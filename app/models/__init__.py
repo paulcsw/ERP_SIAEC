@@ -11,6 +11,9 @@ from app.models.reference import Aircraft, WorkPackage, ShopStream  # noqa: E402
 from app.models.ot import OtRequest, OtApproval  # noqa: E402, F401
 from app.models.audit import AuditLog  # noqa: E402, F401
 from app.models.system_config import SystemConfig  # noqa: E402, F401
+from app.models.shop import Shop  # noqa: E402, F401
+from app.models.user_shop_access import UserShopAccess  # noqa: E402, F401
+from app.models.task import TaskItem, TaskSnapshot  # noqa: E402, F401
 from app.models.attendance import ShiftTemplate, ShiftAssignment, AttendanceEvent  # noqa: E402, F401
 from app.models.tracking import DailyAssignment, WorklogBlock  # noqa: E402, F401
 from app.models.ledger import TimeLedgerDaily, LedgerAllocationDaily  # noqa: E402, F401
