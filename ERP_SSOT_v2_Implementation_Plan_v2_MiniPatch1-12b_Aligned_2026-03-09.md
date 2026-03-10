@@ -1,8 +1,8 @@
-# ERP Implementation Plan v2 (SSOT v2.0 MiniPatch 1~12 Aligned)
+# ERP Implementation Plan v2 (SSOT v2.0 MiniPatch 1~12b Aligned)
 
-- 기준 SSOT: **ERP 통합 SSOT v2.0 (MiniPatch 1~12 Applied)** — 2026-03-09 (Asia/Singapore)
+- 기준 SSOT: **ERP 통합 SSOT v2.0 (MiniPatch 1~12b Applied)** — 2026-03-09 (Asia/Singapore)
 - 기준 Plan: `ERP_SSOT_v2_Implementation_Plan_v2_MiniPatch1-10_Aligned_2026-03-03.md`
-- 본 문서 목적: 위 SSOT 기준으로 **브랜치/커밋 단위 실행 플랜을 MiniPatch 11~12 변경사항까지 포함해 재정렬/수정**한다.
+- 본 문서 목적: 위 SSOT 기준으로 **브랜치/커밋 단위 실행 플랜을 MiniPatch 11~12b 변경사항까지 포함해 재정렬/수정**한다.
 
 > 핵심 변경점(이번 정합화에서 반영)
 > - OT: **2단계 승인(SUPERVISOR endorse → ADMIN approve)**, **월 72h 한도(4,320분)**, **Admin OT Approve 대기열** 반영
@@ -10,6 +10,7 @@
 > - Task: **`assigned_supervisor_id` / `assigned_worker_id` / `distributed_at` / `planned_mh` / `supervisor_updated_at`** 반영, Task Distribution API 추가
 > - UI: **`/tasks/meeting` → `/tasks`(Task Manager)**, **Data Entry 역할 재정의**, **`/rfo/{id}`** 신규, **OT Stats 확장**
 > - Reporting: 기존 OT/Task views 확장 + **`vw_fact_ot_by_reason` / `vw_fact_ot_weekly` / `vw_rfo_efficiency` / `vw_rfo_burndown` / `vw_task_distribution`** 추가
+> - Mobile/UI(12b): **모바일 셸 3탭(작업/OT/더보기)**, **OT 통합 탭(O1/O2/O3)**, **Worker 모바일 접근**, **더보기(RFO 요약/도움말/글자 크기/내 계정/로그아웃)**, **M5 작업 상세**, **모바일 접근성 규칙** 반영
 
 ---
 
@@ -29,6 +30,7 @@
   - batch update(all-or-nothing), soft delete/restore, deactivate/reactivate
   - Task Import Preview/Confirm, Assign/Bulk Assign, Assign Worker
   - Task Manager / Data Entry / Task Detail / RFO Detail / Task CSV export
+  - 모바일 셸 3탭(작업 / OT / 더보기), OT 통합 탭(O1 / O2 / O3), 더보기 탭, M5 읽기전용 Task Detail, 글자 크기 3단계 / 모바일 접근성
 - **Admin / Reference**
   - users CRUD(조건부 HARD DELETE 포함)
   - aircraft / work_packages(rfo_no 포함) / shop_streams CRUD
@@ -45,6 +47,7 @@
 - 다중 Worker 배정(M:N): MVP는 **`assigned_worker_id` 1:1**로 고정, 확장은 MiniPatch 13+
 - HasIssue 자동 계산 로직 고도화(규칙 기반): Phase 2
 - Celery/Redis 기반 비동기 잡: Phase 2
+- 한국어 우선 문구 / 전면 i18n 적용: Phase 2+ (현행 영문 라벨 유지)
 
 ---
 
@@ -58,12 +61,12 @@
 | 01 | `feat/db-001-core-ot-rfo` | Alembic 001: core + OT(2단계) + audit + system_config + rfo_no + future schema(DDL) | — |
 | 02 | `feat/security-auth-csrf-pagination` | Azure AD OAuth2 + session, CSRF, pagination, rate limit | — |
 | 03 | `feat/admin-users-reference-config-import` | Users + Reference CRUD(UI/API) + `/api/config` + Reference CSV import | ✅ |
-| 04 | `feat/ot-end-to-end-2stage` | OT 수직 슬라이스(SSR 포함) + 72h limit + CSV export + Admin approve queue | ✅ |
+| 04 | `feat/ot-end-to-end-2stage` | OT 수직 슬라이스(SSR 포함) + 72h limit + CSV export + Admin approve queue + OT mobile segments(O1/O2/O3) | ✅ |
 | 05 | `feat/db-002-task-schema-distribution` | Alembic 002: shops + user_shop_access + task schema + distribution fields | — |
 | 06 | `feat/task-admin-shop-access` | shops + user_shop_access CRUD(UI/API) + access service + OT export shop_id 교차필터 | ✅ |
 | 07 | `feat/task-core-snapshots-rfo` | Task Core API + optimistic lock + MH 정책 + RFO/airline/supervisor 필터 | — |
 | 08 | `feat/task-lifecycle-batch` | init-week + batch(all-or-nothing) + delete/restore + deactivate/reactivate | — |
-| 09 | `feat/task-distribution-ui` | Task Manager/Data Entry/Task Detail + Task Distribution API + Task CSV export + Settings | ✅ |
+| 09 | `feat/task-distribution-ui` | Task Manager/Data Entry/Task Detail + Task Distribution API + Task CSV export + Settings + mobile shell / more / M5 / accessibility | ✅ |
 | 10 | `feat/reporting-views-sql-expanded` | SQL Server reporting views(create_views.py + 선택적 migration) 확장 | — |
 | 11 | `feat/stats-rfo-dashboard` | OT 통계 확장 + RFO summary/metrics API + OT/RFO 대시보드 | ✅ |
 
@@ -84,7 +87,7 @@
   - ADMIN은 `user_shop_access` 행 없이도 **모든 shop bypass**
 - 화면 역할:
   - `/tasks`(Task Manager): **ADMIN 주사용**, SUPERVISOR는 본인 shop 범위 읽기전용
-  - `/tasks/entry`(Data Entry): **SUPERVISOR 워크스테이션**, 배포된 task 기준 동작
+  - `/tasks/entry`(Data Entry): **SUPERVISOR 주사용 워크스테이션**, WORKER도 `user_shop_access`가 있으면 모바일 Task 탭에서 접근 가능(VIEW=read-only, EDIT=Quick Update 가능)
 
 ### 2.2 에러 포맷(전역)
 - 모든 에러는 `{ "detail": "...", "code": "..." }` 형태
@@ -294,7 +297,7 @@
 ---
 
 ### Branch 04 — `feat/ot-end-to-end-2stage`
-**목표**: OT 기능을 API+SSR까지 수직 슬라이스로 완성한다.
+**목표**: OT 기능을 API+SSR까지 수직 슬라이스로 완성하고, 모바일 OT 탭(O1/O2/O3)까지 포함한다.
 
 **커밋**
 1) `feat(ot): submit service (self/proxy/bulk) + minutes compute + monthly limit`
@@ -350,11 +353,57 @@
 - `/admin/ot-approve`
   - ENDORSED 건 최종 승인/반려 대기열
 
+6) `feat(ssr): OT mobile segments (O1/O2/O3)`
+- 모바일 `/ot` 진입 시 세그먼트 컨트롤 렌더 (신청 / 내역 / 승인)
+- 데스크탑에서는 기존 별도 페이지 구조 유지
+
+**O1 신청**
+- 상단 요약 카드: 이번 달 OT 누적 (`58h / 72h` + 진행 바)
+- 입력: 날짜, 시작/종료 시간, 자동 계산, `reason_code`, 상세 설명, RFO(선택)
+- Supervisor / Admin: 작업자 드롭다운 (대리 / 벌크)
+- 하단 고정: `신청하기` 버튼
+- 72h 초과 제출 차단 + 인라인 경고
+- API: `POST /api/ot`
+
+**O2 내역**
+- 필터 칩: 전체 / `PENDING` / `ENDORSED` / `APPROVED` / `REJECTED` / `CANCELLED`
+- 카드형 리스트 (테이블 아님)
+  - 날짜, 시간대, 대상자, 상태 배지, 단계 표시
+  - 카드 탭 → OT 상세 (읽기 + `PENDING` 취소)
+- Export / pagination은 모바일 제외 (데스크탑 전용)
+- API: `GET /api/ot` + `GET /api/ot/{id}`
+
+**O3 승인**
+- WORKER에게는 세그먼트 자체 숨김
+- SUPERVISOR: `PENDING` 건 표시 → `POST /api/ot/{id}/endorse`
+- ADMIN: `ENDORSED` 건 표시 → `POST /api/ot/{id}/approve`
+- 승인 카드: 신청자, 날짜/시간, 사유, RFO, 대상자 이번 달 누적 (`58h / 72h`)
+- self endorse / approve 대상은 목록에서 제외
+- 하단: `승인` / `반려` 버튼
+
+**템플릿**
+- `templates/ot/ot_mobile.html` — shell (세그먼트 컨트롤)
+- `templates/ot/partials/_o1_submit.html`
+- `templates/ot/partials/_o2_list.html`
+- `templates/ot/partials/_o2_detail.html`
+- `templates/ot/partials/_o3_approve.html`
+
+**HTMX**
+- 세그먼트 전환: `hx-get="/ot/segment/{o1|o2|o3}"` → `#ot-stage` swap
+- O2 필터: `hx-get="/ot/list?status=PENDING"` → `#ot-list` swap
+- O2 → 상세: `hx-get="/ot/{id}/detail"` → `#ot-stage` swap + push-url
+
 **DoD**
 - OT submit/list/detail/cancel/endorse/approve/CSV export 동작
 - 2단계 승인(stage=ENDORSE/APPROVE) 이력 정확
 - 월 72h 한도 단건/벌크 시나리오 통과
 - Admin OT Approve 화면에서 ENDORSED 건만 처리 가능
+- 모바일에서 OT 세그먼트 컨트롤(신청 / 내역 / 승인) 전환 동작
+- O1에서 72h 한도 초과 시 제출 차단 + 인라인 경고
+- O2에서 카드형 리스트 표시 + 필터 칩 동작
+- O3에서 SUPERVISOR → endorse API, ADMIN → approve API 정확 분기
+- WORKER에게 O3 세그먼트 숨김
+- self endorse / approve 건 목록 제외
 
 ---
 
@@ -524,7 +573,7 @@
 ---
 
 ### Branch 09 — `feat/task-distribution-ui`
-**목표**: Task Manager / Data Entry / Settings + Task Distribution API + Task CSV export를 완성한다.
+**목표**: Task Manager / Data Entry / Settings + Task Distribution API + Task CSV export를 완성하고, 모바일 셸 / 더보기 / M5 / 접근성까지 포함한다.
 
 **커밋**
 1) `feat(api): GET /api/tasks/export/csv`
@@ -568,8 +617,48 @@
 - detail overlay:
   - Distribution + Remarks + Active Issue + MH History + Audit Trail
 
-4) `feat(ssr): /tasks/entry (Data Entry)`
-- Supervisor 워크스테이션
+4-a) `feat(ssr): mobile shell — bottom tab bar`
+- 모바일(`< 768px`)에서 데스크탑 사이드바를 비활성화하고 하단 3탭 바를 렌더
+- 데스크탑(`≥ 768px`)에서는 기존 사이드바 유지
+
+**탭 구성**
+| 탭 | 아이콘 | 라벨 | 대상 |
+|----|--------|------|------|
+| 작업 | 클립보드 | Tasks | `/tasks/entry` (M1) |
+| OT | 시계 | OT | `/ot` (O1 세그먼트) |
+| 더보기 | ⋯ | More | 더보기 목록 |
+
+**구현**
+- 탭 바: 높이 56px, `safe-area-inset-bottom` 대응
+- 현재 탭 강조 (아이콘 + 라벨 색상)
+- 탭 전환 시 마지막 상태 유지 (작업 탭에서 M2였다면 복귀 시 M2)
+- 배지 카운트:
+  - 작업 탭: 미확인 NEW 태스크 수 (`supervisor_updated_at IS NULL`)
+  - OT 탭: 승인 대기 수 (SUP = `PENDING`, ADMIN = `ENDORSED`)
+- CSS: `position: fixed; bottom: 0; z-index: 40`
+- 각 탭 content는 `#tab-tasks`, `#tab-ot`, `#tab-more` 컨테이너에 렌더
+
+**역할별 노출**
+- Worker (shop_access 없음): OT + 더보기만 (작업 탭 비활성)
+- Worker (shop_access: VIEW): 작업(읽기전용) + OT + 더보기
+- Worker (shop_access: EDIT): 작업(수정 가능) + OT + 더보기
+- Supervisor: 전부 (OT에 O3 포함)
+- Admin: 전부 (OT에 O3 포함, 단 Task Manager / Personnel / Settings 등은 데스크탑 전용)
+
+**데스크탑 전용 메뉴 (모바일 탭 제외)**
+- Dashboard, Task Manager, OT Dashboard, RFO Detail
+- Personnel, Reference Admin, System Settings, Shop Admin / Shop Access
+
+**템플릿**
+- `templates/mobile_shell.html` — 탭 바 + content 컨테이너
+- `templates/partials/_tab_bar.html` — 하단 3탭
+- `templates/partials/_tab_more.html` — 더보기 목록
+
+4-b) `feat(ssr): /tasks/entry (Data Entry)`
+- Supervisor 주사용 워크스테이션
+- Worker도 `user_shop_access`가 있으면 모바일 Task 탭에서 접근 가능
+  - VIEW: 읽기전용
+  - EDIT: Quick Update 가능
 - 본인 shop에 **배포된 task**만 표시
 - status filter
 - Quick Update 카드(상태/MH/issue)
@@ -577,6 +666,51 @@
 - Add Task 모달
 - NEW / NEEDS UPDATE / up-to-date badge
 - 모바일 우선 반응형
+
+4-c) `feat(ssr): more tab (RFO summary + help + accessibility)`
+- 더보기 목록:
+  - RFO 요약 (SUP+)
+  - 도움말 (ALL)
+  - 글자 크기 (ALL)
+  - 내 계정 (ALL)
+  - 로그아웃 (ALL)
+- RFO 요약 화면:
+  - 요약 카드 4개: 진행률(%), 지연 작업 수, blocker 수, 남은 MH
+  - Blocker 리스트
+  - `관련 작업 보기` → 작업 탭 M2로 이동
+  - 데이터: `GET /api/rfo/{work_package_id}/metrics` + `GET /api/rfo/{work_package_id}/blockers`
+- 도움말: 정적 HTML 4종 (작업 업데이트, OT 신청, 저장 실패 대처, 담당자 연락처)
+- 글자 크기:
+  - 기본 / 크게(+2px) / 아주 크게(+4px)
+  - `<html data-font-size="default|large|xlarge">`
+  - 폰트 / 간격 CSS 변수 연동
+  - MVP 저장: `localStorage`
+
+4-d) `feat(ssr): M5 task detail (read-only)`
+- M3의 ⋯ 메뉴 → `작업 상세 보기`
+- 라우트: `GET /tasks/entry/{aircraft_id}/task/{snapshot_id}/detail?shop_id={shop_id}&meeting_date={meeting_date}`
+- 읽기전용: 편집 버튼 없음
+- 표시:
+  - 작업명, 현재 상태, AC / RFO / Shop 컨텍스트
+  - 전체 비고
+  - 중요 이슈
+  - 배정 정보 (Supervisor, Worker, 배포일, 최종 업데이트)
+  - 스냅샷 히스토리 (주간별 status / MH / remarks 타임라인)
+  - 감사 추적 (`audit_logs`, 최근 10건)
+- full-screen stage, back → M3
+- 권한: VIEW+
+- HTMX: `hx-get` → `#entry-stage` swap + push-url
+
+4-e) `feat(css): mobile accessibility rules`
+- 모바일 폰트 최소 규칙:
+  - 제목 18px+, 본문 / 입력 16px+, 보조 14px+, 메타 / 배지 13px+ (13px 미만 금지)
+  - 데스크탑 기존 크기 유지, 모바일(`< 768px`)만 적용
+- `data-font-size` CSS 변수 3단계 구현
+- M3 세부:
+  - Worker Assignment `+ Add` 버튼 모바일 숨김 (`display:none`)
+  - `Ver 3 · Last sync 14:30`는 접힌 상태(`<details><summary>`)
+  - 버전 충돌 시에만 인라인 에러 카드로 버전 정보 노출
+- 터치 영역 검증: 모든 탭 가능 요소 최소 48px
 
 5) `feat(ssr): /tasks/{task_id} + partial fragments`
 - Task history / snapshot list / audit trail
@@ -595,6 +729,18 @@
 - Task Manager는 ADMIN 주사용 / SUP 읽기전용이 지켜짐
 - Data Entry는 배포된 task 중심으로 동작
 - 에러 메시지/재시도 UX 준수
+- 모바일에서 하단 3탭 바 렌더, 데스크탑에서는 사이드바 유지
+- 탭 전환 시 마지막 상태 유지
+- 배지 카운트(NEW 수, 승인 대기 수) 정확
+- Worker(shop_access 없음) → 작업 탭 비활성
+- Worker(VIEW) → 작업 탭 읽기전용
+- Worker(EDIT) → 작업 탭 수정 가능
+- 더보기: RFO 요약, 도움말, 글자 크기, 내 계정, 로그아웃 동작
+- RFO 요약: `metrics` + `blockers` API 호출 + `관련 작업 보기` 이동
+- 글자 크기 3단계 전환 → 폰트 / 간격 연동
+- M5 작업 상세: 읽기전용, 히스토리 / 감사 표시, 편집 없음
+- M3: `+ Add Worker` 모바일 숨김, 기술 메타 접기
+- 모바일 폰트 최소 13px 이상 (10px / 11px 사용 금지)
 
 ---
 
@@ -725,12 +871,15 @@ MiniPatch 12 추가 views:
 - Branch 04 OT CSV의 `shop_id` 교차필터는 Branch 06 의존
 - Branch 09 Task Distribution API는 Branch 05 + 06 + 07 의존
 - Branch 11 RFO/OT 통계 API는 Branch 10 view 의존을 권장
+- Branch 09 commit 4-a (mobile shell)는 Branch 04 commit 6 (OT mobile)보다 먼저 머지하는 것을 권장한다. 권장 순서: 09/4-a(shell) → 04/6(OT mobile) → 09/4-b~4-e(Data Entry + 더보기 + M5 + 접근성)
+- 글자 크기(09/4-e)는 mobile shell(09/4-a)에 의존한다. CSS 변수를 shell 레벨에 정의한다.
+- Branch 09 commit 4-c (더보기의 RFO 요약)은 Branch 11의 `metrics` / `blockers` API를 재사용하므로, API가 늦어질 경우 mock partial 또는 stub JSON으로 병행 개발한다.
 
 ---
 
 ## 5. 최소 수용 테스트(요약)
 
-### 5.1 OT (대표 13개)
+### 5.1 OT (기존 13개 + 모바일 6개)
 - 본인 OT submit 성공(분 계산)
 - `requested_minutes` 불일치 → 422 `VALIDATION_ERROR`
 - 중복 시간 겹침 → 422 `DUPLICATE_OT`
@@ -745,7 +894,15 @@ MiniPatch 12 추가 views:
 - worker tries cancel endorsed → 409 `INVALID_STATUS`
 - OT CSV export 200 + 헤더(Content-Type/Disposition) + `endorsed_*` / `approved_*` 컬럼 확인
 
-### 5.2 Task / Distribution (대표 16개)
+#### 모바일 OT 추가 테스트 (6건)
+- O1: 모바일에서 72h 초과 제출 차단 + 인라인 경고 표시
+- O2: 카드형 리스트 렌더 + 필터 칩 전환 동작
+- O2: Export 버튼이 모바일에서 숨김인지 확인
+- O3: WORKER → 승인 세그먼트 자체 숨김
+- O3: SUPERVISOR → endorse API 호출 (`PENDING`만)
+- O3: ADMIN → approve API 호출 (`ENDORSED`만)
+
+### 5.2 Task / Distribution (기존 16개 + 모바일 12개)
 - init-week 최초 → carry-over 생성(`created_count > 0`)
 - init-week 재호출 → idempotent(`created_count=0`, `skipped_count > 0`)
 - `COMPLETED` / `is_deleted=true` / `is_active=false` task는 carry-over 제외
@@ -762,6 +919,20 @@ MiniPatch 12 추가 views:
 - Task Import Confirm → all-or-nothing + audit
 - Assign / Bulk Assign → `assigned_supervisor_id`, `distributed_at` 설정
 - Assign Worker → 본인 shop 내 worker만 허용, cross-shop 403
+
+#### 모바일 셸 + 접근성 추가 테스트 (12건)
+- Worker(shop_access 없음) → 작업 탭 비활성, OT/더보기만 표시
+- Worker(shop_access: VIEW) → 작업 탭 접근 + M3 Save 숨김 확인
+- Worker(shop_access: EDIT) → M3 Quick Update 수정 가능 확인
+- 하단 탭 바: 탭 전환 시 마지막 상태 유지 (M2에서 OT 갔다 돌아오면 M2)
+- 배지 카운트: NEW 태스크 수 정확성
+- 배지 카운트: OT 승인 대기 수 (SUP=`PENDING`, ADMIN=`ENDORSED`) 정확성
+- M5: 읽기전용 확인, 편집 버튼 없음
+- M5: 스냅샷 히스토리 주간별 표시 확인
+- M3: `+ Add Worker` 모바일 숨김 확인
+- M3: 기술 메타(version/sync) 접힌 상태 확인
+- 글자 크기: `크게` 선택 → 모바일 본문 18px 적용 확인
+- 글자 크기: 변경 후 새로고침 → 설정 유지 확인 (`localStorage`)
 
 ### 5.3 Analytics / Reporting (대표 10개)
 - `/api/stats/ot-summary` role scope 검증
@@ -840,6 +1011,12 @@ MiniPatch 12 추가 views:
   - `/tasks` Task Manager, `/tasks/entry` Data Entry 역할 재정의
   - `/rfo/{id}` RFO Detail + `/stats/ot` 확장
   - 추가 reporting views 5종 반영
+- MiniPatch 12b 반영:
+  - Branch 04 OT mobile segments(O1 / O2 / O3) 추가
+  - Branch 09 mobile shell(하단 3탭) + Worker 모바일 접근 규칙 반영
+  - 더보기 탭(RFO 요약 / 도움말 / 글자 크기 / 내 계정 / 로그아웃) 추가
+  - M5 작업 상세(읽기전용) + 모바일 접근성 규칙 반영
+  - OT / Task 모바일 테스트와 shell → OT mobile → Data Entry 의존성 반영
 - 기존 MiniPatch 8~10 유지:
   - MSSQL/Azure SQL + ODBC18
   - Azure AD OAuth2 + session + CSRF + rate limit
@@ -852,11 +1029,15 @@ MiniPatch 12 추가 views:
 
 다음 항목이 본 문서에 반영되어 있어야 한다.
 
-- [x] 문서 제목 / 기준 SSOT가 **MiniPatch 1~12**로 갱신됨
+- [x] 문서 제목 / 기준 SSOT가 **MiniPatch 1~12b**로 갱신됨
 - [x] OT 2단계 승인 / 월 72h 한도 / `rfo_no` / Reference CSV import 반영
 - [x] Task Distribution 스키마(`assigned_*`, `distributed_at`, `planned_mh`, `supervisor_updated_at`) 반영
 - [x] `/api/tasks/import`, `/api/tasks/import/confirm`, `/api/tasks/{id}/assign`, `/api/tasks/bulk-assign`, `/api/tasks/{id}/assign-worker` 반영
 - [x] `/tasks` Task Manager / `/tasks/entry` Data Entry / `/rfo/{id}` RFO Detail 반영
+- [x] Branch 04 commit 6: OT mobile segments(O1 / O2 / O3) 반영
+- [x] Branch 09 commit 4-a ~ 4-e: mobile shell / more / M5 / accessibility 반영
+- [x] OT 모바일 테스트 6건 + Task 모바일 셸 / 접근성 테스트 12건 반영
+- [x] shell → OT mobile → Data Entry 순서 의존성 반영
 - [x] `/api/stats/ot-monthly-usage`, `/api/stats/ot-by-reason`, `/api/stats/ot-weekly-trend`, `/api/rfo/{id}/metrics` 반영
 - [x] reporting views 5종(`vw_fact_ot_by_reason`, `vw_fact_ot_weekly`, `vw_rfo_efficiency`, `vw_rfo_burndown`, `vw_task_distribution`) 반영
 - [x] 기존 MiniPatch 8~10 핵심 규칙(auth, config, airline, audit, MSSQL) 유지

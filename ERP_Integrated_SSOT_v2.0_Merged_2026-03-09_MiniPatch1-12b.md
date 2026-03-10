@@ -1,7 +1,7 @@
-# ERP 통합 SSOT v2.0 (MiniPatch 1~12a Applied)
+# ERP 통합 SSOT v2.0 (MiniPatch 1~12b Applied)
 **MH Tracking (OT) + Task Manager (Weekly Snapshot) 통합 단일 기준 문서**
 
-- 문서 버전: v2.0 (Audit-Patched, MiniPatch 1~12a Applied)
+- 문서 버전: v2.0 (Audit-Patched, MiniPatch 1~12b Applied)
 - 기준일: 2026-03-09 (Asia/Singapore)
 - 기반 문서:
   - MH Tracking Integrated System — MVP SSOT v1.0 (2026-02-13)
@@ -17,8 +17,7 @@
   - 배치 API + all-or-nothing 트랜잭션
   - correction_reason 필드 (MH 감소 감사 추적)
   - CSS 프레임워크 확정 (Tailwind CDN)
-  - MiniPatch 1~12 반영 (MiniPatch 1~9 + MiniPatch 10: 감사 결함 7건 수정 + MiniPatch 11: RFO No.(work_packages.rfo_no) + CSV Import(Reference Data) + 월 72h OT 한도(제출 차단/위젯) + 2단계 OT 승인(PENDING→ENDORSED→APPROVED) + Task-RFO 연결(task_items.work_package_id) + MiniPatch 12: Task Distribution/Worker Assignment/Planned MH + Task Manager·Data Entry 역할 분리 + RFO Detail Lean Metrics + OT by Reason/Weekly Trend + 모바일 최적화)
-  - MiniPatch 12a 반영 (Data Entry RBAC 경계 명확화 + NEEDS UPDATE 기준 추가 + 모바일 full-screen modal 규칙 추가)
+  - MiniPatch 1~12b 반영 (MiniPatch 1~9 + MiniPatch 10: 감사 결함 7건 수정 + MiniPatch 11: RFO No.(work_packages.rfo_no) + CSV Import(Reference Data) + 월 72h OT 한도(제출 차단/위젯) + 2단계 OT 승인(PENDING→ENDORSED→APPROVED) + Task-RFO 연결(task_items.work_package_id) + MiniPatch 12: Task Distribution/Worker Assignment/Planned MH + Task Manager·Data Entry 역할 분리 + RFO Detail Lean Metrics + OT by Reason/Weekly Trend + 모바일 최적화 + MiniPatch 12b: 모바일 셸 3탭(Tasks/OT/More) + Worker 모바일 접근 명확화 + OT 통합 탭(O1/O2/O3) + 더보기 탭(RFO 요약/도움말/글자 크기/내 계정/로그아웃) + M5 작업 상세 + 모바일 접근성 규칙)
 
 ---
 
@@ -59,6 +58,7 @@
 - Phase 1-B Task Manager / Data Entry (주간 스냅샷 기반 Task 배포·감사·현장 업데이트: Task Manager, Data Entry, carry-over, deadline clear, soft delete, Power BI view)
 - RFO No. 연결 (work_packages + task_items) + CSV Import (Reference Data)
 - CSV Export API (OT/Task) (MVP 포함)
+- 모바일 셸 3탭(작업/OT/더보기), OT 통합 탭(O1/O2/O3), 더보기 탭, M5 작업 상세(읽기전용), 글자 크기 조절/모바일 접근성 규칙 (MVP 포함)
 
 ### 1.2 Out of Scope (본 문서에서 스키마만 선반영 또는 제외)
 - Attendance(shift_templates/shift_assignments/attendance_events) 기능 구현
@@ -72,6 +72,7 @@
 - Outlook email 자동 발송 (OT 승인 알림, 리마인더) (Phase 2)
   - Settings UI에는 토글 표시하되, 실제 연동은 Phase 2에서 구현
   - Phase 2 착수 시 별도 스펙 문서 작성 필요
+- UI 한국어 우선 문구 / 전면 i18n 적용 (현행 영문 라벨 유지, Phase 2+ 검토)
 
 ---
 
@@ -407,7 +408,7 @@ CREATE INDEX idx_audit_created ON audit_logs(created_at);
 
 #### system_config
 
-Admin Settings(회의 기준일/자동 advance, Data Entry badge threshold, Teams/Outlook 토글·수신자·템플릿 등) 저장용 테이블.
+Admin Settings(회의 기준일/자동 advance, Teams/Outlook 토글·수신자·템플릿 등) 저장용 테이블.
 
 ```sql
 CREATE TABLE system_config (
@@ -424,7 +425,6 @@ CREATE TABLE system_config (
 INSERT INTO system_config ([key], value) VALUES
   ('meeting_current_date',       '2026-02-26'),
   ('meeting_auto_advance',       'every_monday'),
-  ('needs_update_threshold_hours','72'),
   ('teams_enabled',              'true'),
   ('teams_recipients',           '#cis-sheet-metal'),
   ('teams_message_template',     'Weekly Summary — {shop} · Week {week}: {task_count} tasks, {issues} issues flagged.'),
@@ -672,19 +672,16 @@ Task는 **Shop 단위 스코프**로 운영한다. 비ADMIN 사용자는 `user_s
 | Task Manager 상세 패널 | ✅ (조회) | ✅ (조회) | ✅ (조회) | ✅ (조회) |
 | Export Report / Audit Log | ❌ | ❌ | ❌ | ✅ |
 
-**Data Entry 페이지**: Supervisor 워크스테이션. 본인 Shop에 **배포된 Task**만 표시.
+**Data Entry 페이지**: Supervisor 주사용 워크스테이션. 다만 Worker도 `user_shop_access`가 있으면 읽기전용(VIEW) 또는 Quick Update(EDIT+) 범위로 접근할 수 있다. 본인 Shop에 **배포된 Task**만 표시.
 
 | 기능 | VIEW | EDIT | MANAGE | ADMIN |
 |------|------|------|--------|-------|
 | 배포된 Task 조회 | ✅ | ✅ | ✅ | ✅ |
-| 상태/MH/remarks/issue 수정 (단건) | ❌ | ✅ | ✅ | ✅ |
+| 상태/MH/remarks/issue 수정 | ❌ | ✅ | ✅ | ✅ |
 | Worker 배정 | ❌ | ✅ | ✅ | ✅ |
-| Add Task (selected AC context, 단건) | ❌ | ✅ | ✅ | ✅ |
-| Save & Next (연속 단건 수정) | ❌ | ✅ | ✅ | ✅ |
-
-> **Data Entry에서 제공하지 않는 기능** (Task Manager 전용):
-> Init-week, Batch save, Soft delete/Restore, Deactivate/Reactivate, include_deleted 토글.
-> 이 기능들은 `/tasks` (Task Manager) 페이지에서만 사용 가능하다.
+| Add Task (현재 AC 하위) | ❌ | ✅ | ✅ | ✅ |
+| Init-week (carry-over) | ❌ | ❌ | ✅ | ✅ |
+| Soft delete / Restore | ❌ | ❌ | ✅ | ✅ |
 
 **ADMIN bypass 규칙**: ADMIN은 `user_shop_access` 테이블 행 없이도 모든 Shop에 MANAGE 접근을 허용한다.
 
@@ -699,6 +696,21 @@ def check_shop_access(user: User, shop_id: int, required: ShopAccessRole) -> boo
     return access_level(access.access) >= access_level(required)
     # MANAGE(3) > EDIT(2) > VIEW(1)
 ```
+
+**모바일 역할별 탭 노출 규칙:**
+
+| 역할 | 작업 탭 | OT 탭 | 더보기 탭 |
+|------|--------|--------|----------|
+| WORKER (`shop_access`: VIEW) | ✅ 읽기전용 | ✅ (신청 + 내역) | ✅ |
+| WORKER (`shop_access`: EDIT) | ✅ 수정 가능 | ✅ (신청 + 내역) | ✅ |
+| SUPERVISOR | ✅ 수정 가능 | ✅ (신청 + 내역 + 1차 승인) | ✅ |
+| ADMIN | ✅ 수정 가능 | ✅ (신청 + 내역 + 최종 승인) | ✅ |
+
+- Worker의 작업 탭 접근은 `user_shop_access` 기준으로 결정한다.
+  - `shop_access` 행이 없는 Worker → 작업 탭 비활성 (OT/더보기만)
+  - VIEW → 목록/상세 열람만, Add/Save 숨김
+  - EDIT → Quick Update, Worker 배정, Add Task 가능
+- Admin의 Task Manager / Personnel / Reference / Settings는 모바일에서 제외한다. 해당 화면은 데스크탑에서만 접근한다.
 
 ---
 
@@ -925,7 +937,6 @@ Admin: Task Manager에서 전체 감사
 | D8 | 업데이트 추적 | RFO 뷰: `count(supervisor_updated_at IS NOT NULL) / total` → "2/4 updated" 배지 |
 | D9 | Import 형식 | Excel (`.xlsx`) 또는 CSV. 파싱 → 미리보기 → 확인 → DB 기록 + audit_logs |
 | D10 | Supervisor Task 추가 | Data Entry에서 Add Task 시 자동으로 `assigned_supervisor_id = 현재 사용자`, 해당 AC/RFO 하위에 생성 |
-| D11 | NEEDS UPDATE 배지 | `supervisor_updated_at IS NOT NULL` 이고 현재 시각 기준 `system_config['needs_update_threshold_hours']` 시간(기본 72)보다 이전이면 Data Entry에서 노란 "NEEDS UPDATE" 배지로 표시한다. Admin Settings UI에서 변경 가능하다. |
 
 ### 7.4 RFO Detail Lean/Kaizen 메트릭 정의
 
@@ -2018,14 +2029,15 @@ Auth:
 | OT Stats | /stats/ot | SUPERVISOR+ | **Individual OT vs 72h** (전폭, 6명) + **OT by Reason** + **Weekly Trend** | **대폭 확장** |
 | Admin OT Approve | /admin/ot-approve | ADMIN | ENDORSED 건 최종 결재 대기열 | 기존 |
 | **Task Manager** | /tasks | ADMIN 주사용, SUP 읽기 | 배포/감사 허브: Import RFO, Create & Assign, Bulk Assign, Table/Kanban/RFO 3뷰, 상세 오버레이 패널, Pagination | **명칭+역할 변경** (기존 Meeting Console) |
-| **Data Entry** | /tasks/entry | SUPERVISOR 주사용 | Supervisor 워크스테이션: 배포된 Task 업데이트, Worker 배정, Add Task, Quick Update 카드 | **역할 재정의** |
+| **Data Entry** | /tasks/entry | SUPERVISOR 주사용 / WORKER(권한 있는 경우) | Supervisor 워크스테이션 + Worker shop_access 기반 모바일 작업 탭: 배포된 Task 업데이트, Worker 배정, Add Task, Quick Update 카드 | **역할 재정의** |
 | Task Detail | /tasks/{task_id} | VIEW+ | Task 상세 (스냅샷 히스토리) | 기존 |
+| **Task Detail (M5 Mobile)** | /tasks/entry/{aircraft_id}/task/{snapshot_id}/detail | VIEW+ | Data Entry 보조 읽기전용 상세: 전체 비고, 배정 정보, 스냅샷 히스토리, 최근 audit | **신규** |
 | **RFO Detail** | /rfo/{id} | SUPERVISOR+ | **검색 콤보박스**, Summary Strip, 6 KPI, MH Burndown, Efficiency Metrics, Blockers, Worker Allocation | **전면 재설계** |
 | Shop Admin | /admin/shops | ADMIN | Shop CRUD | 기존 |
 | Shop Access | /admin/shop-access | ADMIN | user_shop_access 관리 | 기존 |
 | User Admin | /admin/users | ADMIN | **Add User 모달** + **Edit User 모달** 포함 사용자 관리 | **수정** |
 | Reference Admin | /admin/reference | ADMIN | Aircraft, RFO(WP), shop stream 관리 + **CSV Import** | **수정** |
-| System Settings | /admin/settings | ADMIN | **Snapshot Week Config** + **Data Entry badge threshold** + 알림/수신자/템플릿 설정 | **수정** |
+| System Settings | /admin/settings | ADMIN | **Snapshot Week Config** + 알림/수신자/템플릿 설정 | **수정** |
 
 ### 9.1.1 Task Manager (기존 Meeting Console) 변경 상세
 
@@ -2052,11 +2064,11 @@ Auth:
 
 | 항목 | 변경 내용 |
 |------|----------|
-| 좌측 패널 헤더 | "Aircraft" → "My Assigned Tasks" + Shop/Supervisor 컨텍스트 |
+| 좌측 패널 헤더 | "Aircraft" → "My Assigned Tasks" + Shop/Supervisor 컨텍스트 (Worker는 shop_access 기반 read-only 또는 Quick Update) |
 | 좌측 패널 필터 | Shop 선택 제거 → Status 필터 (All / Not Started / In Progress / Waiting / Completed) |
 | AC 카드 | NEW 배지, needs update 경고, ✓ up to date 상태 |
 | 태스크 목록 | Worker 배정 표시, 최종 업데이트 시간, NEW/NEEDS UPDATE 배지, 신규 배포 배경 하이라이트 |
-| Add Task 모달 | Description, Status, Deadline, Estimated MH, Assign Worker, Remarks (모바일 `< 768px`에서는 full-screen modal 허용) |
+| Add Task 모달 | Description, Status, Deadline, Estimated MH, Assign Worker, Remarks |
 | 편집 패널 | `max-w-4xl mx-auto`, Quick Update + Worker Assignment 2열, Details & Remarks 3열 |
 | Quick Update | 금색 좌측 보더 강조, Status + MH 최상단 |
 | Worker Assignment | 별도 카드, 드롭다운 + "+ Add" + 현재 배정자 표시 |
@@ -2087,7 +2099,7 @@ Auth:
 | 화면 | 변경 |
 |------|------|
 | OT Request | Technician Roster에 검색 입력 + 팀/Shop 컨텍스트 |
-| Settings | "Snapshot Week Configuration": Advance On (요일+시간) → 주간 범위 자동 연동, 커스텀 ‹/› 네비게이터 + `needs_update_threshold_hours` (기본 72h) 설정 |
+| Settings | "Snapshot Week Configuration": Advance On (요일+시간) → 주간 범위 자동 연동, 커스텀 ‹/› 네비게이터 |
 | Personnel | Add User 모달 (Employee No./Name/Team/Role/Email), Edit User 모달 (읽기전용 No. + 편집 + Active/Deactivate) |
 
 ### 9.2 기능 매트릭스
@@ -2106,6 +2118,24 @@ Auth:
 | Pagination (10건/페이지) | ✅ | ❌ (AC 단위 스크롤) |
 | Init-week (carry-over) | ✅ (MANAGE) | ❌ |
 | Soft delete / Restore | ✅ (MANAGE) | ❌ |
+
+
+### 9.2.2 모바일 탭별 기능 매트릭스
+
+| 기능 | 작업 탭 | OT 탭 | 더보기 탭 |
+|------|--------|--------|----------|
+| Aircraft List (M1) | ✅ | — | — |
+| Task List (M2) | ✅ | — | — |
+| Quick Update (M3) | ✅ (EDIT+) | — | — |
+| Add Task (M4) | ✅ (EDIT+) | — | — |
+| Task Detail (M5) | ✅ (VIEW+) | — | — |
+| OT 신청 (O1) | — | ✅ (WORKER+) | — |
+| OT 내역 (O2) | — | ✅ (WORKER+) | — |
+| OT 승인 (O3) | — | ✅ (SUP/ADMIN) | — |
+| RFO 요약 | — | — | ✅ (SUP+) |
+| 도움말 | — | — | ✅ (ALL) |
+| 글자 크기 | — | — | ✅ (ALL) |
+| 내 계정 | — | — | ✅ (ALL) |
 
 ### 9.3 HTMX 인터랙션 패턴
 
@@ -2126,6 +2156,116 @@ Auth:
 
 ### 9.4 모바일 최적화
 
+
+#### 모바일 셸 구조 (< 768px)
+
+모바일에서는 데스크탑 사이드바를 **하단 탭 바 3탭**으로 교체한다.
+
+| 탭 | 아이콘 | 라벨 | 기본 화면 |
+|----|--------|------|----------|
+| 작업 | 클립보드 | Tasks | M1 내 작업 (Aircraft List) |
+| OT | 시계 | OT | O1 신청 (세그먼트 컨트롤) |
+| 더보기 | ⋯ | More | 설정/도움말 목록 |
+
+**탭 바 규칙:**
+- 높이 56px, `safe-area-inset-bottom` 대응
+- 현재 탭 아이콘 + 라벨 강조
+- 탭 전환 시 각 탭의 마지막 상태 유지 (예: M2에 있었으면 돌아왔을 때 M2)
+- 배지 카운트:
+  - 작업 탭: 미확인 NEW 수 (`supervisor_updated_at IS NULL`)
+  - OT 탭: 승인 대기 수 (SUPERVISOR = `PENDING`, ADMIN = `ENDORSED`)
+
+**모바일 메인에서 제외하는 화면** (데스크탑 전용):
+- Dashboard (`/dashboard`) — 역할별 대시보드 + RFO Progress 위젯
+- Task Manager (`/tasks`) — Admin 배포/감사 허브 (Import, Bulk Assign, 3뷰, Pagination)
+- OT Dashboard (`/stats/ot`) — 분석 차트 (Individual OT, Reason Code, Weekly Trend)
+- RFO Detail (`/rfo/{id}`) — 6 KPI + Burndown + Efficiency (→ 더보기에 축소 버전 제공)
+- Personnel (`/admin/users`) — ADMIN 전용
+- Reference Admin (`/admin/reference`) — ADMIN 전용
+- System Settings (`/admin/settings`) — ADMIN 전용
+- Shop Admin / Shop Access — ADMIN 전용
+
+#### OT 탭 내부 구조
+
+OT 탭은 상단 세그먼트 컨트롤로 3화면을 전환한다.
+
+| 세그먼트 | 화면 | 역할 | 매핑 API |
+|---------|------|------|---------|
+| 신청 | O1 | WORKER+ | `POST /api/ot` |
+| 내역 | O2 | WORKER+ | `GET /api/ot` |
+| 승인 | O3 | SUP / ADMIN | `POST /api/ot/{id}/endorse` 또는 `POST /api/ot/{id}/approve` |
+
+**O1. 신청**
+- 상단 요약 카드: 이번 달 OT 누적 (예: `58h / 72h`, 진행 바)
+- 입력: 날짜, 시작/종료 시간, 자동 계산 시간, 사유(`reason_code`), 상세 설명, 관련 RFO(선택)
+- Supervisor/Admin: 작업자 선택 드롭다운 (대리/벌크 제출용)
+- 하단 고정: `신청하기` 버튼
+- 72h 초과 시 제출 차단 + 인라인 경고
+
+**O2. 내역**
+- 필터 칩: 전체 / 대기(PENDING) / 1차 승인(ENDORSED) / 최종 승인(APPROVED) / 반려(REJECTED) / 취소(CANCELLED)
+- 카드 리스트 (테이블 아님):
+  - 날짜, 시간대, 대상자, 상태 배지
+  - 단계 표시: `대기 → 1차 → 최종`
+  - 카드 탭 → OT 상세 (읽기 + 취소 가능 시 취소 버튼)
+- Export / pagination은 모바일에서 제외 (데스크탑 전용)
+
+**O3. 승인** (권한자에게만 세그먼트 노출)
+- SUPERVISOR: `PENDING` 건만 표시 (1차 승인/반려)
+  - 호출: `POST /api/ot/{id}/endorse`
+- ADMIN: `ENDORSED` 건만 표시 (최종 승인/반려)
+  - 호출: `POST /api/ot/{id}/approve`
+- 승인 카드 구성:
+  - 신청자, 날짜/시간, 사유, 관련 RFO
+  - 해당 사용자 이번 달 누적 (예: `58h / 72h`)
+  - 하단: `승인` / `반려` 버튼 2개
+- WORKER에게는 O3 세그먼트 자체가 숨겨진다.
+- self endorse/approve는 금지되며, 자기 OT는 목록에서 제외한다.
+
+#### 더보기 탭 내부 구조
+
+| 항목 | 설명 | 비고 |
+|------|------|------|
+| RFO 요약 | 현재 배정된 RFO의 축소 요약 (진행률, 지연 수, blocker 수, 남은 MH) + "관련 작업 보기" 링크 (→ M2) | RFO Detail 축소 버전 |
+| 도움말 | 작업 업데이트 방법, OT 신청 방법, 저장 안 될 때 대처, 담당자 연락처 | 정적 콘텐츠 |
+| 글자 크기 | 기본 / 크게 / 아주 크게 (3단계). 리스트 간격도 연동 확대 | §9.5 접근성 규칙 참조 |
+| 내 계정 | 이름, 사번, 팀, 역할, Shop 표시 (읽기전용) | |
+| 로그아웃 | Azure AD 세션 종료 | |
+
+**RFO 요약 화면 구성:**
+- 제목: 작업번호 + AC reg
+- 요약 카드 4개: 진행률(%), 지연 작업 수, blocker 수, 남은 MH
+- Blocker 리스트 (있으면): 차단 요인명 + 경과 일수
+- 하단: `관련 작업 보기` → 작업 탭 M2로 이동 (해당 AC 컨텍스트)
+- 데이터: `GET /api/rfo/{work_package_id}/metrics` + `GET /api/rfo/{work_package_id}/blockers` 재사용
+
+> **알림**: SSOT §1.2에서 알림/스케줄러는 Phase 2+로 분류한다. 모바일 MVP에서는 별도 알림 화면을 구현하지 않는다.
+> Phase 2에서 알림 인프라(Teams / Outlook / Push)를 구축할 때 더보기 탭에 `알림` 항목을 추가한다.
+
+#### M5. 작업 상세 (읽기전용)
+
+M3의 ⋯ 메뉴 → `작업 상세 보기`에서 진입한다. 메인 플로우가 아닌 보조 화면이다.
+
+**구성:**
+- 상단: `← 빠른 업데이트로 돌아가기`
+- 작업명 (크게)
+- 현재 상태 배지
+- AC reg + RFO + Shop 컨텍스트
+- 전체 비고 (truncate 없이 전문)
+- 중요 이슈 (있으면)
+- 배정 정보: Supervisor, Worker, 배포일, 최종 업데이트
+- 스냅샷 히스토리 (주간별 변경 이력)
+  - 각 주간: status 변경, MH 변경, remarks 변경을 타임라인으로 표시
+- 감사 추적 (`audit_logs` 기반, 최근 10건)
+
+**라우트:**
+`GET /tasks/entry/{aircraft_id}/task/{snapshot_id}/detail?shop_id={shop_id}&meeting_date={meeting_date}`
+
+**렌더:** full-screen stage (M3와 같은 레벨). browser back → M3로 복귀  
+**권한:** VIEW+ (읽기전용 화면이므로 모든 접근 레벨에서 열람 가능)  
+**수정 불가:** 이 화면에서는 편집 기능이 없고, 수정은 M3(Quick Update)에서만 수행한다.
+
+
 #### 반응형 브레이크포인트
 
 | 브레이크포인트 | 대상 |
@@ -2138,11 +2278,13 @@ Auth:
 
 | 요소 | 모바일 동작 |
 |------|-----------|
+| 하단 탭 바 | `position: fixed`, 높이 56px, `safe-area-inset-bottom` 대응 |
+| 탭 컨텐츠 컨테이너 | 작업 / OT / 더보기 상태를 각각 유지, 탭 전환 시 마지막 stage 복귀 |
+| OT 세그먼트 컨테이너 | O1/O2/O3 stage swap, 카드형 리스트 중심 |
 | Data Entry 좌측 패널 | `w-full` + `max-height: 35vh`, 하단 스택 |
 | 상세 패널 (split-detail) | `position: fixed` + `w-full` |
 | 칸반 디테일 패널 | `w-full` (420px → 100%) |
 | 모든 모달 | `w-full` + 16px 좌우 패딩 |
-| 입력 필드가 4개 이상인 모달 (Add Task, Add User 등) | mobile(`< 768px`)에서는 full-screen modal(page-takeover)로 렌더. 상단 ← 뒤로 + 제목, 하단 고정 CTA. 데스크탑에서는 기존 overlay 모달 유지. |
 | RFO Summary Strip | `flex-wrap`, 세로 구분선 숨김 |
 | 하단바 (pagination) | `flex-col` 세로 스택 |
 | 필터바 | `flex-wrap`, 각 필터 `flex: 1 1 45%` |
@@ -2166,7 +2308,6 @@ min-w-[380px] → min-w-0 sm:min-w-[380px]
 
 ### 9.5 현장 UX 필수 규칙
 - **모바일 우선**: 하단 고정 버튼, 큰 터치 영역 (최소 44×44px)
-- **모바일 모달 전환 규칙**: 입력 필드 4개 이상의 생성/편집 모달은 모바일(`< 768px`)에서 full-screen modal로 전환한다. 키보드 노출 시 CTA 가림을 방지하고 입력 공간을 확보하기 위함이다. 데스크탑에서는 기존 overlay 모달을 유지한다.
 - **실패 시 에러 메시지**: 명확한 사유 표시 (redirect만 하지 말 것)
 - **저장 실패 시 입력값 유지 + 재시도 가능** (데이터 유실 방지)
 - **init-week**: 처리 결과 count 표시 ("5건 생성, 2건 skip")
@@ -2174,6 +2315,22 @@ min-w-[380px] → min-w-0 sm:min-w-[380px]
 - **MH 감소 차단 시**: "MH는 누적 값이므로 감소할 수 없습니다. 관리자에게 문의하세요" 메시지
 - **Import Preview**: 오류 행(row)별 원인을 확인한 뒤 confirm할 수 있어야 함
 - **배포 상태 표시**: NEW / NEEDS UPDATE / Unassigned 배지가 목록에서 즉시 식별 가능해야 함
+
+- **모바일 폰트 최소 규칙**:
+  - 제목: 18px 이상
+  - 본문 / 입력: 16px 이상
+  - 보조 텍스트: 14px 이상
+  - 메타 / 배지: 13px 이상 (13px 미만 금지)
+  - 데스크탑에서는 기존 크기를 유지하고, 이 규칙은 모바일(`< 768px`)에만 적용한다.
+- **글자 크기 조절 (접근성)**:
+  - 더보기 탭에서 3단계 선택: 기본 / 크게(+2px) / 아주 크게(+4px)
+  - 리스트 간격도 연동 확대 (기본 `py-3` → 크게 `py-4` → 아주 크게 `py-5`)
+  - 선택은 `localStorage` 또는 서버 user preference에 저장한다. (MVP는 `localStorage`)
+  - CSS 구현은 `<html data-font-size="default|large|xlarge">` 클래스를 기준으로 한다.
+- **M3 모바일 UX 세부 규칙**:
+  - Worker Assignment의 `+ Add` 버튼은 모바일에서 숨긴다. (사용자 추가는 Admin 기능)
+  - `Ver 3 · Last sync 14:30` 같은 기술 메타는 접힌 상태로 표시하고, 탭하면 펼친다.
+  - 버전 충돌 시에만 버전 정보를 인라인 에러 카드로 눈에 띄게 노출한다.
 
 ---
 
@@ -2645,19 +2802,33 @@ async def worker_client(db_session):
 
 ---
 
-### 13.6 MiniPatch 12~12a 추가 시나리오
+### 13.6 MiniPatch 12 추가 시나리오
 
 1. **Task Import Preview**: 유효/오류 row 분리, `valid_count`/`error_count` 정확성 확인
 2. **Task Import Confirm**: all-or-nothing 저장 + audit_logs 기록 확인
 3. **Assign / Bulk Assign**: `assigned_supervisor_id`, `distributed_at` 설정 및 권한 검증
 4. **Assign Worker**: 본인 Shop 내 Worker만 허용, 타 Shop Worker 지정 시 403
 5. **NEW 배지**: `distributed_at` 존재 + `supervisor_updated_at = NULL` 인 Task만 NEW로 표시
-6. **NEEDS UPDATE 배지**: `supervisor_updated_at`가 `needs_update_threshold_hours`(기본 72h)보다 이전인 Task만 표시
-7. **Data Entry 기능 경계**: `/tasks/entry`에는 Init-week, Batch save, Soft delete/Restore, Deactivate/Reactivate, include_deleted가 노출되지 않음
-8. **모바일 full-screen modal**: Add Task/Add User 등 입력 필드 4개 이상 모달은 `< 768px`에서 full-screen modal로 전환
-9. **RFO 배포/업데이트 배지**: assigned / updated 카운트가 RFO 뷰와 일치하는지 확인
-10. **RFO Metrics API**: `/api/rfo/{id}/metrics`, `/blockers`, `/worker-allocation`, `/burndown` 응답 구조 검증
-11. **OT Stats 확장**: `/api/stats/ot-by-reason`, `/api/stats/ot-weekly-trend` 권한/집계 검증
+6. **RFO 배포/업데이트 배지**: assigned / updated 카운트가 RFO 뷰와 일치하는지 확인
+7. **RFO Metrics API**: `/api/rfo/{id}/metrics`, `/blockers`, `/worker-allocation`, `/burndown` 응답 구조 검증
+8. **OT Stats 확장**: `/api/stats/ot-by-reason`, `/api/stats/ot-weekly-trend` 권한/집계 검증
+
+
+### 13.7 MiniPatch 12b 모바일/접근성 시나리오
+
+1. 모바일 셸 3탭(작업 / OT / 더보기) 노출과 역할별 비활성 규칙 검증
+2. Worker(shop_access 없음) → 작업 탭 비활성, OT/더보기만 표시
+3. Worker(VIEW) → 작업 탭 읽기전용, Save/Add 숨김
+4. Worker(EDIT) → Quick Update 가능, Worker Assignment / Add Task 노출 정책 검증
+5. OT 탭 O1/O2/O3 세그먼트 전환 및 권한별 노출 검증
+6. 모바일 O1에서 72h 한도 초과 시 제출 차단 + 인라인 경고 확인
+7. 모바일 O2 카드형 리스트 / 상태 필터 칩 동작 확인
+8. 모바일 O3에서 SUPERVISOR는 endorse, ADMIN은 approve만 노출되는지 확인
+9. self endorse/approve 대상이 모바일 승인 목록에서 제외되는지 확인
+10. 더보기 탭 RFO 요약이 `metrics` / `blockers` API를 재사용하는지 확인
+11. M5 작업 상세가 읽기전용이며 히스토리 / 감사 추적을 표시하는지 확인
+12. 글자 크기 3단계 전환 후 새로고침 시 `localStorage` 기반으로 유지되는지 확인
+13. 모바일 폰트 최소 크기(본문 16px, 메타 13px 이상)와 기술 메타 접기 규칙 검증
 
 ## 14. Seed Data (Development)
 
@@ -2710,7 +2881,6 @@ SHOPS = [
 SYSTEM_CONFIG = [
     ("meeting_current_date",       "2026-02-26"),
     ("meeting_auto_advance",       "every_monday"),
-    ("needs_update_threshold_hours","72"),
     ("teams_enabled",              "true"),
     ("teams_recipients",           "#cis-sheet-metal"),
     ("teams_message_template",     "Weekly Summary — {shop} · Week {week}: {task_count} tasks, {issues} issues flagged."),
@@ -2880,16 +3050,21 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 - [ ] 전역: CSRF, rate limit, pagination, 인증 강제
 
 ### UI
-- [ ] /tasks/meeting — init-week + 인라인 편집 + 배치 저장 + soft delete/restore
-- [ ] /tasks/entry — 단건 상태/MH/remarks 업데이트
+- [ ] `/tasks` — Task Manager (Table / Kanban / RFO 3뷰, init-week, 배포/감사)
+- [ ] `/tasks/entry` — Quick Update + Worker Assignment + Add Task
+- [ ] 모바일 셸 3탭(작업 / OT / 더보기) + 역할별 노출 규칙
+- [ ] OT 모바일 세그먼트(O1 신청 / O2 내역 / O3 승인)
+- [ ] 더보기 탭(RFO 요약 / 도움말 / 글자 크기 / 내 계정 / 로그아웃)
+- [ ] M5 작업 상세(읽기전용) + 스냅샷 히스토리 + 최근 audit
 - [ ] Version 충돌 에러 표시
 - [ ] MH 감소 차단 메시지
+- [ ] 모바일 접근성 규칙(폰트 최소 크기 / 글자 크기 3단계 / 기술 메타 접기)
 
 ### 테스트
-- [ ] OT 시나리오 9개 CI 통과
-- [ ] Task 시나리오 9개 CI 통과
-- [ ] 동시성/보안 시나리오 10개 CI 통과
-- [ ] MH 누적/감소 시나리오 4개 CI 통과
+- [ ] OT 핵심 + 모바일 시나리오 CI 통과
+- [ ] Task / Distribution + 모바일 셸 / 접근성 시나리오 CI 통과
+- [ ] 동시성 / 보안 시나리오 CI 통과
+- [ ] MH 누적 / 감소 시나리오 CI 통과
 
 ### Audit
 - [ ] 모든 Task write → audit_logs 기록
