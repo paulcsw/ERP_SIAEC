@@ -767,6 +767,29 @@ async def mobile_m3(
     })
 
 
+# ── Mobile HTMX: M4 Add Task Modal ───────────────────────────────────
+
+@router.get("/tasks/entry/mobile/m4")
+async def mobile_m4(
+    request: Request,
+    ac_id: int | None = Query(None),
+    meeting_date: str | None = Query(None),
+    shop_id: int | None = Query(None),
+    work_package_id: int | None = Query(None),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    workers = await _get_workers(db)
+    return templates.TemplateResponse("tasks/partials/_m4_add_task.html", {
+        "request": request,
+        "workers": workers,
+        "selected_ac_id": ac_id,
+        "meeting_date": meeting_date or "",
+        "shop_id": shop_id or "",
+        "work_package_id": work_package_id or "",
+    })
+
+
 # ── Mobile HTMX: M5 Task Detail (read-only) ──────────────────────────
 
 @router.get("/tasks/entry/mobile/m5")

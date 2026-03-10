@@ -36,6 +36,7 @@ def create_app() -> FastAPI:
     from app.api.rfo import router as rfo_router
     from app.views.stats import router as stats_views_router
     from app.views.rfo import router as rfo_views_router
+    from app.views.admin import router as admin_views_router
 
     app.include_router(auth_router)
     app.include_router(users_router)
@@ -52,6 +53,7 @@ def create_app() -> FastAPI:
     app.include_router(more_views_router)
     app.include_router(stats_views_router)
     app.include_router(rfo_views_router)
+    app.include_router(admin_views_router)
 
     # ── Middleware (last added = outermost in Starlette) ──────────
     # Execution order: Session → CSRF → RateLimit → handler

@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Shop Access — CIS ERP{% endblock %}
+{% block breadcrumb %}Admin &rsaquo; Shop Access{% endblock %}
+
+{% block content %}
+<div class="p-4 lg:p-5 flex flex-col h-full w-full">
+
+  <div class="flex items-center justify-between mb-3 shrink-0">
+    <div>
+      <h1 class="text-lg font-semibold text-navy-900">Shop Access Control</h1>
+      <p class="text-xs text-surf-400">Manage user shop permissions (VIEW / EDIT / MANAGE)</p>
+    </div>
+    <button class="btn-primary btn-sm text-xs" onclick="showModal('modal-add-access')">+ Grant Access</button>
+  </div>
+
+  <div class="card flex-1 flex flex-col min-h-0">
+    <div class="flex-1 overflow-y-auto">
+      <table class="tbl">
+        <thead>
+          <tr><th>Employee</th><th>Name</th><th>Shop</th><th>Access</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+        {% for a in access_list %}
+          <tr>
+            <td class="font-mono text-xs">{{ a.employee_no }}</td>
+            <td class="text-sm font-medium">{{ a.user_name }}</td>
+            <td class="text-xs">{{ a.shop_code }} — {{ a.shop_name }}</td>
+            <td>
+              <span class="badge {% if a.access == 'MANAGE' %}bg-navy-50 text-navy-700{% elif a.access == 'EDIT' %}bg-gold-50 text-gold-600{% else %}bg-surf-100 text-surf-400{% endif %}">{{ a.access }}</span>
+            </td>
+            <td>
+              <button class="btn-outline btn-sm text-xs" onclick="editAccess({{ a.id }},'{{ a.access }}')">Edit</button>
+              <button class="btn-outline btn-sm text-xs text-st-red" onclick="revokeAccess({{ a.id }})">Revoke</button>
+            </td>
+          </tr>
+        {% endfor %}
+        {% if not access_list %}
+          <tr><td colspan="5" class="text-center text-sm text-surf-400 py-8">No access grants</td></tr>
+        {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{# ── Grant Access Modal ────────────────────────────────────────────── #}
+<div class="modal-overlay" id="modal-add-access" style="display:none">
+  <div class="card w-full sm:w-[420px]">
+    <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between">
+      <h3 class="font-semibold text-navy-900">Grant Shop Access</h3>
+      <button onclick="closeModal('modal-add-access')" class="text-surf-400 hover:text-navy-700 text-lg">&times;</button>
+    </div>
+    <div class="p-5 space-y-3">
+      <div>
+        <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">User *</label>
+        <select id="add-access-user" class="inp w-full h-9 text-sm">
+          <option value="">-- Select --</option>
+          {% for u in users %}<option value="{{ u.id }}">{{ u.employee_no }} — {{ u.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Shop *</label>
+        <select id="add-access-shop" class="inp w-full h-9 text-sm">
+          <option value="">-- Select --</option>
+          {% for s in shops %}<option value="{{ s.id }}">{{ s.code }} — {{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Access Level *</label>
+        <select id="add-access-level" class="inp w-full h-9 text-sm">
+          <option value="VIEW">VIEW</option>
+          <option value="EDIT">EDIT</option>
+          <option value="MANAGE">MANAGE</option>
+        </select>
+      </div>
+      <button class="btn-gold w-full" onclick="grantAccess()">Grant Access</button>
+    </div>
+  </div>
+</div>
+
+{# ── Edit Access Modal ─────────────────────────────────────────────── #}
+<div class="modal-overlay" id="modal-edit-access" style="display:none">
+  <div class="card w-full sm:w-[380px]">
+    <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between">
+      <h3 class="font-semibold text-navy-900">Edit Access Level</h3>
+      <button onclick="closeModal('modal-edit-access')" class="text-surf-400 hover:text-navy-700 text-lg">&times;</button>
+    </div>
+    <div class="p-5 space-y-3">
+      <input type="hidden" id="edit-access-id"/>
+      <div>
+        <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Access Level *</label>
+        <select id="edit-access-level" class="inp w-full h-9 text-sm">
+          <option value="VIEW">VIEW</option>
+          <option value="EDIT">EDIT</option>
+          <option value="MANAGE">MANAGE</option>
+        </select>
+      </div>
+      <div class="flex gap-3">
+        <button class="btn-outline flex-1" onclick="closeModal('modal-edit-access')">Cancel</button>
+        <button class="btn-gold flex-1" onclick="saveAccess()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var csrf=()=>(document.cookie.match(/csrftoken=([^;]+)/)||[])[1]||'';
+
+function grantAccess(){
+  var body={user_id:parseInt(document.getElementById('add-access-user').value),shop_id:parseInt(document.getElementById('add-access-shop').value),access:document.getElementById('add-access-level').value};
+  if(!body.user_id||!body.shop_id){showToast('Error','User and Shop required','red');return;}
+  fetch('/api/shop-access',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(body)})
+    .then(r=>{if(!r.ok)return r.json().then(e=>{throw e});return r.json()})
+    .then(()=>{closeModal('modal-add-access');showToast('Granted','Access granted','green');location.reload();})
+    .catch(e=>showToast('Error',(e&&e.detail)||'Failed','red'));
+}
+
+function editAccess(id,level){
+  document.getElementById('edit-access-id').value=id;
+  document.getElementById('edit-access-level').value=level;
+  showModal('modal-edit-access');
+}
+
+function saveAccess(){
+  var id=document.getElementById('edit-access-id').value;
+  var body={access:document.getElementById('edit-access-level').value};
+  fetch('/api/shop-access/'+id,{method:'PATCH',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(body)})
+    .then(r=>{if(!r.ok)return r.json().then(e=>{throw e});return r.json()})
+    .then(()=>{closeModal('modal-edit-access');showToast('Updated','Access level changed','green');location.reload();})
+    .catch(e=>showToast('Error',(e&&e.detail)||'Failed','red'));
+}
+
+function revokeAccess(id){
+  if(!confirm('Revoke this access?'))return;
+  fetch('/api/shop-access/'+id,{method:'DELETE',headers:{'X-CSRFToken':csrf()}})
+    .then(r=>{if(!r.ok)return r.json().then(e=>{throw e});return r.json()})
+    .then(()=>{showToast('Revoked','Access removed','green');location.reload();})
+    .catch(e=>showToast('Error',(e&&e.detail)||'Failed','red'));
+}
+</script>
+{% endblock %}

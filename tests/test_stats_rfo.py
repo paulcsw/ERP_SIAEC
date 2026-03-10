@@ -556,3 +556,51 @@ async def test_rfo_detail_ssr_with_id(async_client, rfo_env):
     resp = await async_client.get(f"/rfo?id={wp_id}")
     assert resp.status_code == 200
     assert "RFO-001" in resp.text
+
+
+# ── Admin SSR smoke tests ────────────────────────────────────────────
+
+
+async def test_admin_users_ssr(async_client, db):
+    """GET /admin/users returns HTML with user table."""
+    resp = await async_client.get("/admin/users")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "Personnel" in resp.text
+    assert "E001" in resp.text  # seeded admin
+
+
+async def test_admin_reference_ssr(async_client, db):
+    """GET /admin/reference returns HTML with tabs."""
+    resp = await async_client.get("/admin/reference")
+    assert resp.status_code == 200
+    assert "Reference Data" in resp.text
+    assert "Aircraft" in resp.text
+
+
+async def test_admin_shops_ssr(async_client, db):
+    """GET /admin/shops returns HTML."""
+    resp = await async_client.get("/admin/shops")
+    assert resp.status_code == 200
+    assert "Shop Management" in resp.text
+
+
+async def test_admin_shop_access_ssr(async_client, db):
+    """GET /admin/shop-access returns HTML."""
+    resp = await async_client.get("/admin/shop-access")
+    assert resp.status_code == 200
+    assert "Shop Access" in resp.text
+
+
+async def test_admin_pages_worker_forbidden(worker_client, db):
+    """WORKER cannot access admin pages."""
+    for url in ["/admin/users", "/admin/reference", "/admin/shops", "/admin/shop-access"]:
+        resp = await worker_client.get(url)
+        assert resp.status_code == 403, f"{url} should be 403 for WORKER"
+
+
+async def test_mobile_m4_route(async_client, db):
+    """GET /tasks/entry/mobile/m4 returns add-task partial."""
+    resp = await async_client.get("/tasks/entry/mobile/m4")
+    assert resp.status_code == 200
+    assert "Add Task" in resp.text

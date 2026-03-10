@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Shops — CIS ERP{% endblock %}
+{% block breadcrumb %}Admin &rsaquo; Shops{% endblock %}
+
+{% block content %}
+<div class="p-4 lg:p-5 flex flex-col h-full w-full">
+
+  <div class="flex items-center justify-between mb-3 shrink-0">
+    <div>
+      <h1 class="text-lg font-semibold text-navy-900">Shop Management</h1>
+      <p class="text-xs text-surf-400">Workshop codes and names</p>
+    </div>
+    <button class="btn-primary btn-sm text-xs" onclick="showModal('modal-add-shop')">+ Add Shop</button>
+  </div>
+
+  <div class="card flex-1 flex flex-col min-h-0">
+    <div class="flex-1 overflow-y-auto">
+      <table class="tbl">
+        <thead>
+          <tr><th>Code</th><th>Name</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+        {% for s in shops %}
+          <tr>
+            <td class="font-mono text-xs font-medium">{{ s.code }}</td>
+            <td class="text-sm">{{ s.name }}</td>
+            <td><button class="btn-outline btn-sm text-xs" onclick="editShop({{ s.id }},'{{ s.code }}','{{ s.name }}')">Edit</button></td>
+          </tr>
+        {% endfor %}
+        {% if not shops %}
+          <tr><td colspan="3" class="text-center text-sm text-surf-400 py-8">No shops</td></tr>
+        {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{# ── Add Shop Modal ────────────────────────────────────────────────── #}
+<div class="modal-overlay" id="modal-add-shop" style="display:none">
+  <div class="card w-full sm:w-[380px]">
+    <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between">
+      <h3 class="font-semibold text-navy-900">Add Shop</h3>
+      <button onclick="closeModal('modal-add-shop')" class="text-surf-400 hover:text-navy-700 text-lg">&times;</button>
+    </div>
+    <div class="p-5 space-y-3">
+      <div><label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Code *</label><input id="add-shop-code" class="inp w-full h-9 text-sm font-mono" placeholder="e.g. SM"/></div>
+      <div><label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Name *</label><input id="add-shop-name" class="inp w-full h-9 text-sm" placeholder="e.g. Sheet Metal"/></div>
+      <button class="btn-gold w-full" onclick="addShop()">Add Shop</button>
+    </div>
+  </div>
+</div>
+
+{# ── Edit Shop Modal ───────────────────────────────────────────────── #}
+<div class="modal-overlay" id="modal-edit-shop" style="display:none">
+  <div class="card w-full sm:w-[380px]">
+    <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between">
+      <h3 class="font-semibold text-navy-900">Edit Shop</h3>
+      <button onclick="closeModal('modal-edit-shop')" class="text-surf-400 hover:text-navy-700 text-lg">&times;</button>
+    </div>
+    <div class="p-5 space-y-3">
+      <input type="hidden" id="edit-shop-id"/>
+      <div><label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Code</label><input id="edit-shop-code" class="inp w-full h-9 text-sm font-mono bg-surf-50" readonly/></div>
+      <div><label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Name *</label><input id="edit-shop-name" class="inp w-full h-9 text-sm"/></div>
+      <div class="flex gap-3">
+        <button class="btn-outline flex-1" onclick="closeModal('modal-edit-shop')">Cancel</button>
+        <button class="btn-gold flex-1" onclick="saveShop()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var csrf=()=>(document.cookie.match(/csrftoken=([^;]+)/)||[])[1]||'';
+
+function addShop(){
+  var body={code:document.getElementById('add-shop-code').value,name:document.getElementById('add-shop-name').value};
+  if(!body.code||!body.name){showToast('Error','Code and Name required','red');return;}
+  fetch('/api/shops',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(body)})
+    .then(r=>{if(!r.ok)return r.json().then(e=>{throw e});return r.json()})
+    .then(()=>{closeModal('modal-add-shop');showToast('Created','Shop added','green');location.reload();})
+    .catch(e=>showToast('Error',(e&&e.detail)||'Failed','red'));
+}
+
+function editShop(id,code,name){
+  document.getElementById('edit-shop-id').value=id;
+  document.getElementById('edit-shop-code').value=code;
+  document.getElementById('edit-shop-name').value=name;
+  showModal('modal-edit-shop');
+}
+
+function saveShop(){
+  var id=document.getElementById('edit-shop-id').value;
+  var body={name:document.getElementById('edit-shop-name').value};
+  fetch('/api/shops/'+id,{method:'PATCH',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(body)})
+    .then(r=>{if(!r.ok)return r.json().then(e=>{throw e});return r.json()})
+    .then(()=>{closeModal('modal-edit-shop');showToast('Updated','Shop saved','green');location.reload();})
+    .catch(e=>showToast('Error',(e&&e.detail)||'Failed','red'));
+}
+</script>
+{% endblock %}

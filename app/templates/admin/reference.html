@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Reference Data — CIS ERP{% endblock %}
+{% block breadcrumb %}Admin &rsaquo; Reference Data{% endblock %}
+
+{% block content %}
+<div class="p-4 lg:p-5 flex flex-col h-full w-full">
+
+  {# ── Header ──────────────────────────────────────────────────────── #}
+  <div class="flex items-center justify-between mb-3 shrink-0">
+    <div>
+      <h1 class="text-lg font-semibold text-navy-900">Reference Data</h1>
+      <p class="text-xs text-surf-400">Aircraft, Work Packages (RFO), Shop Streams</p>
+    </div>
+    <button class="btn-outline btn-sm text-xs" onclick="showModal('modal-csv')">CSV Import</button>
+  </div>
+
+  {# ── Tabs ────────────────────────────────────────────────────────── #}
+  <div class="flex gap-1 mb-3 border-b border-surf-100">
+    <button class="ref-tab active" data-tab="tab-aircraft" onclick="switchRefTab(this)">Aircraft</button>
+    <button class="ref-tab" data-tab="tab-wp" onclick="switchRefTab(this)">Work Packages</button>
+    <button class="ref-tab" data-tab="tab-ss" onclick="switchRefTab(this)">Shop Streams</button>
+  </div>
+
+  {# ── Aircraft Table ──────────────────────────────────────────────── #}
+  <div id="tab-aircraft" class="ref-panel card flex-1 flex flex-col min-h-0">
+    <div class="flex-1 overflow-y-auto">
+      <table class="tbl">
+        <thead>
+          <tr><th>AC Reg</th><th>Airline</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+        {% for a in aircraft %}
+          <tr>
+            <td class="font-mono text-xs font-medium">{{ a.ac_reg }}</td>
+            <td class="text-sm">{{ a.airline }}</td>
+            <td><span class="badge {% if a.status == 'ACTIVE' %}bg-st-greenBg text-st-green{% elif a.status == 'COMPLETED' %}bg-navy-50 text-navy-600{% else %}bg-surf-100 text-surf-400{% endif %}">{{ a.status }}</span></td>
+          </tr>
+        {% endfor %}
+        {% if not aircraft %}
+          <tr><td colspan="3" class="text-center text-sm text-surf-400 py-8">No aircraft</td></tr>
+        {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ── Work Packages Table ─────────────────────────────────────────── #}
+  <div id="tab-wp" class="ref-panel card flex-1 flex flex-col min-h-0" style="display:none">
+    <div class="flex-1 overflow-y-auto">
+      <table class="tbl">
+        <thead>
+          <tr><th>RFO No</th><th>Title</th><th>Aircraft</th><th>Start</th><th>End</th><th>Priority</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+        {% for wp in work_packages %}
+          <tr>
+            <td class="font-mono text-xs font-medium">{{ wp.rfo_no }}</td>
+            <td class="text-sm">{{ wp.title }}</td>
+            <td class="font-mono text-xs">{{ wp.ac_reg }}</td>
+            <td class="text-xs">{{ wp.start_date }}</td>
+            <td class="text-xs">{{ wp.end_date }}</td>
+            <td class="text-xs text-center">{{ wp.priority }}</td>
+            <td><span class="badge {% if wp.status == 'ACTIVE' %}bg-st-greenBg text-st-green{% else %}bg-surf-100 text-surf-400{% endif %}">{{ wp.status }}</span></td>
+          </tr>
+        {% endfor %}
+        {% if not work_packages %}
+          <tr><td colspan="7" class="text-center text-sm text-surf-400 py-8">No work packages</td></tr>
+        {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ── Shop Streams Table ──────────────────────────────────────────── #}
+  <div id="tab-ss" class="ref-panel card flex-1 flex flex-col min-h-0" style="display:none">
+    <div class="flex-1 overflow-y-auto">
+      <table class="tbl">
+        <thead>
+          <tr><th>Shop Code</th><th>RFO</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+        {% for ss in shop_streams %}
+          <tr>
+            <td class="font-mono text-xs font-medium">{{ ss.shop_code }}</td>
+            <td class="text-xs">{{ ss.rfo_no }}</td>
+            <td><span class="badge {% if ss.status == 'ACTIVE' %}bg-st-greenBg text-st-green{% else %}bg-surf-100 text-surf-400{% endif %}">{{ ss.status }}</span></td>
+          </tr>
+        {% endfor %}
+        {% if not shop_streams %}
+          <tr><td colspan="3" class="text-center text-sm text-surf-400 py-8">No shop streams</td></tr>
+        {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+{# ── CSV Import Modal ──────────────────────────────────────────────── #}
+<div class="modal-overlay" id="modal-csv" style="display:none">
+  <div class="card w-full sm:w-[500px] max-h-[80vh] overflow-y-auto">
+    <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between">
+      <h3 class="font-semibold text-navy-900">CSV Import &mdash; Reference Data</h3>
+      <button onclick="closeModal('modal-csv')" class="text-surf-400 hover:text-navy-700 text-lg">&times;</button>
+    </div>
+    <div class="p-5 space-y-4">
+      <div>
+        <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Entity Type</label>
+        <select id="csv-entity" class="inp w-full h-9 text-sm">
+          <option value="aircraft">Aircraft</option>
+          <option value="work_package">RFO (Work Package)</option>
+          <option value="shop_stream">Shop Stream</option>
+        </select>
+      </div>
+      <div class="border-2 border-dashed border-surf-200 rounded-lg p-8 text-center">
+        <input type="file" id="csv-file" accept=".csv" class="hidden"/>
+        <div class="text-sm text-surf-400">Drop CSV file here or <span class="text-st-blue font-medium cursor-pointer" onclick="document.getElementById('csv-file').click()">browse</span></div>
+        <div class="text-[10px] text-surf-300 mt-1">Max 5MB, UTF-8</div>
+      </div>
+      <div id="csv-preview" style="display:none" class="card p-3 bg-st-greenBg border-st-green/30">
+        <div class="text-xs font-medium text-st-green" id="csv-preview-text"></div>
+      </div>
+      <button class="btn-gold w-full" onclick="importCsv()">Import</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function switchRefTab(btn) {
+  document.querySelectorAll('.ref-tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.ref-panel').forEach(p=>p.style.display='none');
+  document.getElementById(btn.dataset.tab).style.display='';
+}
+
+document.getElementById('csv-file').addEventListener('change', function(e) {
+  var f=e.target.files[0];
+  if(f){
+    document.getElementById('csv-preview').style.display='';
+    document.getElementById('csv-preview-text').textContent='Selected: '+f.name+' ('+Math.round(f.size/1024)+'KB)';
+  }
+});
+
+function importCsv() {
+  var file=document.getElementById('csv-file').files[0];
+  if(!file){showToast('Error','Please select a CSV file','red');return;}
+  var entity=document.getElementById('csv-entity').value;
+  var fd=new FormData();
+  fd.append('file',file);
+  fd.append('entity_type',entity);
+  var csrf=(document.cookie.match(/csrftoken=([^;]+)/)||[])[1]||'';
+  fetch('/api/reference/import/csv',{method:'POST',headers:{'X-CSRFToken':csrf},body:fd})
+    .then(r=>{if(!r.ok)return r.json().then(e=>{throw e});return r.json()})
+    .then(d=>{closeModal('modal-csv');showToast('Imported',d.created+' created, '+d.skipped+' skipped','green');location.reload();})
+    .catch(e=>showToast('Error',(e&&e.detail)||'Import failed','red'));
+}
+</script>
+<style>
+.ref-tab{padding:.5rem 1rem;font-size:.8125rem;font-weight:500;color:var(--surf-400);border-bottom:2px solid transparent;cursor:pointer;background:none;border-top:none;border-left:none;border-right:none}
+.ref-tab.active{color:var(--navy-700);border-bottom-color:var(--navy-600)}
+.ref-tab:hover{color:var(--navy-700)}
+</style>
+{% endblock %}
