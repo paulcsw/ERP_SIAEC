@@ -26,7 +26,10 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
 
     # ── Middleware (last added = outermost in Starlette) ──────────
-    # Execution order: Session → handler
+    # Execution order: Session → CSRF → handler
+    from app.middleware.csrf import CSRFMiddleware
+
+    app.add_middleware(CSRFMiddleware)
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.SECRET_KEY,

@@ -9,7 +9,8 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
     {% block head %}{% endblock %}
 </head>
-<body class="bg-gray-50 text-gray-900">
+<body class="bg-gray-50 text-gray-900"
+      hx-headers='js:{"X-CSRFToken": document.cookie.match(/csrftoken=([^;]+)/)?.[1] || ""}'>
     {% block body %}{% endblock %}
 </body>
 </html>
