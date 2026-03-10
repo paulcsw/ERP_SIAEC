@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% block title %}RFO Detail — CIS ERP{% endblock %}
+{% block breadcrumb %}RFO Detail{% endblock %}
+
+{% block content %}
+<div class="p-4 lg:p-5 flex flex-col h-full w-full overflow-y-auto">
+
+  {# ── Header + RFO Selector ─────────────────────────────────── #}
+  <div class="flex items-center justify-between mb-4">
+    <h1 class="text-lg font-semibold text-navy-900">RFO Detail</h1>
+    <div class="relative" id="rfo-combo">
+      <button onclick="document.getElementById('rfo-dropdown').classList.toggle('hidden')"
+              class="inp h-9 text-sm flex items-center gap-2 min-w-[260px] cursor-pointer">
+        <svg class="w-4 h-4 text-surf-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        <span id="rfo-combo-value">{% if selected %}{{ selected.rfo_no }} — {{ selected.title | truncate(30) }}{% else %}Select RFO…{% endif %}</span>
+      </button>
+      <div id="rfo-dropdown" class="hidden absolute right-0 top-10 w-80 bg-white border border-surf-200 rounded-lg shadow-lg z-20 max-h-72 overflow-y-auto">
+        <div class="p-2 border-b border-surf-100">
+          <input type="text" class="inp w-full h-8 text-sm" placeholder="Search RFO…" id="rfo-search"
+                 oninput="filterRfo(this.value)"/>
+        </div>
+        <div id="rfo-list">
+        {% for opt in rfo_options %}
+          <a href="/rfo?id={{ opt.id }}" class="rfo-item block px-3 py-2 hover:bg-surf-50 cursor-pointer text-sm {% if selected and selected.id == opt.id %}bg-navy-50 border-l-2 border-navy-600{% endif %}"
+             data-search="{{ opt.rfo_no }} {{ opt.title }} {{ opt.ac_reg or '' }}">
+            <div class="font-medium text-navy-900">{{ opt.rfo_no }}</div>
+            <div class="text-[11px] text-surf-400">{{ opt.ac_reg or '–' }} · {{ opt.title | truncate(40) }}</div>
+          </a>
+        {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+{% if selected %}
+  {# ── Summary Strip ─────────────────────────────────────────── #}
+  <div class="card p-3 mb-4 flex items-center gap-4 flex-wrap text-sm">
+    <div><span class="text-surf-400">Aircraft</span> <span class="font-medium text-navy-900 ml-1">{{ summary_strip.ac_reg }}</span></div>
+    <div class="w-px h-8 bg-surf-200"></div>
+    <div><span class="text-surf-400">Airline</span> <span class="font-medium text-navy-900 ml-1">{{ summary_strip.airline }}</span></div>
+    <div class="w-px h-8 bg-surf-200"></div>
+    <div><span class="text-surf-400">Start</span> <span class="font-medium text-navy-900 ml-1">{{ summary_strip.start_date }}</span></div>
+    <div class="w-px h-8 bg-surf-200"></div>
+    <div><span class="text-surf-400">Target Out</span> <span class="font-medium {% if summary_strip.days_remaining is not none and summary_strip.days_remaining < 14 %}text-st-red{% else %}text-navy-900{% endif %} ml-1">{{ summary_strip.end_date }}</span></div>
+    <div class="w-px h-8 bg-surf-200"></div>
+    <div><span class="text-surf-400">Days Remaining</span> <span class="font-medium {% if summary_strip.days_remaining is not none and summary_strip.days_remaining < 14 %}text-st-red{% else %}text-navy-900{% endif %} ml-1">{{ summary_strip.days_remaining if summary_strip.days_remaining is not none else '–' }}</span></div>
+    <div class="w-px h-8 bg-surf-200"></div>
+    <div>
+      <span class="text-surf-400">Priority</span>
+      <span class="font-medium text-navy-900 ml-1">P{{ summary_strip.priority }}{% if summary_strip.priority <= 1 %} — Critical{% elif summary_strip.priority <= 2 %} — High{% endif %}</span>
+    </div>
+    <div class="ml-auto">
+      <span class="badge {% if selected.status == 'ACTIVE' %}badge-approved{% elif selected.status == 'COMPLETED' %}badge-completed{% else %}badge-pending{% endif %}">{{ selected.status }}</span>
+    </div>
+  </div>
+
+  {# ── 6 KPI Cards ───────────────────────────────────────────── #}
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+    <div class="card p-3">
+      <div class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Tasks</div>
+      <div class="text-2xl font-bold text-navy-900">{{ kpi.total_tasks }}</div>
+    </div>
+    <div class="card p-3">
+      <div class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Planned MH</div>
+      <div class="text-2xl font-bold text-navy-900">{{ kpi.planned_mh }}</div>
+    </div>
+    <div class="card p-3">
+      <div class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Actual MH</div>
+      <div class="text-2xl font-bold text-st-green">{{ kpi.actual_mh }}</div>
+      <div class="text-[10px] text-surf-400">{{ kpi.plan_pct }}% of plan</div>
+    </div>
+    <div class="card p-3">
+      <div class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">MH Variance</div>
+      <div class="text-2xl font-bold {% if kpi.mh_variance <= 0 %}text-st-green{% else %}text-st-red{% endif %}">{{ kpi.mh_variance }}</div>
+    </div>
+    <div class="card p-3">
+      <div class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">OT Hours</div>
+      <div class="text-2xl font-bold text-gold-500">{{ kpi.ot_hours }}h</div>
+      <div class="text-[10px] text-surf-400">{{ kpi.ot_ratio }}% of actual</div>
+    </div>
+    <div class="card p-3">
+      <div class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Blockers</div>
+      <div class="text-2xl font-bold text-st-red">{{ kpi.blocker_count }}</div>
+    </div>
+  </div>
+
+  {# ── 3-column: Task Status / Burndown / Efficiency ──────────── #}
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+
+    {# Task Completion bar #}
+    <div class="card p-4">
+      <div class="text-sm font-semibold text-navy-900 mb-3">Task Completion</div>
+      <div class="flex h-8 rounded-lg overflow-hidden mb-3">
+        {% if task_status_bar %}
+        <div class="bg-st-green flex items-center justify-center text-white text-xs font-medium" style="width:{{ task_status_bar.COMPLETED }}%">{% if task_status_bar.COMPLETED > 10 %}{{ task_status_bar.counts.COMPLETED }}{% endif %}</div>
+        <div class="bg-gold-500 flex items-center justify-center text-white text-xs font-medium" style="width:{{ task_status_bar.IN_PROGRESS }}%">{% if task_status_bar.IN_PROGRESS > 10 %}{{ task_status_bar.counts.IN_PROGRESS }}{% endif %}</div>
+        <div class="bg-st-red flex items-center justify-center text-white text-xs font-medium" style="width:{{ task_status_bar.WAITING }}%">{% if task_status_bar.WAITING > 10 %}{{ task_status_bar.counts.WAITING }}{% endif %}</div>
+        <div class="bg-surf-300 flex items-center justify-center text-white text-xs font-medium" style="width:{{ task_status_bar.NOT_STARTED }}%">{% if task_status_bar.NOT_STARTED > 10 %}{{ task_status_bar.counts.NOT_STARTED }}{% endif %}</div>
+        {% endif %}
+      </div>
+      <div class="flex flex-wrap gap-3 text-[10px] text-surf-400">
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-st-green inline-block"></span> Done {{ task_status_bar.counts.COMPLETED if task_status_bar else 0 }}</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-gold-500 inline-block"></span> Active {{ task_status_bar.counts.IN_PROGRESS if task_status_bar else 0 }}</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-st-red inline-block"></span> Blocked {{ task_status_bar.counts.WAITING if task_status_bar else 0 }}</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-surf-300 inline-block"></span> Queued {{ task_status_bar.counts.NOT_STARTED if task_status_bar else 0 }}</span>
+      </div>
+    </div>
+
+    {# MH Burndown #}
+    <div class="card p-4">
+      <div class="text-sm font-semibold text-navy-900 mb-3">MH Burndown</div>
+      {% if burndown_data and burndown_data.weeks %}
+      <div class="flex items-end gap-2 h-36">
+        {% for w in burndown_data.weeks %}
+        <div class="flex-1 flex flex-col items-center gap-1">
+          <div class="w-full relative">
+            <div class="w-full bg-surf-100 rounded-t" style="height:{{ w.remaining_h }}px"></div>
+            <div class="w-full {% if loop.last %}bg-gold-500{% else %}bg-navy-500{% endif %} rounded-t" style="height:{{ w.actual_h }}px"></div>
+          </div>
+          <span class="text-[9px] text-surf-400">{{ w.label }}</span>
+          <span class="text-[10px] font-mono text-navy-700">{{ w.actual }}h</span>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="flex gap-3 mt-2 text-[10px] text-surf-400">
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded bg-navy-500 inline-block"></span> Actual</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded bg-gold-500 inline-block"></span> Current</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded bg-surf-100 inline-block"></span> Remaining</span>
+      </div>
+      {% else %}
+      <div class="text-sm text-surf-400 py-8 text-center">No snapshot data</div>
+      {% endif %}
+    </div>
+
+    {# Efficiency Metrics #}
+    <div class="card p-4">
+      <div class="text-sm font-semibold text-navy-900 mb-3">Efficiency Metrics</div>
+      <div class="space-y-3">
+        <div>
+          <div class="flex justify-between text-xs mb-1"><span class="text-surf-400">Productive Ratio</span><span class="font-medium text-st-green">{{ kpi.productive_ratio }}%</span></div>
+          <div class="prog-bar h-2"><div class="prog-fill bg-st-green rounded-full" style="width:{{ kpi.productive_ratio }}%"></div></div>
+        </div>
+        <div>
+          <div class="flex justify-between text-xs mb-1"><span class="text-surf-400">OT Ratio</span><span class="font-medium text-gold-500">{{ kpi.ot_ratio }}%</span></div>
+          <div class="prog-bar h-2"><div class="prog-fill bg-gold-500 rounded-full" style="width:{{ kpi.ot_ratio }}%"></div></div>
+        </div>
+        <div>
+          <div class="flex justify-between text-xs mb-1"><span class="text-surf-400">First-Time Completion</span><span class="font-medium text-navy-700">{{ kpi.ftc }}%</span></div>
+          <div class="prog-bar h-2"><div class="prog-fill bg-navy-500 rounded-full" style="width:{{ kpi.ftc }}%"></div></div>
+        </div>
+        <div>
+          <div class="flex justify-between text-xs"><span class="text-surf-400">Avg Cycle Time</span><span class="font-medium text-navy-700">{{ kpi.avg_cycle }} weeks</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── 2-column: Blockers / Worker Allocation ─────────────────── #}
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+    {# Active Blockers #}
+    <div class="card p-4">
+      <div class="flex items-center gap-2 mb-3">
+        <svg class="w-4 h-4 text-st-red" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+        <span class="text-sm font-semibold text-navy-900">Active Blockers</span>
+        <span class="badge badge-rejected text-[10px] ml-auto">{{ blockers_data.count }} open</span>
+      </div>
+      <div class="space-y-2">
+      {% for b in blockers_data["items"] %}
+        <div class="p-3 rounded-lg {% if b.days_blocked >= 7 %}bg-st-redBg/30 border border-st-red/15{% else %}bg-st-yellowBg/50 border border-gold-200/40{% endif %}">
+          <div class="flex items-start justify-between">
+            <div class="text-sm font-medium text-navy-900">{{ b.task_text | truncate(50) }}</div>
+            <span class="badge badge-rejected text-[10px] shrink-0 ml-2">{{ b.days_blocked }}d</span>
+          </div>
+          {% if b.critical_issue %}
+          <div class="text-xs text-surf-400 mt-1">{{ b.critical_issue | truncate(80) }}</div>
+          {% endif %}
+        </div>
+      {% endfor %}
+      {% if not blockers_data.items %}
+        <div class="text-sm text-surf-400 py-4 text-center">No active blockers</div>
+      {% endif %}
+      </div>
+    </div>
+
+    {# Worker Allocation #}
+    <div class="card p-4">
+      <div class="text-sm font-semibold text-navy-900 mb-3">Worker Allocation</div>
+      <div class="space-y-2.5">
+      {% for w in workers_data %}
+        <div class="flex items-center gap-3">
+          <div class="w-32 shrink-0">
+            <div class="text-sm font-medium {% if w.is_unassigned %}text-st-red{% else %}text-navy-900{% endif %} truncate">{{ w.name }}</div>
+            {% if w.employee_no %}<div class="text-[10px] text-surf-400">{{ w.employee_no }}</div>{% endif %}
+          </div>
+          <div class="flex-1">
+            <div class="prog-bar h-2">
+              <div class="prog-fill {% if w.is_unassigned %}bg-st-red{% else %}bg-navy-500{% endif %} rounded-full" style="width:{{ w.pct }}%"></div>
+            </div>
+          </div>
+          <div class="w-20 text-right text-xs text-navy-700">
+            <span class="font-mono font-medium">{{ w.mh }}h</span>
+            <span class="text-surf-400 ml-1">{{ w.count }} tasks</span>
+          </div>
+        </div>
+      {% endfor %}
+      {% if not workers_data %}
+        <div class="text-sm text-surf-400 py-4 text-center">No assignments</div>
+      {% endif %}
+      </div>
+    </div>
+  </div>
+
+{% else %}
+  {# No RFO selected #}
+  <div class="card p-8 text-center">
+    <svg class="w-12 h-12 text-surf-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+    <div class="text-sm text-surf-400 mb-1">Select an RFO from the dropdown above</div>
+    <div class="text-xs text-surf-300">{{ rfo_options | length }} work packages available</div>
+  </div>
+{% endif %}
+
+</div>
+
+<script>
+function filterRfo(q) {
+  const items = document.querySelectorAll('.rfo-item');
+  const lq = q.toLowerCase();
+  items.forEach(el => {
+    el.style.display = (el.dataset.search || '').toLowerCase().includes(lq) ? '' : 'none';
+  });
+}
+// Close dropdown on outside click
+document.addEventListener('click', e => {
+  const combo = document.getElementById('rfo-combo');
+  const dd = document.getElementById('rfo-dropdown');
+  if (combo && dd && !combo.contains(e.target)) dd.classList.add('hidden');
+});
+</script>
+{% endblock %}

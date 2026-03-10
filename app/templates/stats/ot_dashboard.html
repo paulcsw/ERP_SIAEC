@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}OT Dashboard — CIS ERP{% endblock %}
+{% block breadcrumb %}OT Dashboard{% endblock %}
+
+{% block content %}
+<div class="p-4 lg:p-5 flex flex-col h-full w-full overflow-y-auto">
+
+  {# ── Header + Filters ─────────────────────────────────────── #}
+  <div class="flex items-center justify-between mb-4">
+    <h1 class="text-lg font-semibold text-navy-900">OT Dashboard</h1>
+    <div class="flex items-center gap-2">
+      <input type="month" class="inp h-9 text-sm" value="{{ month_label }}"
+             onchange="location.href='/stats/ot?month='+this.value"/>
+    </div>
+  </div>
+
+  {# ── Summary KPI Cards (4 cols) ────────────────────────────── #}
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+    <div class="card p-3">
+      <div class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Total OT Hours</div>
+      <div class="text-2xl font-bold text-navy-900">{{ summary.total_hours }}h</div>
+    </div>
+    <div class="card p-3">
+      <div class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Approved</div>
+      <div class="text-2xl font-bold text-st-green">{{ summary.approved_hours }}h</div>
+    </div>
+    <div class="card p-3">
+      <div class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Pending / Endorsed</div>
+      <div class="text-2xl font-bold text-st-purple">{{ summary.pending_endorsed_hours }}h</div>
+    </div>
+    <div class="card p-3">
+      <div class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Avg Turnaround</div>
+      <div class="text-2xl font-bold text-navy-900">{{ summary.avg_turnaround }}h</div>
+    </div>
+  </div>
+
+  {# ── Individual Monthly OT vs 72h Limit (full-width) ───────── #}
+  <div class="card p-4 mb-4">
+    <div class="flex items-center justify-between mb-3">
+      <div class="text-sm font-semibold text-navy-900">Individual Monthly OT vs 72h Limit</div>
+      <div class="flex items-center gap-3 text-[10px] text-surf-400">
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-navy-600 inline-block"></span> Safe</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-gold-500 inline-block"></span> Warning</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-st-red inline-block"></span> At Limit</span>
+      </div>
+    </div>
+    <div class="space-y-2.5">
+    {% for u in usage_list %}
+      <div class="flex items-center gap-3">
+        <div class="w-32 shrink-0">
+          <div class="text-sm font-medium text-navy-900 truncate">{{ u.name }}</div>
+          <div class="text-[10px] text-surf-400">{{ u.employee_no }}</div>
+        </div>
+        <div class="flex-1">
+          <div class="prog-bar h-2.5">
+            <div class="prog-fill {{ u.bar_color }} rounded-full" style="width:{{ [u.pct, 100] | min }}%"></div>
+          </div>
+        </div>
+        <div class="w-12 text-right text-sm font-mono font-medium text-navy-700">{{ u.pct }}%</div>
+        <div class="w-24 text-right text-[10px] text-surf-400">{{ u.remaining_hours }}h left</div>
+      </div>
+    {% endfor %}
+    {% if not usage_list %}
+      <div class="text-sm text-surf-400 py-4 text-center">No OT data for this period</div>
+    {% endif %}
+    </div>
+  </div>
+
+  {# ── 3-column: Pipeline / By Reason / Weekly Trend ─────────── #}
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+    {# Approval Pipeline #}
+    <div class="card p-4">
+      <div class="text-sm font-semibold text-navy-900 mb-3">Approval Pipeline</div>
+      <div class="space-y-2.5">
+        {% set pipe_items = [
+          ("Submitted", pipeline.submitted, "bg-surf-300"),
+          ("Endorsed", pipeline.endorsed, "bg-st-purple"),
+          ("Approved", pipeline.approved, "bg-st-green"),
+          ("Rejected", pipeline.rejected, "bg-st-red"),
+        ] %}
+        {% set pipe_max = [pipeline.submitted, 1] | max %}
+        {% for label, count, color in pipe_items %}
+        <div class="flex items-center gap-2">
+          <div class="w-20 text-xs text-surf-400">{{ label }}</div>
+          <div class="flex-1 prog-bar h-2">
+            <div class="prog-fill {{ color }} rounded-full" style="width:{{ (count / pipe_max * 100) | round }}%"></div>
+          </div>
+          <div class="w-8 text-right text-xs font-mono font-medium text-navy-700">{{ count }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# OT by Reason #}
+    <div class="card p-4">
+      <div class="text-sm font-semibold text-navy-900 mb-3">OT by Reason Code</div>
+      <div class="space-y-2.5">
+        {% for r in reason_bars %}
+        <div class="flex items-center gap-2">
+          <div class="w-28 text-xs text-surf-400 truncate">{{ r.code | replace('_', ' ') | title }}</div>
+          <div class="flex-1 prog-bar h-2">
+            <div class="prog-fill {{ reason_colors.get(r.code, 'bg-surf-300') }} rounded-full" style="width:{{ r.pct }}%"></div>
+          </div>
+          <div class="w-10 text-right text-xs font-mono font-medium text-navy-700">{{ r.hours }}h</div>
+        </div>
+        {% endfor %}
+        {% if not reason_bars %}
+        <div class="text-sm text-surf-400 py-4 text-center">No data</div>
+        {% endif %}
+      </div>
+    </div>
+
+    {# Weekly OT Trend #}
+    <div class="card p-4">
+      <div class="text-sm font-semibold text-navy-900 mb-3">Weekly OT Trend</div>
+      <div class="flex items-end gap-3 h-40">
+        {% for w in weekly %}
+        <div class="flex-1 flex flex-col items-center gap-1">
+          <div class="w-full {{ week_colors[loop.index0 % (week_colors | length)] }} rounded-t transition-all" style="height:{{ w.height }}px"></div>
+          <span class="text-[9px] text-surf-400">{{ w.label }}</span>
+          <span class="text-[10px] font-mono text-navy-700">{{ w.hours }}h</span>
+        </div>
+        {% endfor %}
+        {% if not weekly %}
+        <div class="text-sm text-surf-400 py-4 text-center w-full">No data</div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
