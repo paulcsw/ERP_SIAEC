@@ -14,13 +14,19 @@ from app.models.task import TaskItem, TaskSnapshot
 from app.models.user import User
 from app.schemas.common import APIError, PaginatedResponse, pagination_params
 from app.schemas.task import (
+    BatchUpdateRequest,
+    BatchUpdateResponse,
     InitWeekRequest,
     InitWeekResponse,
+    SnapshotDeleteResponse,
     SnapshotListItem,
+    SnapshotRestoreResponse,
     SnapshotUpdate,
     SnapshotUpdateResponse,
+    SnapshotVersionRequest,
     TaskCreate,
     TaskCreateResponse,
+    TaskDeactivateResponse,
 )
 from app.services.audit_service import write_audit
 from app.services.shop_access_service import enforce_shop_access
@@ -354,6 +360,165 @@ async def create_task(
     }
 
 
+# ── §8.4.5 PATCH /api/tasks/snapshots/batch ───────────────────────────
+# NOTE: Must be registered before /snapshots/{snapshot_id} to avoid
+#       FastAPI matching "batch" as a path parameter.
+
+@router.patch("/snapshots/batch", response_model=BatchUpdateResponse)
+async def batch_update_snapshots(
+    body: BatchUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not body.updates:
+        raise APIError(422, "updates list must not be empty", "VALIDATION_ERROR")
+
+    errors: list[dict] = []
+    results: list[dict] = []
+
+    # Pre-load all snapshots + tasks in one pass
+    snap_ids = [u.snapshot_id for u in body.updates]
+    snap_rows = (
+        await db.execute(select(TaskSnapshot).where(TaskSnapshot.id.in_(snap_ids)))
+    ).scalars().all()
+    snap_map = {s.id: s for s in snap_rows}
+
+    task_ids = {s.task_id for s in snap_rows}
+    task_rows = (
+        await db.execute(select(TaskItem).where(TaskItem.id.in_(task_ids)))
+    ).scalars().all()
+    task_map = {t.id: t for t in task_rows}
+
+    # Check shop access for all involved shops
+    shop_ids_involved = {t.shop_id for t in task_rows}
+    for sid in shop_ids_involved:
+        await enforce_shop_access(db, current_user, sid, "EDIT")
+
+    now = datetime.now(timezone.utc)
+
+    for item in body.updates:
+        snap = snap_map.get(item.snapshot_id)
+        if not snap:
+            errors.append({
+                "snapshot_id": item.snapshot_id,
+                "code": "NOT_FOUND",
+                "detail": "Snapshot not found",
+            })
+            continue
+
+        task = task_map.get(snap.task_id)
+        if not task:
+            errors.append({
+                "snapshot_id": item.snapshot_id,
+                "code": "NOT_FOUND",
+                "detail": "Task not found",
+            })
+            continue
+
+        # Version check
+        if snap.version != item.version:
+            errors.append({
+                "snapshot_id": item.snapshot_id,
+                "code": "CONFLICT_VERSION",
+                "current_version": snap.version,
+            })
+            continue
+
+        # Validate status
+        if item.status is not None:
+            try:
+                validate_status(item.status)
+            except APIError:
+                errors.append({
+                    "snapshot_id": item.snapshot_id,
+                    "code": "VALIDATION_ERROR",
+                    "detail": f"Invalid status: {item.status}",
+                })
+                continue
+
+        # MH decrease check
+        if item.mh_incurred_hours is not None:
+            try:
+                await check_mh_decrease(
+                    db, snap, item.mh_incurred_hours, current_user,
+                    task.shop_id, item.correction_reason,
+                )
+            except APIError as e:
+                errors.append({
+                    "snapshot_id": item.snapshot_id,
+                    "code": e.code,
+                    "detail": e.detail,
+                })
+                continue
+
+    # All-or-nothing: if any errors, rollback entire batch
+    if errors:
+        await db.rollback()
+        return JSONResponse(
+            status_code=422,
+            content={
+                "detail": "Batch update failed. All changes rolled back.",
+                "code": "BATCH_VALIDATION_ERROR",
+                "errors": errors,
+            },
+        )
+
+    # Apply changes
+    for item in body.updates:
+        snap = snap_map[item.snapshot_id]
+        before = _snap_to_dict(snap)
+
+        if item.status is not None:
+            snap.status = validate_status(item.status)
+        if item.mh_incurred_hours is not None:
+            snap.mh_incurred_hours = item.mh_incurred_hours
+        if item.has_issue is not None:
+            snap.has_issue = item.has_issue
+        if item.remarks is not None:
+            snap.remarks = item.remarks
+        if item.critical_issue is not None:
+            snap.critical_issue = item.critical_issue
+        if item.correction_reason is not None:
+            snap.correction_reason = item.correction_reason
+        if "deadline_date" in item.model_fields_set:
+            snap.deadline_date = item.deadline_date
+
+        snap.version += 1
+        snap.last_updated_at = now
+        snap.last_updated_by = current_user["user_id"]
+        snap.supervisor_updated_at = now
+
+        await db.flush()
+
+        await write_audit(
+            db,
+            actor_id=current_user["user_id"],
+            entity_type="task_snapshot",
+            entity_id=snap.id,
+            action="UPDATE",
+            before=before,
+            after=_snap_to_dict(snap),
+        )
+
+        results.append({
+            "snapshot_id": snap.id,
+            "version": snap.version,
+            "status": snap.status,
+            "mh_incurred_hours": snap.mh_incurred_hours,
+            "deadline_date": snap.deadline_date,
+            "remarks": snap.remarks,
+            "critical_issue": snap.critical_issue,
+            "has_issue": snap.has_issue,
+            "correction_reason": snap.correction_reason,
+            "last_updated_at": snap.last_updated_at,
+            "last_updated_by": snap.last_updated_by,
+            "supervisor_updated_at": snap.supervisor_updated_at,
+        })
+
+    await db.commit()
+    return {"items": results}
+
+
 # ── §8.4.4 PATCH /api/tasks/snapshots/{snapshot_id} ──────────────────
 
 @router.patch("/snapshots/{snapshot_id}", response_model=SnapshotUpdateResponse)
@@ -447,6 +612,244 @@ async def update_snapshot(
         "last_updated_at": snap.last_updated_at,
         "last_updated_by": snap.last_updated_by,
         "supervisor_updated_at": snap.supervisor_updated_at,
+    }
+
+
+# ── §8.4.7 PATCH /api/tasks/snapshots/{id}/delete ────────────────────
+
+@router.patch("/snapshots/{snapshot_id}/delete", response_model=SnapshotDeleteResponse)
+async def soft_delete_snapshot(
+    snapshot_id: int,
+    body: SnapshotVersionRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    snap = (
+        await db.execute(select(TaskSnapshot).where(TaskSnapshot.id == snapshot_id))
+    ).scalar_one_or_none()
+    if not snap:
+        raise APIError(404, "Snapshot not found", "NOT_FOUND")
+
+    task = (
+        await db.execute(select(TaskItem).where(TaskItem.id == snap.task_id))
+    ).scalar_one_or_none()
+    if not task:
+        raise APIError(404, "Task not found", "NOT_FOUND")
+
+    await enforce_shop_access(db, current_user, task.shop_id, "MANAGE")
+
+    if snap.version != body.version:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": "Snapshot modified by another user. Reload and retry.",
+                "code": "CONFLICT_VERSION",
+                "current_version": snap.version,
+            },
+        )
+
+    before = _snap_to_dict(snap)
+    now = datetime.now(timezone.utc)
+
+    snap.is_deleted = True
+    snap.deleted_at = now
+    snap.deleted_by = current_user["user_id"]
+    snap.version += 1
+    snap.last_updated_at = now
+    snap.last_updated_by = current_user["user_id"]
+
+    await db.flush()
+
+    await write_audit(
+        db,
+        actor_id=current_user["user_id"],
+        entity_type="task_snapshot",
+        entity_id=snap.id,
+        action="DELETE",
+        before=before,
+        after=_snap_to_dict(snap),
+    )
+    await db.commit()
+
+    return {
+        "snapshot_id": snap.id,
+        "is_deleted": True,
+        "version": snap.version,
+        "deleted_at": snap.deleted_at,
+        "deleted_by": snap.deleted_by,
+    }
+
+
+# ── §8.4.8 PATCH /api/tasks/snapshots/{id}/restore ───────────────────
+
+@router.patch("/snapshots/{snapshot_id}/restore", response_model=SnapshotRestoreResponse)
+async def restore_snapshot(
+    snapshot_id: int,
+    body: SnapshotVersionRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    snap = (
+        await db.execute(select(TaskSnapshot).where(TaskSnapshot.id == snapshot_id))
+    ).scalar_one_or_none()
+    if not snap:
+        raise APIError(404, "Snapshot not found", "NOT_FOUND")
+
+    task = (
+        await db.execute(select(TaskItem).where(TaskItem.id == snap.task_id))
+    ).scalar_one_or_none()
+    if not task:
+        raise APIError(404, "Task not found", "NOT_FOUND")
+
+    await enforce_shop_access(db, current_user, task.shop_id, "MANAGE")
+
+    if snap.version != body.version:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": "Snapshot modified by another user. Reload and retry.",
+                "code": "CONFLICT_VERSION",
+                "current_version": snap.version,
+            },
+        )
+
+    before = _snap_to_dict(snap)
+    now = datetime.now(timezone.utc)
+
+    snap.is_deleted = False
+    snap.deleted_at = None
+    snap.deleted_by = None
+    snap.version += 1
+    snap.last_updated_at = now
+    snap.last_updated_by = current_user["user_id"]
+
+    await db.flush()
+
+    await write_audit(
+        db,
+        actor_id=current_user["user_id"],
+        entity_type="task_snapshot",
+        entity_id=snap.id,
+        action="RESTORE",
+        before=before,
+        after=_snap_to_dict(snap),
+    )
+    await db.commit()
+
+    return {
+        "snapshot_id": snap.id,
+        "is_deleted": False,
+        "version": snap.version,
+        "deleted_at": None,
+        "deleted_by": None,
+    }
+
+
+# ── §8.4.6 PATCH /api/tasks/{id}/deactivate ──────────────────────────
+
+@router.patch("/{task_id}/deactivate", response_model=TaskDeactivateResponse)
+async def deactivate_task(
+    task_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    task = (
+        await db.execute(select(TaskItem).where(TaskItem.id == task_id))
+    ).scalar_one_or_none()
+    if not task:
+        raise APIError(404, "Task not found", "NOT_FOUND")
+
+    await enforce_shop_access(db, current_user, task.shop_id, "MANAGE")
+
+    now = datetime.now(timezone.utc)
+
+    before = {
+        "task_id": task.id,
+        "is_active": task.is_active,
+        "deactivated_at": str(task.deactivated_at) if task.deactivated_at else None,
+        "deactivated_by": task.deactivated_by,
+    }
+
+    task.is_active = False
+    task.deactivated_at = now
+    task.deactivated_by = current_user["user_id"]
+
+    await db.flush()
+
+    await write_audit(
+        db,
+        actor_id=current_user["user_id"],
+        entity_type="task_item",
+        entity_id=task.id,
+        action="DEACTIVATE",
+        before=before,
+        after={
+            "task_id": task.id,
+            "is_active": False,
+            "deactivated_at": str(now),
+            "deactivated_by": current_user["user_id"],
+        },
+    )
+    await db.commit()
+
+    return {
+        "task_id": task.id,
+        "is_active": False,
+        "deactivated_at": task.deactivated_at,
+        "deactivated_by": task.deactivated_by,
+    }
+
+
+# ── §8.4.6 PATCH /api/tasks/{id}/reactivate ──────────────────────────
+
+@router.patch("/{task_id}/reactivate", response_model=TaskDeactivateResponse)
+async def reactivate_task(
+    task_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    task = (
+        await db.execute(select(TaskItem).where(TaskItem.id == task_id))
+    ).scalar_one_or_none()
+    if not task:
+        raise APIError(404, "Task not found", "NOT_FOUND")
+
+    await enforce_shop_access(db, current_user, task.shop_id, "MANAGE")
+
+    before = {
+        "task_id": task.id,
+        "is_active": task.is_active,
+        "deactivated_at": str(task.deactivated_at) if task.deactivated_at else None,
+        "deactivated_by": task.deactivated_by,
+    }
+
+    task.is_active = True
+    task.deactivated_at = None
+    task.deactivated_by = None
+
+    await db.flush()
+
+    await write_audit(
+        db,
+        actor_id=current_user["user_id"],
+        entity_type="task_item",
+        entity_id=task.id,
+        action="REACTIVATE",
+        before=before,
+        after={
+            "task_id": task.id,
+            "is_active": True,
+            "deactivated_at": None,
+            "deactivated_by": None,
+        },
+    )
+    await db.commit()
+
+    return {
+        "task_id": task.id,
+        "is_active": True,
+        "deactivated_at": None,
+        "deactivated_by": None,
     }
 
 

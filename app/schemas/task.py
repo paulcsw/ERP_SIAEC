@@ -111,6 +111,59 @@ class SnapshotUpdateResponse(BaseModel):
     supervisor_updated_at: datetime | None = None
 
 
+# ── §8.4.5 Batch update ───────────────────────────────────────────────
+
+class BatchUpdateItem(BaseModel):
+    snapshot_id: int
+    version: int
+    status: str | None = None
+    mh_incurred_hours: Decimal | None = None
+    deadline_date: date | None = None
+    remarks: str | None = None
+    critical_issue: str | None = None
+    has_issue: bool | None = None
+    correction_reason: str | None = None
+
+
+class BatchUpdateRequest(BaseModel):
+    updates: list[BatchUpdateItem]
+
+
+class BatchUpdateResponse(BaseModel):
+    items: list[SnapshotUpdateResponse]
+
+
+# ── §8.4.7 Soft delete / §8.4.8 Restore ─────────────────────────────
+
+class SnapshotVersionRequest(BaseModel):
+    version: int
+
+
+class SnapshotDeleteResponse(BaseModel):
+    snapshot_id: int
+    is_deleted: bool
+    version: int
+    deleted_at: datetime | None = None
+    deleted_by: int | None = None
+
+
+class SnapshotRestoreResponse(BaseModel):
+    snapshot_id: int
+    is_deleted: bool
+    version: int
+    deleted_at: datetime | None = None
+    deleted_by: int | None = None
+
+
+# ── §8.4.6 Deactivate / Reactivate ──────────────────────────────────
+
+class TaskDeactivateResponse(BaseModel):
+    task_id: int
+    is_active: bool
+    deactivated_at: datetime | None = None
+    deactivated_by: int | None = None
+
+
 # ── §8.4.1 Init week ─────────────────────────────────────────────────
 
 class InitWeekRequest(BaseModel):
