@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}New OT Request — CIS ERP{% endblock %}
+{% block breadcrumb %}OT Request{% endblock %}
+
+{% block content %}
+<div class="p-4 lg:p-5 flex flex-col h-full w-full overflow-y-auto">
+  <h1 class="text-lg font-semibold text-navy-900 mb-1">New Overtime Request</h1>
+  <p class="text-xs text-surf-400 mb-3">Submit for 2-stage approval (Supervisor &rarr; Admin)</p>
+
+  <form id="ot-form" class="grid lg:grid-cols-5 gap-4 flex-1">
+    <div class="lg:col-span-3 space-y-3">
+      {# Submission Details #}
+      <div class="card p-4 space-y-3">
+        <div class="text-sm font-semibold text-navy-700">Submission Details</div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">OT Date *</label>
+            <input type="date" name="date" value="{{ today }}" class="inp w-full h-9 text-sm" required/>
+          </div>
+          <div>
+            <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">Workshop</label>
+            <input type="text" value="{{ current_user.team or '' }}" class="inp w-full h-9 text-sm" readonly/>
+          </div>
+          <div>
+            <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">RFO No. <span class="text-surf-300">(opt)</span></label>
+            <select name="work_package_id" class="inp w-full h-9 text-sm">
+              <option value="">&mdash; None &mdash;</option>
+              {% for wp in rfo_options %}
+              <option value="{{ wp.id }}">{{ wp.rfo_no }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">Start *</label>
+            <input type="time" name="start_time" value="18:00" class="inp w-full h-9 text-sm" required id="start-time"/>
+          </div>
+          <div>
+            <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">End *</label>
+            <input type="time" name="end_time" value="20:00" class="inp w-full h-9 text-sm" required id="end-time"/>
+          </div>
+          <div>
+            <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">Duration</label>
+            <div id="duration-display" class="h-9 flex items-center px-3 rounded-lg bg-st-greenBg text-st-green font-bold text-sm">2.0 hrs</div>
+          </div>
+        </div>
+        <div>
+          <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">Reason *</label>
+          <select name="reason_code" class="inp w-full h-9 text-sm" required>
+            <option value="">Select...</option>
+            <option value="BACKLOG">Backlog</option>
+            <option value="AOG">AOG</option>
+            <option value="SCHEDULE_PRESSURE">Schedule Pressure</option>
+            <option value="MANPOWER_SHORTAGE">Manpower Shortage</option>
+            <option value="OTHER">Other</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">Justification</label>
+          <textarea name="reason_text" class="inp w-full text-sm h-14 resize-none" placeholder="Context..."></textarea>
+        </div>
+      </div>
+
+      {# Technician Roster (SUPERVISOR/ADMIN only) #}
+      {% if is_sup_or_admin and team_users %}
+      <div class="card p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="text-sm font-semibold text-navy-700">Technician Roster</div>
+          <span class="text-[10px] text-surf-400">{{ current_user.team }}</span>
+        </div>
+        <div class="relative">
+          <svg class="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-surf-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input id="roster-search" class="inp w-full h-8 text-xs pl-8" placeholder="Search by name or employee no..."/>
+        </div>
+        <div class="space-y-2" id="roster-list">
+          {% for u in team_users %}
+          <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg {% if u.at_limit %}bg-st-redBg opacity-60{% else %}bg-navy-50{% endif %}" data-name="{{ u.name | lower }}" data-eno="{{ u.employee_no | lower }}">
+            <input type="checkbox" name="user_ids" value="{{ u.id }}" class="chk" {% if u.at_limit %}disabled{% endif %}/>
+            <div class="flex-1 min-w-0">
+              <span class="text-sm font-medium {% if u.at_limit %}text-surf-400 line-through{% endif %}">{{ u.name }}</span>
+              <span class="text-xs text-surf-400 ml-2">{{ u.employee_no }}</span>
+            </div>
+            <div class="w-24">
+              <div class="flex justify-between text-[10px] mb-0.5">
+                <span {% if u.at_limit %}class="font-bold text-st-red"{% endif %}>{{ u.used_hours }}h</span>
+                <span>{{ u.limit_hours }}h</span>
+              </div>
+              <div class="prog-bar h-1.5"><div class="prog-fill" style="width:{{ u.used_pct }}%;background:{{ u.bar_color }}"></div></div>
+            </div>
+            {% if u.at_limit %}<span class="text-[10px] text-st-red font-medium">Limit reached</span>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        <div id="roster-summary" class="text-xs text-surf-400">Select technicians for bulk submit</div>
+      </div>
+      {% endif %}
+
+      <div class="flex gap-3">
+        <a href="/ot" class="btn-outline h-10 flex items-center">Cancel</a>
+        <button type="submit" class="btn-gold h-10 flex-1">Submit Request</button>
+      </div>
+    </div>
+
+    {# Summary sidebar #}
+    <div class="lg:col-span-2 space-y-3">
+      <div class="card overflow-hidden">
+        <div class="bg-navy-700 text-white px-4 py-3">
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] uppercase tracking-wider opacity-70">Live Summary</span>
+            <span class="text-[10px] px-2 py-0.5 rounded bg-white/15">DRAFT</span>
+          </div>
+          <div class="text-3xl font-bold mt-2" id="summary-hours">2.0 <span class="text-base font-normal opacity-70">hrs</span></div>
+          <div class="text-xs opacity-60" id="summary-tech"></div>
+        </div>
+        <div class="p-4 space-y-2 text-sm">
+          <div class="flex justify-between">
+            <span class="text-surf-400">Workflow</span>
+            <span class="text-xs">
+              <span class="badge badge-pending">PENDING</span> &rarr;
+              <span class="badge badge-endorsed">ENDORSED</span> &rarr;
+              <span class="badge badge-approved">APPROVED</span>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="card p-4">
+        <div class="text-sm font-semibold text-navy-900 mb-3">Your Monthly OT</div>
+        <div class="flex items-end gap-3">
+          <div class="text-3xl font-bold text-navy-700">{{ my_used_hours }}<span class="text-base font-normal text-surf-400">h</span></div>
+          <div class="text-sm text-surf-400">/ {{ my_limit_hours }}h limit</div>
+        </div>
+        <div class="prog-bar mt-2"><div class="prog-fill" style="width:{{ my_used_pct }}%;background:{% if my_used_pct >= 100 %}#b93a3a{% elif my_used_pct >= 70 %}#c8850a{% else %}#2e5a8a{% endif %}"></div></div>
+        <div class="text-xs text-surf-400 mt-1">{{ my_remaining_hours }}h remaining this month</div>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block mobile_content %}
+{# Mobile redirects to /ot O1 segment #}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Duration auto-calc
+function calcDuration() {
+  const s = document.getElementById('start-time').value;
+  const e = document.getElementById('end-time').value;
+  if (s && e) {
+    const [sh,sm] = s.split(':').map(Number);
+    const [eh,em] = e.split(':').map(Number);
+    const mins = (eh*60+em) - (sh*60+sm);
+    const hrs = mins > 0 ? (mins/60).toFixed(1) : '0.0';
+    document.getElementById('duration-display').textContent = hrs + ' hrs';
+    document.getElementById('summary-hours').innerHTML = hrs + ' <span class="text-base font-normal opacity-70">hrs</span>';
+  }
+}
+document.getElementById('start-time').addEventListener('change', calcDuration);
+document.getElementById('end-time').addEventListener('change', calcDuration);
+
+// Roster search
+const searchInput = document.getElementById('roster-search');
+if (searchInput) {
+  searchInput.addEventListener('input', function() {
+    const q = this.value.toLowerCase();
+    document.querySelectorAll('#roster-list > div').forEach(function(el) {
+      const name = el.dataset.name || '';
+      const eno = el.dataset.eno || '';
+      el.style.display = (name.includes(q) || eno.includes(q)) ? '' : 'none';
+    });
+  });
+}
+
+// Form submit
+document.getElementById('ot-form').addEventListener('submit', async function(ev) {
+  ev.preventDefault();
+  const fd = new FormData(this);
+  const userIds = fd.getAll('user_ids').map(Number).filter(Boolean);
+  const body = {
+    date: fd.get('date'),
+    start_time: fd.get('start_time'),
+    end_time: fd.get('end_time'),
+    reason_code: fd.get('reason_code'),
+    reason_text: fd.get('reason_text') || null,
+    work_package_id: fd.get('work_package_id') ? Number(fd.get('work_package_id')) : null,
+  };
+  if (userIds.length > 0) body.user_ids = userIds;
+
+  const csrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+  const resp = await fetch('/api/ot', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json();
+  if (resp.ok) {
+    if (data.created_count !== undefined) {
+      showToast('Submitted', `${data.created_count} OT request(s) created`, 'green');
+    } else {
+      showToast('Submitted', `OT #${data.id} pending supervisor endorsement`, 'green');
+    }
+    setTimeout(() => window.location.href = '/ot', 1000);
+  } else {
+    showToast('Error', data.detail || 'Submission failed', 'red');
+  }
+});
+</script>
+{% endblock %}

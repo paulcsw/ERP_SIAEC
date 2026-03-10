@@ -1,0 +1,150 @@
+{# O1: Mobile OT Submit #}
+<div class="p-4 space-y-4" id="ot-o1">
+  {# Monthly usage card #}
+  <div class="card p-4">
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-sm font-semibold text-navy-900">This Month</span>
+      <span class="text-sm font-mono text-navy-700">{{ my_used_hours }}h / {{ my_limit_hours }}h</span>
+    </div>
+    <div class="prog-bar h-3"><div class="prog-fill rounded-full" style="width:{{ my_used_pct }}%;background:{% if my_used_pct >= 100 %}#b93a3a{% elif my_used_pct >= 70 %}#c8850a{% else %}#2e5a8a{% endif %}"></div></div>
+    <div class="text-sm text-surf-400 mt-1">{{ my_remaining_hours }}h remaining</div>
+  </div>
+
+  <form id="mob-ot-form">
+    <div class="space-y-4">
+      <div>
+        <div class="mob-label">Date</div>
+        <input type="date" name="date" value="{{ today }}" class="inp w-full h-12 text-base"/>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <div class="mob-label">Start</div>
+          <input type="time" name="start_time" value="17:30" class="inp w-full h-12 text-base" id="mob-start"/>
+        </div>
+        <div>
+          <div class="mob-label">End</div>
+          <input type="time" name="end_time" value="20:00" class="inp w-full h-12 text-base" id="mob-end"/>
+        </div>
+      </div>
+      <div class="text-sm text-surf-400" id="mob-duration">Duration: <strong class="text-navy-700">2.5 hours</strong> (auto)</div>
+
+      <div>
+        <div class="mob-label">Reason</div>
+        <select name="reason_code" class="inp w-full h-12 text-base">
+          <option value="BACKLOG">Backlog</option>
+          <option value="AOG">AOG</option>
+          <option value="SCHEDULE_PRESSURE">Schedule Pressure</option>
+          <option value="MANPOWER_SHORTAGE">Manpower Shortage</option>
+          <option value="OTHER">Other</option>
+        </select>
+      </div>
+      <div>
+        <div class="mob-label">Details</div>
+        <textarea name="reason_text" class="inp w-full text-base h-16 resize-none" placeholder="Context..."></textarea>
+      </div>
+
+      {# Technician selector (SUPERVISOR/ADMIN only) #}
+      {% if is_sup_or_admin and team_users %}
+      <div>
+        <div class="mob-label">Technician</div>
+        <select name="target_user" class="inp w-full h-12 text-base">
+          <option value="">&mdash; Self &mdash;</option>
+          {% for u in team_users %}
+          {% if not u.at_limit %}
+          <option value="{{ u.id }}">{{ u.name }} ({{ u.employee_no }})</option>
+          {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+
+      <div>
+        <div class="mob-label">Related RFO <span class="text-surf-300">(optional)</span></div>
+        <select name="work_package_id" class="inp w-full h-12 text-base">
+          <option value="">&mdash; None &mdash;</option>
+          {% for wp in rfo_options %}
+          <option value="{{ wp.id }}">{{ wp.rfo_no }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      {# 72h limit warning (hidden by default) #}
+      <div id="mob-limit-warn" style="display:none" class="card p-3 flex items-center gap-2" role="alert">
+        <span style="color:#b93a3a;font-size:18px">&#9888;</span>
+        <div>
+          <div class="text-sm font-semibold" style="color:#b93a3a">Monthly 72h limit exceeded</div>
+          <div class="text-xs text-surf-400">Cannot submit &mdash; reduce hours or contact admin</div>
+        </div>
+      </div>
+
+      <div style="padding-bottom:calc(56px + env(safe-area-inset-bottom))">
+        <button type="submit" id="mob-submit-btn" class="btn-gold w-full h-12 text-base font-semibold">Submit</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<script>
+// Auto-calc duration
+function mobCalcDuration() {
+  const s = document.getElementById('mob-start')?.value;
+  const e = document.getElementById('mob-end')?.value;
+  if (s && e) {
+    const [sh,sm] = s.split(':').map(Number);
+    const [eh,em] = e.split(':').map(Number);
+    const mins = (eh*60+em) - (sh*60+sm);
+    const hrs = mins > 0 ? (mins/60).toFixed(1) : '0.0';
+    const durEl = document.getElementById('mob-duration');
+    if (durEl) durEl.innerHTML = 'Duration: <strong class="text-navy-700">' + hrs + ' hours</strong> (auto)';
+
+    // Check 72h limit
+    const usedMin = {{ (my_used_hours * 60) | int }};
+    const warn = document.getElementById('mob-limit-warn');
+    const btn = document.getElementById('mob-submit-btn');
+    if (warn && btn) {
+      if (usedMin + mins > {{ (my_limit_hours * 60) | int }}) {
+        warn.style.display = 'flex';
+        btn.disabled = true;
+        btn.style.opacity = '.5';
+      } else {
+        warn.style.display = 'none';
+        btn.disabled = false;
+        btn.style.opacity = '1';
+      }
+    }
+  }
+}
+document.getElementById('mob-start')?.addEventListener('change', mobCalcDuration);
+document.getElementById('mob-end')?.addEventListener('change', mobCalcDuration);
+
+// Submit
+document.getElementById('mob-ot-form')?.addEventListener('submit', async function(ev) {
+  ev.preventDefault();
+  const fd = new FormData(this);
+  const body = {
+    date: fd.get('date'),
+    start_time: fd.get('start_time'),
+    end_time: fd.get('end_time'),
+    reason_code: fd.get('reason_code'),
+    reason_text: fd.get('reason_text') || null,
+    work_package_id: fd.get('work_package_id') ? Number(fd.get('work_package_id')) : null,
+  };
+  const targetUser = fd.get('target_user');
+  if (targetUser) body.user_ids = [Number(targetUser)];
+
+  const csrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+  const resp = await fetch('/api/ot', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json();
+  if (resp.ok) {
+    showToast('Submitted', 'OT pending supervisor endorsement', 'green');
+    // Refresh O1
+    htmx.ajax('GET', '/ot/segment/o1', {target: '#ot-stage', swap: 'innerHTML'});
+  } else {
+    showToast('Error', data.detail || 'Submission failed', 'red');
+  }
+});
+</script>

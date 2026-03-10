@@ -1,0 +1,84 @@
+{# O2 Detail: Mobile OT detail view #}
+<div class="p-4 space-y-4" id="ot-o2-detail">
+  <button class="flex items-center gap-1 text-sm text-navy-700 font-medium mb-2"
+          hx-get="/ot/segment/o2" hx-target="#ot-stage" hx-swap="innerHTML">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+    Back to History
+  </button>
+
+  {% if not ot %}
+  <div class="card p-6 text-center text-surf-400">OT request not found</div>
+  {% else %}
+  <div class="card p-4 space-y-3">
+    <div class="flex items-center justify-between">
+      <span class="text-base font-semibold text-navy-900">OT-{{ '%03d' % ot.id }}</span>
+      <span class="badge {{ ot.badge_cls }}">{{ ot.badge_text }}</span>
+    </div>
+    <div class="text-sm text-surf-400">{{ ot.user_name }} ({{ ot.user_employee_no }})</div>
+    <div class="grid grid-cols-2 gap-3 text-sm">
+      <div><span class="text-surf-400 text-xs">Date</span><div class="font-medium">{{ ot.date.strftime('%b %d, %Y') if ot.date else '' }}</div></div>
+      <div><span class="text-surf-400 text-xs">Time</span><div class="font-mono">{{ ot.start_time.strftime('%H:%M') if ot.start_time else '' }}&ndash;{{ ot.end_time.strftime('%H:%M') if ot.end_time else '' }}</div></div>
+      <div><span class="text-surf-400 text-xs">Duration</span><div class="font-bold text-navy-700">{{ ot.hours }} hrs</div></div>
+      <div><span class="text-surf-400 text-xs">Reason</span><div>{{ ot.reason_code | replace('_', ' ') | title }}</div></div>
+    </div>
+    {% if ot.reason_text %}
+    <div class="text-sm"><span class="text-surf-400">Justification:</span> {{ ot.reason_text }}</div>
+    {% endif %}
+    <div class="flex items-center gap-2 text-sm">
+      <span class="text-surf-400">Monthly:</span>
+      <span class="font-mono">{{ ot.monthly_used_hours }}h / {{ ot.monthly_limit_hours }}h</span>
+      <div class="prog-bar h-1.5 w-20"><div class="prog-fill rounded" style="width:{{ ot.monthly_pct }}%;background:{% if ot.monthly_pct >= 100 %}#b93a3a{% elif ot.monthly_pct >= 70 %}#c8850a{% else %}#2e5a8a{% endif %}"></div></div>
+    </div>
+  </div>
+
+  {# Approval history #}
+  <div class="card p-4 space-y-2">
+    <div class="text-sm font-semibold text-navy-700">Approval History</div>
+    {% if ot.endorse %}
+    <div class="text-sm">
+      <span class="font-medium">1st:</span>
+      {% if ot.endorse.action == 'APPROVE' %}
+        <span class="text-st-green">Endorsed by {{ ot.endorse.approver_name }}</span>
+      {% else %}
+        <span class="text-st-red">Rejected by {{ ot.endorse.approver_name }}</span>
+      {% endif %}
+      {% if ot.endorse.acted_at %}<span class="text-xs text-surf-400 ml-1">{{ ot.endorse.acted_at.strftime('%b %d %H:%M') }}</span>{% endif %}
+    </div>
+    {% endif %}
+    {% if ot.approve %}
+    <div class="text-sm">
+      <span class="font-medium">2nd:</span>
+      {% if ot.approve.action == 'APPROVE' %}
+        <span class="text-st-green">Approved by {{ ot.approve.approver_name }}</span>
+      {% else %}
+        <span class="text-st-red">Rejected by {{ ot.approve.approver_name }}</span>
+      {% endif %}
+      {% if ot.approve.acted_at %}<span class="text-xs text-surf-400 ml-1">{{ ot.approve.acted_at.strftime('%b %d %H:%M') }}</span>{% endif %}
+    </div>
+    {% endif %}
+    {% if not ot.endorse and not ot.approve %}
+    <div class="text-sm text-surf-400">Awaiting supervisor review</div>
+    {% endif %}
+  </div>
+
+  {# Cancel action #}
+  {% if ot.status == 'PENDING' and ot.user_id == current_user.user_id %}
+  <button onclick="mobCancelOt({{ ot.id }})" class="btn-outline w-full h-12 text-base" style="color:#b93a3a;border-color:#b93a3a">Cancel Request</button>
+  {% endif %}
+  {% endif %}
+</div>
+
+<script>
+async function mobCancelOt(id) {
+  if (!confirm('Cancel this OT request?')) return;
+  const csrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+  const r = await fetch(`/api/ot/${id}/cancel`, {method:'PATCH', headers:{'X-CSRFToken':csrf}});
+  if (r.ok) {
+    showToast('Cancelled','OT request cancelled','green');
+    htmx.ajax('GET', '/ot/segment/o2', {target: '#ot-stage', swap: 'innerHTML'});
+  } else {
+    const d = await r.json();
+    showToast('Error', d.detail||'Failed','red');
+  }
+}
+</script>

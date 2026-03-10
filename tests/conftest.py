@@ -106,7 +106,7 @@ async def db():
     async with _test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # Seed roles and admin user (user_id auto-assigned)
+    # Seed roles and users (admin id=1, supervisor id=2, worker id=3)
     async with _TestSessionFactory() as session:
         for rn in ("WORKER", "SUPERVISOR", "ADMIN"):
             session.add(Role(name=rn))
@@ -114,16 +114,43 @@ async def db():
         admin_role = (
             await session.execute(select(Role).where(Role.name == "ADMIN"))
         ).scalar_one()
+        sup_role = (
+            await session.execute(select(Role).where(Role.name == "SUPERVISOR"))
+        ).scalar_one()
+        worker_role = (
+            await session.execute(select(Role).where(Role.name == "WORKER"))
+        ).scalar_one()
+
+        now = datetime.now(timezone.utc)
         admin = User(
-            employee_no="E001",
-            name="Test Admin",
-            email="admin@test.com",
-            team="Sheet Metal",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            employee_no="E001", name="Test Admin", email="admin@test.com",
+            team="Sheet Metal", created_at=now, updated_at=now,
         )
         admin.roles = [admin_role]
         session.add(admin)
+
+        sup = User(
+            employee_no="E002", name="Test Supervisor", email="sup@test.com",
+            team="Sheet Metal", created_at=now, updated_at=now,
+        )
+        sup.roles = [sup_role]
+        session.add(sup)
+
+        worker = User(
+            employee_no="E003", name="Test Worker", email="worker@test.com",
+            team="Sheet Metal", created_at=now, updated_at=now,
+        )
+        worker.roles = [worker_role]
+        session.add(worker)
+
+        # Worker in different team (for cross-team tests)
+        worker2 = User(
+            employee_no="E004", name="Other Team Worker", email="w2@test.com",
+            team="Airframe", created_at=now, updated_at=now,
+        )
+        worker2.roles = [worker_role]
+        session.add(worker2)
+
         await session.commit()
 
     yield _TestSessionFactory
@@ -150,4 +177,45 @@ async def async_anon_client(db):
     reset_rate_limits()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
+
+
+# ── Role-specific clients (for OT 2-stage approval tests) ──────────
+
+_SUPERVISOR_SESSION = {
+    "user_id": 2,
+    "employee_no": "E002",
+    "display_name": "Test Supervisor",
+    "roles": ["SUPERVISOR"],
+    "team": "Sheet Metal",
+    "csrf_token": "test-csrf-token-abc123",
+}
+
+_WORKER_SESSION = {
+    "user_id": 3,
+    "employee_no": "E003",
+    "display_name": "Test Worker",
+    "roles": ["WORKER"],
+    "team": "Sheet Metal",
+    "csrf_token": "test-csrf-token-abc123",
+}
+
+
+@pytest_asyncio.fixture
+async def sup_client(db):
+    """Authenticated SUPERVISOR async client with DB backend."""
+    reset_rate_limits()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        c.cookies.set("session", _make_session_cookie(_SUPERVISOR_SESSION))
+        yield c
+
+
+@pytest_asyncio.fixture
+async def worker_client(db):
+    """Authenticated WORKER async client with DB backend."""
+    reset_rate_limits()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        c.cookies.set("session", _make_session_cookie(_WORKER_SESSION))
         yield c

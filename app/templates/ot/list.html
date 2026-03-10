@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}OT Requests — CIS ERP{% endblock %}
+{% block breadcrumb %}OT Requests{% endblock %}
+
+{% block content %}
+<div class="p-4 lg:p-5 flex flex-col h-full w-full">
+  <div class="flex items-center justify-between mb-3 shrink-0">
+    <div>
+      <h1 class="text-lg font-semibold text-navy-900">OT Requests</h1>
+      <p class="text-xs text-surf-400">All overtime requests with 2-stage approval status</p>
+    </div>
+    <div class="flex gap-2">
+      <select id="status-filter" class="inp h-8 text-xs" onchange="window.location.href='/ot?status='+this.value">
+        <option value="" {% if not status_filter %}selected{% endif %}>All Status</option>
+        <option value="PENDING" {% if status_filter == 'PENDING' %}selected{% endif %}>PENDING</option>
+        <option value="ENDORSED" {% if status_filter == 'ENDORSED' %}selected{% endif %}>ENDORSED</option>
+        <option value="APPROVED" {% if status_filter == 'APPROVED' %}selected{% endif %}>APPROVED</option>
+        <option value="REJECTED" {% if status_filter == 'REJECTED' %}selected{% endif %}>REJECTED</option>
+        <option value="CANCELLED" {% if status_filter == 'CANCELLED' %}selected{% endif %}>CANCELLED</option>
+      </select>
+      <a href="/api/ot/export/csv" class="btn-outline btn-sm text-xs flex items-center">Export CSV</a>
+    </div>
+  </div>
+
+  <div class="card flex-1 flex flex-col min-h-0">
+    <div class="flex-1 overflow-y-auto">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th style="width:70px">ID</th>
+            <th>Worker</th>
+            <th style="width:80px">Date</th>
+            <th style="width:100px">Time</th>
+            <th class="text-right" style="width:60px">Mins</th>
+            <th style="width:90px">Reason</th>
+            <th>Status</th>
+            <th style="width:100px">1st (SUP)</th>
+            <th style="width:100px">2nd (ADMIN)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ot in items %}
+          <tr class="cursor-pointer" onclick="window.location.href='/ot/{{ ot.id }}'">
+            <td class="font-mono text-xs">OT-{{ '%03d' % ot.id }}</td>
+            <td class="text-sm">{{ ot.user_name }}</td>
+            <td class="text-xs">{{ ot.date.strftime('%b %d') if ot.date else '' }}</td>
+            <td class="text-xs font-mono">{{ ot.start_time.strftime('%H:%M') if ot.start_time else '' }}-{{ ot.end_time.strftime('%H:%M') if ot.end_time else '' }}</td>
+            <td class="text-right font-mono">{{ ot.requested_minutes }}</td>
+            <td class="text-xs">{{ ot.reason_code | replace('_', ' ') | title }}</td>
+            <td><span class="badge {{ ot.badge_cls }}">{{ ot.badge_text }}</span></td>
+            <td class="text-xs">
+              {% if ot.endorse %}
+                {% if ot.endorse.action == 'APPROVE' %}
+                  <span class="text-st-green">&#10003; {{ ot.endorse.approver_name }}</span>
+                {% else %}
+                  <span class="text-st-red">&#10007; {{ ot.endorse.approver_name }}</span>
+                {% endif %}
+              {% else %}
+                <span class="text-surf-400">&mdash;</span>
+              {% endif %}
+            </td>
+            <td class="text-xs">
+              {% if ot.approve %}
+                {% if ot.approve.action == 'APPROVE' %}
+                  <span class="text-st-green">&#10003; {{ ot.approve.approver_name }}</span>
+                {% else %}
+                  <span class="text-st-red">&#10007; {{ ot.approve.approver_name }}</span>
+                {% endif %}
+              {% elif ot.status == 'ENDORSED' %}
+                <span class="text-surf-400">awaiting</span>
+              {% else %}
+                <span class="text-surf-400">&mdash;</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+          {% if not items %}
+          <tr><td colspan="9" class="text-center py-8 text-surf-400">No OT requests found</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+    {# Pagination #}
+    {% if total_pages > 1 %}
+    <div class="px-4 py-2 border-t border-surf-200 flex items-center justify-between text-xs text-surf-400">
+      <span>{{ ((page-1)*per_page)+1 }}&ndash;{{ [page*per_page, total] | min }} of {{ total }} requests</span>
+      <div class="flex gap-1">
+        {% if page > 1 %}<a href="/ot?page={{ page-1 }}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="pg-btn">&laquo;</a>{% endif %}
+        {% for p in range(1, total_pages+1) %}
+        <a href="/ot?page={{ p }}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="pg-btn {% if p == page %}active{% endif %}">{{ p }}</a>
+        {% endfor %}
+        {% if page < total_pages %}<a href="/ot?page={{ page+1 }}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="pg-btn">&raquo;</a>{% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{# ===== MOBILE: OT segment shell ===== #}
+{% block mobile_content %}
+<div class="flex flex-col h-full">
+  <div class="p-4 bg-white border-b border-surf-200 shrink-0">
+    <h1 class="text-lg font-bold text-navy-900 mb-3">OT</h1>
+    <div class="ot-seg-bar">
+      <button class="active" onclick="switchOtSeg('o1',this)">Submit</button>
+      <button onclick="switchOtSeg('o2',this)">History</button>
+      {% if 'SUPERVISOR' in current_user.roles or 'ADMIN' in current_user.roles %}
+      <button onclick="switchOtSeg('o3',this)">Approve</button>
+      {% endif %}
+    </div>
+  </div>
+  <div class="flex-1 overflow-y-auto" id="ot-stage">
+    {% include "ot/partials/_o1_submit.html" %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function switchOtSeg(seg, btn) {
+  // Update active button
+  btn.closest('.ot-seg-bar').querySelectorAll('button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  // HTMX load segment
+  htmx.ajax('GET', '/ot/segment/' + seg, {target: '#ot-stage', swap: 'innerHTML'});
+}
+</script>
+{% endblock %}

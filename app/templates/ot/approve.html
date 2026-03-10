@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}OT Final Approval — CIS ERP{% endblock %}
+{% block breadcrumb %}OT Final Approval{% endblock %}
+
+{% block content %}
+<div class="p-4 lg:p-5 flex flex-col h-full w-full">
+  <div class="flex items-center justify-between mb-3 shrink-0">
+    <div>
+      <h1 class="text-lg font-semibold text-navy-900">OT Final Approval</h1>
+      <p class="text-xs text-surf-400">ADMIN &mdash; Review endorsed OT requests for final sign-off</p>
+    </div>
+    <span class="badge badge-endorsed text-sm px-3 py-1">{{ count }} awaiting approval</span>
+  </div>
+
+  <div class="space-y-3 flex-1 overflow-y-auto">
+    {% for ot in items %}
+    <div class="card p-4" id="approve-card-{{ ot.id }}">
+      <div class="flex items-start gap-4">
+        <div class="flex-1">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="font-mono text-xs font-medium">OT-{{ '%03d' % ot.id }}</span>
+            <span class="badge badge-endorsed">ENDORSED</span>
+          </div>
+          <div class="text-sm font-medium text-navy-900">{{ ot.user_name }} ({{ ot.user_employee_no }}) &middot; {{ ot.user_team }}</div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-2 text-xs">
+            <div><span class="text-surf-400">Date</span><div class="font-medium">{{ ot.date.strftime('%b %d, %Y') if ot.date else '' }}</div></div>
+            <div><span class="text-surf-400">Time</span><div class="font-mono">{{ ot.start_time.strftime('%H:%M') if ot.start_time else '' }} &ndash; {{ ot.end_time.strftime('%H:%M') if ot.end_time else '' }}</div></div>
+            <div><span class="text-surf-400">Duration</span><div class="font-bold text-navy-700">{{ ot.hours }} hrs</div></div>
+            <div><span class="text-surf-400">Reason</span><div class="font-medium">{{ ot.reason_code | replace('_', ' ') | title }}</div></div>
+          </div>
+          {% if ot.reason_text %}
+          <div class="flex items-center gap-2 mt-2 text-xs"><span class="text-surf-400">Justification:</span><span>{{ ot.reason_text }}</span></div>
+          {% endif %}
+          <div class="flex items-center gap-2 mt-1 text-xs">
+            <span class="text-surf-400">Monthly:</span>
+            <span class="font-mono {% if ot.monthly_pct >= 70 %}text-gold-500 font-bold{% endif %}">{{ ot.monthly_used_hours }}h / {{ ot.monthly_limit_hours }}h</span>
+            <div class="prog-bar h-1 w-16 inline-block align-middle ml-1"><div class="prog-fill" style="width:{{ ot.monthly_pct }}%;background:{{ ot.monthly_bar_color }}"></div></div>
+          </div>
+        </div>
+        <div class="text-right shrink-0 space-y-1">
+          {% if ot.endorse %}
+          <div class="text-[10px] text-surf-400 mb-2">
+            1st approval: <span class="text-st-green font-medium">{{ ot.endorse.approver_name }}</span><br/>
+            {{ ot.endorse.acted_at.strftime('%b %d, %H:%M') if ot.endorse.acted_at else '' }}
+          </div>
+          {% endif %}
+          <button class="btn-primary btn-sm text-xs w-24" onclick="approveAction({{ ot.id }}, 'APPROVE')">Approve</button>
+          <button class="btn-outline btn-sm text-xs w-24" style="color:#b93a3a;border-color:#b93a3a" onclick="approveAction({{ ot.id }}, 'REJECT')">Reject</button>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+
+    {% if not items %}
+    <div class="card p-8 text-center text-surf-400">
+      No endorsed OT requests awaiting approval.
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const csrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+async function approveAction(id, action) {
+  const comment = action === 'REJECT' ? prompt('Rejection reason:') : null;
+  const card = document.getElementById('approve-card-' + id);
+  const r = await fetch(`/api/ot/${id}/approve`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+    body: JSON.stringify({action, comment})
+  });
+  if (r.ok) {
+    card.style.opacity = '.3';
+    showToast(action === 'APPROVE' ? 'Approved' : 'Rejected', `OT-${id} ${action.toLowerCase()}d`, action === 'APPROVE' ? 'green' : 'red');
+    setTimeout(() => card.remove(), 1000);
+  } else {
+    const d = await r.json();
+    showToast('Error', d.detail || 'Action failed', 'red');
+  }
+}
+</script>
+{% endblock %}

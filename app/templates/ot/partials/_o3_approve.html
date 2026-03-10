@@ -1,0 +1,105 @@
+{# O3: Mobile OT Approve/Endorse #}
+<div class="p-4 space-y-3" id="ot-o3">
+  {% if 'WORKER' in current_user.roles and 'SUPERVISOR' not in current_user.roles and 'ADMIN' not in current_user.roles %}
+    {# WORKER: O3 hidden — this shouldn't be reachable but just in case #}
+    <div class="text-center py-8 text-surf-400 text-sm">Approval is not available for your role.</div>
+
+  {% elif 'SUPERVISOR' in current_user.roles and 'ADMIN' not in current_user.roles %}
+    {# SUPERVISOR: PENDING → Endorse #}
+    <div class="text-sm text-surf-400 mb-3">{{ count }} request{{ 's' if count != 1 }} pending your endorsement</div>
+    {% for ot in items %}
+    <div class="card p-4 space-y-3" id="mob-approve-{{ ot.id }}">
+      <div class="flex items-center justify-between">
+        <span class="text-base font-semibold text-navy-900">{{ ot.user_name }}</span>
+        <span class="badge badge-pending">PENDING</span>
+      </div>
+      <div class="text-sm text-surf-400">{{ ot.date.strftime('%b %d') if ot.date else '' }} &middot; {{ ot.start_time.strftime('%H:%M') if ot.start_time else '' }}&ndash;{{ ot.end_time.strftime('%H:%M') if ot.end_time else '' }} &middot; {{ ot.hours }} hrs</div>
+      <div class="text-sm text-surf-400">{{ ot.reason_code | replace('_', ' ') | title }}{% if ot.work_package_id %} &middot; RFO{% endif %}</div>
+      <div class="flex items-center gap-2 text-sm">
+        <span class="text-surf-400">This month:</span>
+        <span class="font-mono text-navy-700">{{ ot.monthly_used_hours }}h / {{ ot.monthly_limit_hours }}h</span>
+        <div class="prog-bar h-1.5 w-20"><div class="prog-fill" style="width:{{ ot.monthly_pct }}%;background:{{ ot.monthly_bar_color }};border-radius:4px"></div></div>
+      </div>
+      <div class="flex gap-3">
+        <button class="btn-outline flex-1 h-12 text-base" style="color:#b93a3a;border-color:#b93a3a"
+                onclick="mobEndorse({{ ot.id }}, 'REJECT')">Reject</button>
+        <button class="flex-1 h-12 text-base font-semibold rounded-lg border-none cursor-pointer"
+                style="background:#6d28d9;color:#fff"
+                onclick="mobEndorse({{ ot.id }}, 'APPROVE')">Endorse</button>
+      </div>
+    </div>
+    {% endfor %}
+    {% if not items %}
+    <div class="text-center py-8 text-surf-400 text-sm">No pending requests to endorse</div>
+    {% endif %}
+
+  {% elif 'ADMIN' in current_user.roles %}
+    {# ADMIN: ENDORSED → Approve #}
+    <div class="text-sm text-surf-400 mb-3">{{ count }} endorsed request{{ 's' if count != 1 }} awaiting final approval</div>
+    {% for ot in items %}
+    <div class="card p-4 space-y-3" id="mob-approve-{{ ot.id }}">
+      <div class="flex items-center justify-between">
+        <span class="text-base font-semibold text-navy-900">{{ ot.user_name }}</span>
+        <span class="badge badge-endorsed">ENDORSED</span>
+      </div>
+      <div class="text-sm text-surf-400">{{ ot.date.strftime('%b %d') if ot.date else '' }} &middot; {{ ot.start_time.strftime('%H:%M') if ot.start_time else '' }}&ndash;{{ ot.end_time.strftime('%H:%M') if ot.end_time else '' }} &middot; {{ ot.hours }} hrs</div>
+      <div class="text-sm text-surf-400">{{ ot.reason_code | replace('_', ' ') | title }}{% if ot.endorse %} &middot; Endorsed by {{ ot.endorse.approver_name }}{% endif %}</div>
+      <div class="flex items-center gap-2 text-sm">
+        <span class="text-surf-400">This month:</span>
+        <span class="font-mono text-navy-700">{{ ot.monthly_used_hours }}h / {{ ot.monthly_limit_hours }}h</span>
+        <div class="prog-bar h-1.5 w-20"><div class="prog-fill" style="width:{{ ot.monthly_pct }}%;background:{{ ot.monthly_bar_color }};border-radius:4px"></div></div>
+      </div>
+      <div class="flex gap-3">
+        <button class="btn-outline flex-1 h-12 text-base" style="color:#b93a3a;border-color:#b93a3a"
+                onclick="mobApprove({{ ot.id }}, 'REJECT')">Reject</button>
+        <button class="btn-gold flex-1 h-12 text-base font-semibold"
+                onclick="mobApprove({{ ot.id }}, 'APPROVE')">Approve</button>
+      </div>
+    </div>
+    {% endfor %}
+    {% if not items %}
+    <div class="text-center py-8 text-surf-400 text-sm">No endorsed requests awaiting approval</div>
+    {% endif %}
+  {% endif %}
+</div>
+
+<script>
+const csrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+async function mobEndorse(id, action) {
+  const comment = action === 'REJECT' ? prompt('Rejection reason:') : null;
+  const card = document.getElementById('mob-approve-' + id);
+  const r = await fetch(`/api/ot/${id}/endorse`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+    body: JSON.stringify({action, comment})
+  });
+  if (r.ok) {
+    card.style.opacity = '.2';
+    showToast(action === 'APPROVE' ? 'Endorsed' : 'Rejected',
+      `OT-${id} ${action === 'APPROVE' ? 'endorsed → awaiting admin' : 'rejected'}`,
+      action === 'APPROVE' ? 'green' : 'red');
+    setTimeout(() => card.remove(), 800);
+  } else {
+    const d = await r.json();
+    showToast('Error', d.detail || 'Failed', 'red');
+  }
+}
+async function mobApprove(id, action) {
+  const comment = action === 'REJECT' ? prompt('Rejection reason:') : null;
+  const card = document.getElementById('mob-approve-' + id);
+  const r = await fetch(`/api/ot/${id}/approve`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+    body: JSON.stringify({action, comment})
+  });
+  if (r.ok) {
+    card.style.opacity = '.2';
+    showToast(action === 'APPROVE' ? 'Approved' : 'Rejected',
+      `OT-${id} ${action.toLowerCase()}d`, action === 'APPROVE' ? 'green' : 'red');
+    setTimeout(() => card.remove(), 800);
+  } else {
+    const d = await r.json();
+    showToast('Error', d.detail || 'Failed', 'red');
+  }
+}
+</script>

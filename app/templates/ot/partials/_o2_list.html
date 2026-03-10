@@ -1,0 +1,57 @@
+{# O2: Mobile OT History #}
+<div class="p-4 space-y-3" id="ot-o2">
+  {# Filter chips #}
+  <div class="flex flex-wrap gap-1.5 mb-2">
+    {% set filters = [('', 'All'), ('PENDING', 'PENDING'), ('ENDORSED', 'ENDORSED'), ('APPROVED', 'APPROVED'), ('REJECTED', 'REJECTED'), ('CANCELLED', 'CANCELLED')] %}
+    {% for val, label in filters %}
+    <button class="entry-chip {% if status_filter == val %}active{% endif %}"
+            hx-get="/ot/segment/o2{% if val %}?status={{ val }}{% endif %}"
+            hx-target="#ot-stage" hx-swap="innerHTML">{{ label }}</button>
+    {% endfor %}
+  </div>
+
+  {# OT cards #}
+  {% for ot in items %}
+  <div class="card p-4 {% if ot.status == 'REJECTED' %}opacity-60{% endif %}"
+       hx-get="/ot/detail/{{ ot.id }}" hx-target="#ot-stage" hx-swap="innerHTML" hx-push-url="true"
+       style="cursor:pointer">
+    <div class="flex items-center justify-between mb-1">
+      <span class="text-sm font-medium text-navy-900">{{ ot.date.strftime('%b %d') if ot.date else '' }} &middot; {{ ot.start_time.strftime('%H:%M') if ot.start_time else '' }}&ndash;{{ ot.end_time.strftime('%H:%M') if ot.end_time else '' }}</span>
+      <span class="badge {{ ot.badge_cls }}" style="font-size:12px">{{ ot.badge_text }}</span>
+    </div>
+    <div class="text-sm text-surf-400">{{ ot.user_name }} &middot; {{ ot.hours }} hrs &middot; {{ ot.reason_code | replace('_', ' ') | title }}</div>
+
+    {# Approval flow visualization #}
+    <div class="flex items-center gap-1 mt-2 text-xs">
+      {% if ot.status == 'PENDING' %}
+        <span class="px-2 py-0.5 rounded" style="background:#fdf5e0;color:#a07d12">Pending</span>
+        <span class="text-surf-300">&rarr;</span><span class="text-surf-300">1st</span>
+        <span class="text-surf-300">&rarr;</span><span class="text-surf-300">Final</span>
+      {% elif ot.status == 'ENDORSED' %}
+        <span class="px-2 py-0.5 rounded" style="background:#ecf7f0;color:#2d7a4f">&#10003; Pending</span>
+        <span class="text-surf-300">&rarr;</span>
+        <span class="px-2 py-0.5 rounded" style="background:#f3f0ff;color:#6d28d9">&#10003; 1st</span>
+        <span class="text-surf-300">&rarr;</span><span class="text-surf-300">Final</span>
+      {% elif ot.status == 'APPROVED' %}
+        <span class="px-2 py-0.5 rounded" style="background:#ecf7f0;color:#2d7a4f">&#10003;</span>
+        <span class="text-surf-300">&rarr;</span>
+        <span class="px-2 py-0.5 rounded" style="background:#ecf7f0;color:#2d7a4f">&#10003;</span>
+        <span class="text-surf-300">&rarr;</span>
+        <span class="px-2 py-0.5 rounded" style="background:#ecf7f0;color:#2d7a4f">&#10003; Final</span>
+      {% elif ot.status == 'REJECTED' %}
+        {% if ot.endorse and ot.endorse.action == 'REJECT' %}
+        <span class="text-xs" style="color:#b93a3a">Rejected by {{ ot.endorse.approver_name }}{% if ot.endorse.comment %} &mdash; {{ ot.endorse.comment }}{% endif %}</span>
+        {% elif ot.approve and ot.approve.action == 'REJECT' %}
+        <span class="text-xs" style="color:#b93a3a">Rejected by {{ ot.approve.approver_name }}{% if ot.approve.comment %} &mdash; {{ ot.approve.comment }}{% endif %}</span>
+        {% endif %}
+      {% elif ot.status == 'CANCELLED' %}
+        <span class="text-xs text-surf-400">Cancelled</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+
+  {% if not items %}
+  <div class="text-center py-8 text-surf-400 text-sm">No OT requests found</div>
+  {% endif %}
+</div>
