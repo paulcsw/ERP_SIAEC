@@ -29,6 +29,7 @@ def create_app() -> FastAPI:
     from app.api.shops import router as shops_router
     from app.api.shop_access import router as shop_access_router
     from app.api.tasks import router as tasks_router
+    from app.views.dashboard import router as dashboard_views_router
     from app.views.ot import router as ot_views_router
     from app.views.tasks import router as task_views_router
     from app.views.more import router as more_views_router
@@ -46,6 +47,7 @@ def create_app() -> FastAPI:
     app.include_router(shops_router)
     app.include_router(shop_access_router)
     app.include_router(tasks_router)
+    app.include_router(dashboard_views_router)
     app.include_router(stats_router)
     app.include_router(rfo_router)
     app.include_router(ot_views_router)

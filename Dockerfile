@@ -10,7 +10,6 @@ RUN apt-get update && \
         > /etc/apt/sources.list.d/mssql-release.list && \
     apt-get update && \
     ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 unixodbc-dev && \
-    apt-get purge -y --auto-remove curl gnupg2 apt-transport-https && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

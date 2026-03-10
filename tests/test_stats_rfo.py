@@ -543,6 +543,21 @@ async def test_ot_dashboard_ssr(async_client, db):
     assert "OT Dashboard" in resp.text
 
 
+async def test_dashboard_ssr(async_client, db):
+    """GET /dashboard returns HTML."""
+    resp = await async_client.get("/dashboard")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "Operations Dashboard" in resp.text
+
+
+async def test_root_redirects_to_dashboard(async_client, db):
+    """GET / redirects authenticated user to /dashboard."""
+    resp = await async_client.get("/", follow_redirects=False)
+    assert resp.status_code in (302, 307)
+    assert resp.headers.get("location") == "/dashboard"
+
+
 async def test_rfo_detail_ssr(async_client, db):
     """GET /rfo returns HTML."""
     resp = await async_client.get("/rfo")

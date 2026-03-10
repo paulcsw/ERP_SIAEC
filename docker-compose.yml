@@ -1,16 +1,36 @@
-version: '3.8'
-
 services:
   db:
     image: mcr.microsoft.com/mssql/server:2022-latest
     environment:
       ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: "YourStrong!Passw0rd" 
+      MSSQL_SA_PASSWORD: "YourStrong!Passw0rd"
       MSSQL_PID: "Developer"
     ports:
       - "1433:1433"
     volumes:
       - mssql_data:/var/opt/mssql
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - db
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-mssql+aioodbc://sa:YourStrong!Passw0rd@db:1433/cis_erp?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes}
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      DEV_LOGIN_ENABLED: ${DEV_LOGIN_ENABLED:-true}
+      PYTHONPATH: /app
+    command: >-
+      sh -c "python scripts/ensure_database.py &&
+      alembic -c alembic/alembic.ini upgrade head &&
+      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/app
 
 volumes:
   mssql_data:

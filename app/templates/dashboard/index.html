@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - CIS ERP{% endblock %}
+{% block breadcrumb %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="p-4 lg:p-5 flex flex-col h-full w-full overflow-y-auto">
+  <div class="flex items-center justify-between mb-4">
+    <h1 class="text-lg font-semibold text-navy-900">Operations Dashboard</h1>
+    <div class="text-xs text-surf-400">Live snapshot</div>
+  </div>
+
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+    <div class="card p-3">
+      <div class="text-[10px] uppercase tracking-wider text-surf-400 font-medium">Task Completion</div>
+      <div class="text-2xl font-bold text-navy-900">{{ summary.completion_pct }}%</div>
+      <div class="text-xs text-surf-400">{{ summary.completed_tasks }} / {{ summary.total_tasks }} completed</div>
+    </div>
+    <div class="card p-3">
+      <div class="text-[10px] uppercase tracking-wider text-surf-400 font-medium">Open Blockers</div>
+      <div class="text-2xl font-bold text-st-red">{{ summary.open_blockers }}</div>
+      <div class="text-xs text-surf-400">Tasks with issues not completed</div>
+    </div>
+    <div class="card p-3">
+      <div class="text-[10px] uppercase tracking-wider text-surf-400 font-medium">OT This Month</div>
+      <div class="text-2xl font-bold text-navy-900">{{ summary.ot_month_hours }}h</div>
+      <div class="text-xs text-surf-400">Approved + Pending + Endorsed</div>
+    </div>
+    <div class="card p-3">
+      <div class="text-[10px] uppercase tracking-wider text-surf-400 font-medium">Awaiting My Action</div>
+      <div class="text-2xl font-bold text-gold-500">{{ summary.ot_awaiting_count }}</div>
+      <div class="text-xs text-surf-400">{{ summary.active_aircraft }} active aircraft in scope</div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
+    <div class="card p-4">
+      <div class="text-sm font-semibold text-navy-900 mb-3">Task Status Distribution</div>
+      <div class="space-y-2.5">
+        {% for item in status_bars %}
+        <div class="flex items-center gap-2">
+          <div class="w-24 text-xs text-surf-400">{{ item.status | replace('_', ' ') | title }}</div>
+          <div class="flex-1 prog-bar h-2">
+            <div class="prog-fill bg-navy-600 rounded-full" style="width:{{ item.pct }}%"></div>
+          </div>
+          <div class="w-8 text-right text-xs font-mono text-navy-700">{{ item.count }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card p-4">
+      <div class="text-sm font-semibold text-navy-900 mb-3">OT Last 7 Days</div>
+      <div class="space-y-2.5">
+        {% for day in ot_trend %}
+        <div class="flex items-center gap-2">
+          <div class="w-12 text-xs text-surf-400">{{ day.label }}</div>
+          <div class="flex-1 prog-bar h-2">
+            <div class="prog-fill bg-gold-500 rounded-full" style="width:{{ day.width }}%"></div>
+          </div>
+          <div class="w-10 text-right text-xs font-mono text-navy-700">{{ day.hours }}h</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
+    <div class="card">
+      <div class="px-4 py-3 border-b border-surf-200 flex items-center justify-between">
+        <div class="text-sm font-semibold text-navy-900">Recent Task Updates</div>
+        <a href="/tasks" class="text-xs text-navy-600 hover:underline">View all</a>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>Task</th>
+              <th>A/C</th>
+              <th>Status</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in recent_tasks %}
+            <tr>
+              <td class="max-w-[280px] truncate">
+                <a href="/tasks/{{ row.task_id }}" class="text-navy-700 hover:underline">{{ row.task_text }}</a>
+                {% if row.has_issue %}
+                <span class="badge badge-rejected ml-2">Issue</span>
+                {% endif %}
+              </td>
+              <td>{{ row.ac_reg }}</td>
+              <td><span class="badge {{ row.status_class }}">{{ row.status }}</span></td>
+              <td>{{ row.updated_at }}</td>
+            </tr>
+            {% endfor %}
+            {% if not recent_tasks %}
+            <tr><td colspan="4" class="text-center text-surf-400 py-4">No task updates yet</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="px-4 py-3 border-b border-surf-200 flex items-center justify-between">
+        <div class="text-sm font-semibold text-navy-900">Recent OT Requests</div>
+        <a href="/ot" class="text-xs text-navy-600 hover:underline">View all</a>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th>Employee</th>
+              <th>Date</th>
+              <th>Hours</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in recent_ots %}
+            <tr>
+              <td>{{ row.employee_name }}</td>
+              <td>{{ row.date }}</td>
+              <td>{{ row.hours }}h</td>
+              <td><span class="badge {{ row.status_class }}">{{ row.status }}</span></td>
+            </tr>
+            {% endfor %}
+            {% if not recent_ots %}
+            <tr><td colspan="4" class="text-center text-surf-400 py-4">No OT requests yet</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex flex-wrap gap-2">
+    <a href="/tasks/entry" class="btn-outline btn-sm">Open Data Entry</a>
+    <a href="/tasks" class="btn-outline btn-sm">Open Task Manager</a>
+    <a href="/ot/new" class="btn-outline btn-sm">Submit OT</a>
+    <a href="/stats/ot" class="btn-outline btn-sm">OT Dashboard</a>
+  </div>
+</div>
+{% endblock %}
