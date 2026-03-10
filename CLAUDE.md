@@ -44,34 +44,50 @@ python scripts/seed_data.py
 
 ### SSOT-Driven Development
 
-All implementation must conform to the SSOT document: `ERP_Integrated_SSOT_v2.0_Merged_*.md`. The implementation plan (`ERP_SSOT_v2_Implementation_Plan_*.md`) defines the branch/commit order. **The SSOT is the single source of truth** — do not deviate from its schema, business rules, or API contracts.
+All implementation must conform to the SSOT document in `docs/`. The current versions are:
+- **SSOT**: `docs/ERP_Integrated_SSOT_v2_0_Merged_2026-03-10_MiniPatch1-12b-fix2.md`
+- **Implementation Plan**: `docs/ERP_SSOT_v2_Implementation_Plan_v2_MiniPatch1-12b-fix2_Aligned_2026-03-10.md`
+
+**The SSOT is the single source of truth** — do not deviate from its schema, business rules, or API contracts. The implementation plan defines the branch/commit order (12 branches, 00–11).
+
+### Implementation Branch Order
+
+| # | Branch | Purpose |
+|--:|--------|---------|
+| 00 | `chore/bootstrap-app` | Project skeleton, Docker, ODBC18 |
+| 01 | `feat/db-001-core-ot-rfo` | Alembic 001: core + OT + audit + system_config |
+| 02 | `feat/security-auth-csrf-pagination` | Azure AD OAuth2, CSRF, pagination, rate limit |
+| 03 | `feat/admin-users-reference-config-import` | Users + Reference CRUD + CSV import |
+| 04 | `feat/ot-end-to-end-2stage` | OT full slice + 72h limit + mobile |
+| 05 | `feat/db-002-task-schema-distribution` | Alembic 002: task schema |
+| 06 | `feat/task-admin-shop-access` | Shops + user_shop_access CRUD |
+| 07 | `feat/task-core-snapshots-rfo` | Task Core API + optimistic lock + MH policy |
+| 08 | `feat/task-lifecycle-batch` | init-week + batch + delete/restore |
+| 09 | `feat/task-distribution-ui` | Task Manager/Data Entry UI + mobile shell |
+| 10 | `feat/reporting-views-sql-expanded` | SQL Server reporting views |
+| 11 | `feat/stats-rfo-dashboard` | OT stats + RFO dashboard |
 
 ### Target Project Structure
 
 ```
-mh-tracking/
-├── alembic/                    # DB migrations (001: core+OT, 002: task manager)
-├── app/
-│   ├── main.py                 # FastAPI app factory
-│   ├── config.py               # Pydantic BaseSettings
-│   ├── database.py             # SQLAlchemy async engine + session
-│   ├── middleware/              # CSRF (Double Submit Cookie), rate limiting (slowapi)
-│   ├── models/                 # SQLAlchemy ORM (user, reference, ot, task, audit, system_config)
-│   ├── schemas/                # Pydantic request/response models
-│   ├── api/                    # FastAPI routers — JSON endpoints
-│   ├── views/                  # HTMX server-rendered views (Jinja2)
-│   ├── services/               # Business logic layer
-│   ├── templates/              # Jinja2 HTML (base, components, dashboard, ot, tasks, admin, stats)
-│   └── static/
-├── scripts/                    # seed_data.py, create_views.py (Power BI views)
-├── tests/
-├── docker-compose.yml
-└── Dockerfile
+app/
+├── main.py                 # FastAPI app factory
+├── config.py               # Pydantic BaseSettings
+├── database.py             # SQLAlchemy async engine + session
+├── middleware/              # CSRF (Double Submit Cookie), rate limiting (slowapi)
+├── models/                 # SQLAlchemy ORM (user, reference, ot, task, audit, system_config)
+├── schemas/                # Pydantic request/response models
+├── api/                    # FastAPI routers — JSON endpoints
+│   └── deps.py             # Auth, RBAC, shop_access dependencies
+├── views/                  # HTMX server-rendered views (Jinja2)
+├── services/               # Business logic layer
+├── templates/              # Jinja2 HTML (base, components, dashboard, ot, tasks, admin, stats)
+└── static/
 ```
 
 ### Key Architectural Patterns
 
-- **3-layer separation**: API routers → Services (business logic) → Models/DB. Routers should not contain business logic.
+- **3-layer separation**: API routers → Services (business logic) → Models/DB. Routers must not contain business logic.
 - **RBAC**: Three roles — WORKER, SUPERVISOR, ADMIN. Enforced via FastAPI dependencies (`api/deps.py`).
 - **Shop-scoped access**: Non-ADMIN users access Task features through `user_shop_access` (VIEW/EDIT/MANAGE). ADMIN bypasses all shop access checks.
 - **Optimistic locking**: `task_snapshots.version` column — increment on update, reject on mismatch (409 CONFLICT_VERSION).
@@ -90,6 +106,7 @@ mh-tracking/
 - **Carry-over (init-week)**: Copies non-COMPLETED, non-deleted, active task snapshots to new meeting_date. Idempotent via UNIQUE(task_id, meeting_date).
 - **MH decrease rules**: EDIT permission → forbidden (422). MANAGE permission → allowed only with `correction_reason`.
 - **Soft delete**: `is_deleted` flag on snapshots, `is_active` flag on task_items.
+- **Data Entry RBAC boundary**: Init-week and soft delete are Task Manager-only operations, not available in Data Entry.
 
 ## DB Conventions (MSSQL-specific)
 
@@ -106,3 +123,8 @@ All API errors follow: `{ "detail": "...", "code": "MACHINE_READABLE_CODE" }`. K
 ## Environment Variables
 
 Required: `DATABASE_URL`, `SECRET_KEY`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `AZURE_REDIRECT_URI`
+
+## Other Files
+
+- `erp_ui_v3_patch12.html` — Static UI prototype (Tailwind + vanilla JS). Reference for visual design, not production code.
+- `docker-compose.yml` — MSSQL 2022 dev database on port 1433 (SA password: `YourStrong!Passw0rd`).

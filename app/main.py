@@ -22,8 +22,14 @@ def create_app() -> FastAPI:
 
     # ── Routers ───────────────────────────────────────────────────
     from app.api.auth import router as auth_router
+    from app.api.users import router as users_router
+    from app.api.reference import router as reference_router
+    from app.api.config import router as config_router
 
     app.include_router(auth_router)
+    app.include_router(users_router)
+    app.include_router(reference_router)
+    app.include_router(config_router)
 
     # ── Middleware (last added = outermost in Starlette) ──────────
     # Execution order: Session → CSRF → RateLimit → handler

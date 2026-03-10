@@ -2210,7 +2210,13 @@ html[data-font-size="xlarge"] #mobile-app .py-3{padding-top:1.25rem;padding-bott
           <div class="p-4 bg-white border-b border-surf-200 shrink-0">
             <div class="flex items-center justify-between">
               <button onclick="mobBackTo('m2')" class="flex items-center gap-1 text-sm text-navy-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg> Tasks</button>
-              <button class="text-surf-400 text-lg" onclick="showToast('Menu','Add Task / Task Detail','green')">⋯</button>
+              <div class="relative">
+                <button class="text-surf-400 text-lg px-2" onclick="var m=this.nextElementSibling;m.style.display=m.style.display==='none'?'':'none'">⋯</button>
+                <div style="display:none;position:absolute;right:0;top:100%;margin-top:4px;z-index:20;min-width:180px" class="card shadow-xl overflow-hidden">
+                  <button class="w-full text-left px-4 py-3 text-sm font-medium text-navy-900 hover:bg-surf-50 border-b border-surf-100" onclick="this.parentElement.style.display='none';showModal('modal-entry-task')">+ Add Task</button>
+                  <button class="w-full text-left px-4 py-3 text-sm font-medium text-navy-900 hover:bg-surf-50" onclick="this.parentElement.style.display='none';mobGoM5()">View Task Detail</button>
+                </div>
+              </div>
             </div>
             <h2 class="text-lg font-bold text-navy-900 mt-2">Replace panel L1-42</h2>
             <span class="text-sm" style="color:#a07d12">In Progress</span>
@@ -2268,6 +2274,65 @@ html[data-font-size="xlarge"] #mobile-app .py-3{padding-top:1.25rem;padding-bott
             <button class="btn-gold flex-1 h-12 text-base font-semibold" onclick="showToast('Saved','Snapshot updated to v4','green')">Save</button>
           </div>
         </div>
+
+        <!-- M5: Task Detail (read-only) -->
+        <div id="mob-m5" class="flex flex-col h-full bg-white" style="display:none">
+          <div class="p-4 bg-white border-b border-surf-200 shrink-0">
+            <button onclick="mobBackTo('m3')" class="flex items-center gap-1 text-sm text-navy-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg> Back to Quick Update</button>
+          </div>
+          <div class="flex-1 overflow-y-auto p-4 space-y-4">
+            <div>
+              <h2 class="text-lg font-bold text-navy-900">Replace panel L1-42</h2>
+              <div class="flex items-center gap-2 mt-1"><span class="text-sm font-medium" style="color:#a07d12">● In Progress</span><span class="text-sm text-surf-400">· 12.5 MH</span></div>
+            </div>
+            <div class="card p-4 space-y-2 text-sm">
+              <div class="flex justify-between"><span class="text-surf-400">Aircraft</span><span class="font-medium font-mono">9V-SMA · A350-900</span></div>
+              <div class="flex justify-between"><span class="text-surf-400">RFO</span><span class="font-medium font-mono">1200000101</span></div>
+              <div class="flex justify-between"><span class="text-surf-400">Shop</span><span class="font-medium">Sheet Metal</span></div>
+              <div class="flex justify-between"><span class="text-surf-400">Deadline</span><span class="font-medium">Mar 15, 2026</span></div>
+            </div>
+            <div class="card p-4">
+              <div class="text-sm font-semibold text-navy-900 mb-2">Remarks</div>
+              <div class="text-sm text-surf-500">Waiting parts from vendor. Expected ETA: Mar 08. Hydraulic seals need replacement before panel can be reinstalled. Vendor confirmed shipment on Mar 06.</div>
+            </div>
+            <div class="card p-4" style="border-left:3px solid #b93a3a">
+              <div class="text-sm font-semibold mb-2" style="color:#b93a3a">⚠ Critical Issue</div>
+              <div class="text-sm text-surf-500">Hydraulic seal micro-fractures found during inspection. Potential AOG risk if not addressed within 48 hours of parts arrival.</div>
+            </div>
+            <div class="card p-4 space-y-2 text-sm">
+              <div class="text-sm font-semibold text-navy-900 mb-1">Assignment</div>
+              <div class="flex justify-between"><span class="text-surf-400">Supervisor</span><span class="font-medium">Lee</span></div>
+              <div class="flex justify-between"><span class="text-surf-400">Worker</span><span class="font-medium">Ali (E010)</span></div>
+              <div class="flex justify-between"><span class="text-surf-400">Distributed</span><span class="font-medium">Mar 01, 2026</span></div>
+              <div class="flex justify-between"><span class="text-surf-400">Last updated</span><span class="font-medium">Mar 09, 14:30</span></div>
+            </div>
+            <div>
+              <div class="text-sm font-semibold text-navy-900 mb-3">Snapshot History</div>
+              <div class="space-y-3">
+                <div class="flex gap-3">
+                  <div class="flex flex-col items-center"><div class="w-2.5 h-2.5 rounded-full" style="background:#a07d12"></div><div class="w-0.5 flex-1 bg-surf-200"></div></div>
+                  <div class="pb-3"><div class="text-sm font-medium">W09 (current)</div><div class="text-xs text-surf-400 mt-0.5">In Progress · 12.5 MH</div><div class="text-xs text-surf-400">"Waiting parts from vendor"</div></div>
+                </div>
+                <div class="flex gap-3">
+                  <div class="flex flex-col items-center"><div class="w-2.5 h-2.5 rounded-full bg-surf-300"></div><div class="w-0.5 flex-1 bg-surf-200"></div></div>
+                  <div class="pb-3"><div class="text-sm font-medium">W08</div><div class="text-xs text-surf-400 mt-0.5">In Progress · 8.0 MH</div><div class="text-xs text-surf-400">"Started disassembly"</div></div>
+                </div>
+                <div class="flex gap-3">
+                  <div class="flex flex-col items-center"><div class="w-2.5 h-2.5 rounded-full bg-surf-300"></div></div>
+                  <div><div class="text-sm font-medium">W07</div><div class="text-xs text-surf-400 mt-0.5">Not Started · 0.0 MH</div><div class="text-xs text-surf-400">(carry-over from W06)</div></div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div class="text-sm font-semibold text-navy-900 mb-3">Audit Trail</div>
+              <div class="space-y-2">
+                <div class="card p-3"><div class="text-xs text-surf-400">Mar 09, 14:30 · Sup. Lee</div><div class="text-sm mt-0.5">MH: 8.0 → 12.5</div></div>
+                <div class="card p-3"><div class="text-xs text-surf-400">Mar 05, 09:15 · Sup. Lee</div><div class="text-sm mt-0.5">Status: Not Started → In Progress</div></div>
+                <div class="card p-3"><div class="text-xs text-surf-400">Mar 01, 08:00 · Admin</div><div class="text-sm mt-0.5">Task distributed to Sup. Lee</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -2303,7 +2368,11 @@ html[data-font-size="xlarge"] #mobile-app .py-3{padding-top:1.25rem;padding-bott
             <div><div class="mob-label">Details</div><textarea class="inp w-full text-base h-16 resize-none" placeholder="Context..."></textarea></div>
             <div data-role="SUPERVISOR,ADMIN"><div class="mob-label">Technician</div><select class="inp w-full h-12 text-base"><option value="">— Self —</option><option>Worker Ali (E010)</option><option>Worker Muthu (E011)</option><option>Worker Ahmad (E012)</option></select></div>
             <div><div class="mob-label">Related RFO <span class="text-surf-300">(optional)</span></div><select class="inp w-full h-12 text-base"><option value="">— None —</option><option>1200000101</option><option>1200000202</option><option>1200000303</option></select></div>
-            <div style="padding-bottom:calc(56px + env(safe-area-inset-bottom))"><button class="btn-gold w-full h-12 text-base font-semibold" onclick="showToast('Submitted','OT pending supervisor endorsement','green')">Submit</button></div>
+            <div id="ot-limit-warn" style="display:none" class="card p-3 flex items-center gap-2" role="alert">
+              <span style="color:#b93a3a;font-size:18px">⚠</span>
+              <div><div class="text-sm font-semibold" style="color:#b93a3a">Monthly 72h limit exceeded</div><div class="text-xs text-surf-400">Cannot submit — reduce hours or contact admin</div></div>
+            </div>
+            <div style="padding-bottom:calc(56px + env(safe-area-inset-bottom))"><button id="ot-submit-btn" class="btn-gold w-full h-12 text-base font-semibold" onclick="showToast('Submitted','OT pending supervisor endorsement','green')">Submit</button></div>
           </div>
           <!-- O2: History -->
           <div id="ot-o2" style="display:none" class="p-4 space-y-3">
@@ -2313,6 +2382,7 @@ html[data-font-size="xlarge"] #mobile-app .py-3{padding-top:1.25rem;padding-bott
               <button class="entry-chip" onclick="entryFilterChip(this)">ENDORSED</button>
               <button class="entry-chip" onclick="entryFilterChip(this)">APPROVED</button>
               <button class="entry-chip" onclick="entryFilterChip(this)">REJECTED</button>
+              <button class="entry-chip" onclick="entryFilterChip(this)">CANCELLED</button>
             </div>
             <div class="card p-4">
               <div class="flex items-center justify-between mb-1"><span class="text-sm font-medium text-navy-900">Mar 10 · 17:30–20:00</span><span class="badge" style="background:#fdf5e0;color:#a07d12;font-size:12px">PENDING</span></div>
@@ -3032,12 +3102,30 @@ function closeKanbanDetail(){
 }
 
 // ===== MOBILE APP =====
+// Tab state memory
+var tabStates = { tasks: null, ot: null, more: null };
 function switchMobTab(tab){
+  // Save current task tab state
+  var curTab = document.querySelector('.mob-tab-bar .tab-item.active');
+  if(curTab){
+    var curName = curTab.getAttribute('data-tab');
+    if(curName === 'tasks'){
+      tabStates.tasks = document.getElementById('mob-m3').style.display==='flex' ? 'm3' :
+                         document.getElementById('mob-m2').style.display==='flex' ? 'm2' : 'm1';
+    }
+  }
   document.querySelectorAll('.mob-page').forEach(function(p){p.classList.remove('active')});
   document.querySelectorAll('.mob-tab-bar .tab-item').forEach(function(t){t.classList.remove('active')});
   document.getElementById('mob-'+tab).classList.add('active');
   var at=document.querySelector('.mob-tab-bar .tab-item[data-tab="'+tab+'"]');
   if(at) at.classList.add('active');
+  // Restore task tab state
+  if(tab === 'tasks' && tabStates.tasks){
+    document.getElementById('mob-m1').style.display = tabStates.tasks==='m1'?'flex':'none';
+    document.getElementById('mob-m2').style.display = tabStates.tasks==='m2'?'flex':'none';
+    document.getElementById('mob-m3').style.display = tabStates.tasks==='m3'?'flex':'none';
+    document.getElementById('mob-m5').style.display = 'none';
+  }
 }
 function mobGoM2(ac,info,rfo,summary){
   document.getElementById('mob-m2-ac').textContent=ac;
@@ -3055,7 +3143,12 @@ function mobGoM3(){
 function mobBackTo(target){
   document.getElementById('mob-m1').style.display=target==='m1'?'flex':'none';
   document.getElementById('mob-m2').style.display=target==='m2'?'flex':'none';
+  document.getElementById('mob-m3').style.display=target==='m3'?'flex':'none';
+  document.getElementById('mob-m5').style.display='none';
+}
+function mobGoM5(){
   document.getElementById('mob-m3').style.display='none';
+  document.getElementById('mob-m5').style.display='flex';
 }
 function mobStepMH(d){
   var inp=document.getElementById('mob-mh');
@@ -3081,16 +3174,43 @@ function mobSelectStatus(btn){
   btn.classList.add('active');
 }
 // Role system
-var currentRole = 'SUPERVISOR';
+var currentRole = 'SUPERVISOR'; // WORKER | SUPERVISOR | ADMIN
+var hasShopAccess = true; // false = Worker with no shop_access
+var shopAccessLevel = 'EDIT'; // VIEW | EDIT | MANAGE
+
 function applyRoleUI(){
+  // data-role visibility
   document.querySelectorAll('[data-role]').forEach(function(el){
     var roles = el.getAttribute('data-role').split(',');
     el.style.display = roles.indexOf(currentRole) >= 0 ? '' : 'none';
   });
+  // O3 segment: hide for WORKER
   var o3seg = document.querySelector('.ot-seg-bar button:nth-child(3)');
   if(o3seg && currentRole === 'WORKER') o3seg.style.display = 'none';
+  // Tasks tab: disable for Worker with no shop_access
+  var tasksTab = document.querySelector('.mob-tab-bar .tab-item[data-tab="tasks"]');
+  if(tasksTab && currentRole === 'WORKER' && !hasShopAccess){
+    tasksTab.style.opacity = '0.3';
+    tasksTab.style.pointerEvents = 'none';
+    var badge = tasksTab.querySelector('.tab-badge');
+    if(badge) badge.style.display = 'none';
+  }
+  // M3 Save buttons: hide for VIEW-only
+  if(currentRole === 'WORKER' && shopAccessLevel === 'VIEW'){
+    var m3Bottom = document.querySelector('#mob-m3 .border-t.bg-white');
+    if(m3Bottom) m3Bottom.style.display = 'none';
+    var m2AddBtn = document.querySelector('#mob-m2 .btn-gold');
+    if(m2AddBtn) m2AddBtn.style.display = 'none';
+  }
 }
 applyRoleUI();
+// Close M3 menu on outside click
+document.addEventListener('click',function(e){
+  if(!e.target.closest('#mob-m3 .relative')){
+    var menus=document.querySelectorAll('#mob-m3 .relative > div:nth-child(2)');
+    menus.forEach(function(m){m.style.display='none'});
+  }
+});
 // Restore font size
 try{var fs=localStorage.getItem('mob-font-size');if(fs)setMobFontSize(fs)}catch(e){}
 </script>

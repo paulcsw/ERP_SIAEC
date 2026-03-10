@@ -1,8 +1,8 @@
-# ERP 통합 SSOT v2.0 (MiniPatch 1~12b Applied)
+# ERP 통합 SSOT v2.0 (MiniPatch 1~12b-fix2 Applied)
 **MH Tracking (OT) + Task Manager (Weekly Snapshot) 통합 단일 기준 문서**
 
-- 문서 버전: v2.0 (Audit-Patched, MiniPatch 1~12b Applied)
-- 기준일: 2026-03-09 (Asia/Singapore)
+- 문서 버전: v2.0 (Audit-Patched, MiniPatch 1~12b-fix2 Applied)
+- 기준일: 2026-03-10 (Asia/Singapore)
 - 기반 문서:
   - MH Tracking Integrated System — MVP SSOT v1.0 (2026-02-13)
   - Task Manager 프로젝트 SSOT v1.0 (2026-02-13)
@@ -17,7 +17,7 @@
   - 배치 API + all-or-nothing 트랜잭션
   - correction_reason 필드 (MH 감소 감사 추적)
   - CSS 프레임워크 확정 (Tailwind CDN)
-  - MiniPatch 1~12b 반영 (MiniPatch 1~9 + MiniPatch 10: 감사 결함 7건 수정 + MiniPatch 11: RFO No.(work_packages.rfo_no) + CSV Import(Reference Data) + 월 72h OT 한도(제출 차단/위젯) + 2단계 OT 승인(PENDING→ENDORSED→APPROVED) + Task-RFO 연결(task_items.work_package_id) + MiniPatch 12: Task Distribution/Worker Assignment/Planned MH + Task Manager·Data Entry 역할 분리 + RFO Detail Lean Metrics + OT by Reason/Weekly Trend + 모바일 최적화 + MiniPatch 12b: 모바일 셸 3탭(Tasks/OT/More) + Worker 모바일 접근 명확화 + OT 통합 탭(O1/O2/O3) + 더보기 탭(RFO 요약/도움말/글자 크기/내 계정/로그아웃) + M5 작업 상세 + 모바일 접근성 규칙)
+  - MiniPatch 1~12b-fix2 반영 (MiniPatch 1~9 + MiniPatch 10: 감사 결함 7건 수정 + MiniPatch 11: RFO No.(work_packages.rfo_no) + CSV Import(Reference Data) + 월 72h OT 한도(제출 차단/위젯) + 2단계 OT 승인(PENDING→ENDORSED→APPROVED) + Task-RFO 연결(task_items.work_package_id) + MiniPatch 12: Task Distribution/Worker Assignment/Planned MH + Task Manager·Data Entry 역할 분리 + RFO Detail Lean Metrics + OT by Reason/Weekly Trend + 모바일 최적화 + MiniPatch 12b: 모바일 셸 3탭(Tasks/OT/More) + Worker 모바일 접근 명확화 + OT 통합 탭(O1/O2/O3) + 더보기 탭(RFO 요약/도움말/글자 크기/내 계정/로그아웃) + M5 작업 상세 + 모바일 접근성 규칙 + MiniPatch 12b-fix1: D11 NEEDS UPDATE 배지 기준 복원 + `needs_update_threshold_hours`(기본 72h) seed + Settings 설명 보강 + MiniPatch 12b-fix2: §6.3 Data Entry RBAC 경계 복원(Init-week/Soft delete → Task Manager 전용, Save & Next 추가) + §9.5 full-screen modal 전환 규칙 복원)
 
 ---
 
@@ -425,6 +425,7 @@ CREATE TABLE system_config (
 INSERT INTO system_config ([key], value) VALUES
   ('meeting_current_date',       '2026-02-26'),
   ('meeting_auto_advance',       'every_monday'),
+  ('needs_update_threshold_hours','72'),
   ('teams_enabled',              'true'),
   ('teams_recipients',           '#cis-sheet-metal'),
   ('teams_message_template',     'Weekly Summary — {shop} · Week {week}: {task_count} tasks, {issues} issues flagged.'),
@@ -677,11 +678,14 @@ Task는 **Shop 단위 스코프**로 운영한다. 비ADMIN 사용자는 `user_s
 | 기능 | VIEW | EDIT | MANAGE | ADMIN |
 |------|------|------|--------|-------|
 | 배포된 Task 조회 | ✅ | ✅ | ✅ | ✅ |
-| 상태/MH/remarks/issue 수정 | ❌ | ✅ | ✅ | ✅ |
+| 상태/MH/remarks/issue 수정 (단건) | ❌ | ✅ | ✅ | ✅ |
 | Worker 배정 | ❌ | ✅ | ✅ | ✅ |
-| Add Task (현재 AC 하위) | ❌ | ✅ | ✅ | ✅ |
-| Init-week (carry-over) | ❌ | ❌ | ✅ | ✅ |
-| Soft delete / Restore | ❌ | ❌ | ✅ | ✅ |
+| Add Task (selected AC context, 단건) | ❌ | ✅ | ✅ | ✅ |
+| Save & Next (연속 단건 수정) | ❌ | ✅ | ✅ | ✅ |
+
+> **Data Entry에서 제공하지 않는 기능** (Task Manager 전용):
+> Init-week, Batch save, Soft delete/Restore, Deactivate/Reactivate, include_deleted 토글.
+> 이 기능들은 `/tasks` (Task Manager) 페이지에서만 사용 가능하다.
 
 **ADMIN bypass 규칙**: ADMIN은 `user_shop_access` 테이블 행 없이도 모든 Shop에 MANAGE 접근을 허용한다.
 
@@ -937,6 +941,7 @@ Admin: Task Manager에서 전체 감사
 | D8 | 업데이트 추적 | RFO 뷰: `count(supervisor_updated_at IS NOT NULL) / total` → "2/4 updated" 배지 |
 | D9 | Import 형식 | Excel (`.xlsx`) 또는 CSV. 파싱 → 미리보기 → 확인 → DB 기록 + audit_logs |
 | D10 | Supervisor Task 추가 | Data Entry에서 Add Task 시 자동으로 `assigned_supervisor_id = 현재 사용자`, 해당 AC/RFO 하위에 생성 |
+| D11 | NEEDS UPDATE 배지 | `supervisor_updated_at IS NOT NULL` 이고 현재 시각 기준 `system_config['needs_update_threshold_hours']` 시간(기본 72)보다 이전이면 Data Entry에서 노란 "NEEDS UPDATE" 배지로 표시한다. Admin Settings UI에서 변경 가능하다. |
 
 ### 7.4 RFO Detail Lean/Kaizen 메트릭 정의
 
@@ -2037,7 +2042,7 @@ Auth:
 | Shop Access | /admin/shop-access | ADMIN | user_shop_access 관리 | 기존 |
 | User Admin | /admin/users | ADMIN | **Add User 모달** + **Edit User 모달** 포함 사용자 관리 | **수정** |
 | Reference Admin | /admin/reference | ADMIN | Aircraft, RFO(WP), shop stream 관리 + **CSV Import** | **수정** |
-| System Settings | /admin/settings | ADMIN | **Snapshot Week Config** + 알림/수신자/템플릿 설정 | **수정** |
+| System Settings | /admin/settings | ADMIN | **Snapshot Week Config** + **Data Entry badge threshold** + 알림/수신자/템플릿 설정 | **수정** |
 
 ### 9.1.1 Task Manager (기존 Meeting Console) 변경 상세
 
@@ -2099,7 +2104,7 @@ Auth:
 | 화면 | 변경 |
 |------|------|
 | OT Request | Technician Roster에 검색 입력 + 팀/Shop 컨텍스트 |
-| Settings | "Snapshot Week Configuration": Advance On (요일+시간) → 주간 범위 자동 연동, 커스텀 ‹/› 네비게이터 |
+| Settings | "Snapshot Week Configuration": Advance On (요일+시간) → 주간 범위 자동 연동, 커스텀 ‹/› 네비게이터 + `needs_update_threshold_hours` (기본 72h) 설정 |
 | Personnel | Add User 모달 (Employee No./Name/Team/Role/Email), Edit User 모달 (읽기전용 No. + 편집 + Active/Deactivate) |
 
 ### 9.2 기능 매트릭스
@@ -2308,6 +2313,7 @@ min-w-[380px] → min-w-0 sm:min-w-[380px]
 
 ### 9.5 현장 UX 필수 규칙
 - **모바일 우선**: 하단 고정 버튼, 큰 터치 영역 (최소 44×44px)
+- **모바일 모달 전환 규칙**: 입력 필드 4개 이상의 생성/편집 모달은 모바일(`< 768px`)에서 full-screen modal로 전환한다. 키보드 노출 시 CTA 가림을 방지하고 입력 공간을 확보하기 위함이다. 데스크탑에서는 기존 overlay 모달을 유지한다.
 - **실패 시 에러 메시지**: 명확한 사유 표시 (redirect만 하지 말 것)
 - **저장 실패 시 입력값 유지 + 재시도 가능** (데이터 유실 방지)
 - **init-week**: 처리 결과 count 표시 ("5건 생성, 2건 skip")
@@ -2810,8 +2816,9 @@ async def worker_client(db_session):
 4. **Assign Worker**: 본인 Shop 내 Worker만 허용, 타 Shop Worker 지정 시 403
 5. **NEW 배지**: `distributed_at` 존재 + `supervisor_updated_at = NULL` 인 Task만 NEW로 표시
 6. **RFO 배포/업데이트 배지**: assigned / updated 카운트가 RFO 뷰와 일치하는지 확인
-7. **RFO Metrics API**: `/api/rfo/{id}/metrics`, `/blockers`, `/worker-allocation`, `/burndown` 응답 구조 검증
-8. **OT Stats 확장**: `/api/stats/ot-by-reason`, `/api/stats/ot-weekly-trend` 권한/집계 검증
+7. **NEEDS UPDATE 배지**: `supervisor_updated_at`이 `system_config['needs_update_threshold_hours']`(기본 72h)보다 오래되면 Data Entry에서 노란 배지로 표시되고, threshold 변경 시 판정이 즉시 반영되는지 확인
+8. **RFO Metrics API**: `/api/rfo/{id}/metrics`, `/blockers`, `/worker-allocation`, `/burndown` 응답 구조 검증
+9. **OT Stats 확장**: `/api/stats/ot-by-reason`, `/api/stats/ot-weekly-trend` 권한/집계 검증
 
 
 ### 13.7 MiniPatch 12b 모바일/접근성 시나리오
@@ -2881,6 +2888,7 @@ SHOPS = [
 SYSTEM_CONFIG = [
     ("meeting_current_date",       "2026-02-26"),
     ("meeting_auto_advance",       "every_monday"),
+    ("needs_update_threshold_hours", "72"),
     ("teams_enabled",              "true"),
     ("teams_recipients",           "#cis-sheet-metal"),
     ("teams_message_template",     "Weekly Summary — {shop} · Week {week}: {task_count} tasks, {issues} issues flagged."),

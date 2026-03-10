@@ -1,8 +1,8 @@
-# ERP Implementation Plan v2 (SSOT v2.0 MiniPatch 1~12b Aligned)
+# ERP Implementation Plan v2 (SSOT v2.0 MiniPatch 1~12b-fix2 Aligned)
 
-- 기준 SSOT: **ERP 통합 SSOT v2.0 (MiniPatch 1~12b Applied)** — 2026-03-09 (Asia/Singapore)
+- 기준 SSOT: **ERP 통합 SSOT v2.0 (MiniPatch 1~12b-fix2 Applied)** — 2026-03-10 (Asia/Singapore)
 - 기준 Plan: `ERP_SSOT_v2_Implementation_Plan_v2_MiniPatch1-10_Aligned_2026-03-03.md`
-- 본 문서 목적: 위 SSOT 기준으로 **브랜치/커밋 단위 실행 플랜을 MiniPatch 11~12b 변경사항까지 포함해 재정렬/수정**한다.
+- 본 문서 목적: 위 SSOT 기준으로 **브랜치/커밋 단위 실행 플랜을 MiniPatch 11~12b-fix2 변경사항까지 포함해 재정렬/수정**한다.
 
 > 핵심 변경점(이번 정합화에서 반영)
 > - OT: **2단계 승인(SUPERVISOR endorse → ADMIN approve)**, **월 72h 한도(4,320분)**, **Admin OT Approve 대기열** 반영
@@ -11,6 +11,8 @@
 > - UI: **`/tasks/meeting` → `/tasks`(Task Manager)**, **Data Entry 역할 재정의**, **`/rfo/{id}`** 신규, **OT Stats 확장**
 > - Reporting: 기존 OT/Task views 확장 + **`vw_fact_ot_by_reason` / `vw_fact_ot_weekly` / `vw_rfo_efficiency` / `vw_rfo_burndown` / `vw_task_distribution`** 추가
 > - Mobile/UI(12b): **모바일 셸 3탭(작업/OT/더보기)**, **OT 통합 탭(O1/O2/O3)**, **Worker 모바일 접근**, **더보기(RFO 요약/도움말/글자 크기/내 계정/로그아웃)**, **M5 작업 상세**, **모바일 접근성 규칙** 반영
+> - Task/UI(12b-fix1): **D11 NEEDS UPDATE 배지 규칙 복원**, **`needs_update_threshold_hours`(기본 72h)**, **System Settings의 Data Entry badge threshold** 반영
+> - RBAC/UX(12b-fix2): **§6.3 Data Entry RBAC 경계 복원**(Init-week/Soft delete → Task Manager 전용, Save & Next 추가), **§9.5 full-screen modal 전환 규칙 복원**
 
 ---
 
@@ -30,12 +32,13 @@
   - batch update(all-or-nothing), soft delete/restore, deactivate/reactivate
   - Task Import Preview/Confirm, Assign/Bulk Assign, Assign Worker
   - Task Manager / Data Entry / Task Detail / RFO Detail / Task CSV export
+  - NEW / NEEDS UPDATE / up-to-date badge 규칙(`needs_update_threshold_hours` 기본 72h, Settings에서 변경 가능)
   - 모바일 셸 3탭(작업 / OT / 더보기), OT 통합 탭(O1 / O2 / O3), 더보기 탭, M5 읽기전용 Task Detail, 글자 크기 3단계 / 모바일 접근성
 - **Admin / Reference**
   - users CRUD(조건부 HARD DELETE 포함)
   - aircraft / work_packages(rfo_no 포함) / shop_streams CRUD
   - Reference CSV Import, shops CRUD, shop access 관리
-  - system settings(system_config) UI + `/api/config`
+  - system settings(system_config) UI + `/api/config` + Data Entry badge threshold(`needs_update_threshold_hours`)
 - **공통**
   - RBAC 강제, CSRF, pagination wrapper, rate limiting, audit_logs
   - SQL Server reporting views → Power BI
@@ -182,7 +185,7 @@
 - roles/users seed
 - work_packages seed에 `rfo_no` 포함
 - system_config 기본 key들 seed:
-  - `meeting_current_date`, `meeting_auto_advance`
+  - `meeting_current_date`, `meeting_auto_advance`, `needs_update_threshold_hours`(기본 72)
   - Teams/Outlook/critical alert 관련 토글/수신자/템플릿
 
 4) `test(db): alembic upgrade/downgrade smoke (MSSQL)`
@@ -445,7 +448,7 @@
 - migration 002 적용 성공
 - distribution 관련 컬럼/인덱스 생성 확인
 - `supervisor_updated_at` 포함
-- 주의: `supervisor_updated_at`은 NEW/updated badge 추적용으로 **선택이 아니라 필수 반영**으로 구현
+- 주의: `supervisor_updated_at`은 NEW/NEEDS UPDATE/updated badge 추적용으로 **선택이 아니라 필수 반영**으로 구현
 
 ---
 
@@ -665,6 +668,9 @@
 - Worker Assignment 카드
 - Add Task 모달
 - NEW / NEEDS UPDATE / up-to-date badge
+  - NEW: `distributed_at IS NOT NULL AND supervisor_updated_at IS NULL`
+  - NEEDS UPDATE: `supervisor_updated_at`가 `system_config['needs_update_threshold_hours']`(기본 72h)보다 오래된 경우
+  - 그 외는 up-to-date
 - 모바일 우선 반응형
 
 4-c) `feat(ssr): more tab (RFO summary + help + accessibility)`
@@ -720,6 +726,8 @@
 - Snapshot Week Config
   - `meeting_current_date`
   - auto-advance 관련 보조 UI
+- Data Entry badge threshold
+  - `needs_update_threshold_hours` (기본 72h)
 - Teams/Outlook/critical alert 토글 + recipients/template 입력(저장만, 실제 발송 X)
 - 저장은 `/api/config PATCH` 호출 → audit_logs 자동 기록
 
@@ -739,6 +747,7 @@
 - RFO 요약: `metrics` + `blockers` API 호출 + `관련 작업 보기` 이동
 - 글자 크기 3단계 전환 → 폰트 / 간격 연동
 - M5 작업 상세: 읽기전용, 히스토리 / 감사 표시, 편집 없음
+- `/admin/settings`에서 `needs_update_threshold_hours` 저장 시 Data Entry NEEDS UPDATE badge 판정에 즉시 반영
 - M3: `+ Add Worker` 모바일 숨김, 기술 메타 접기
 - 모바일 폰트 최소 13px 이상 (10px / 11px 사용 금지)
 
@@ -902,12 +911,13 @@ MiniPatch 12 추가 views:
 - O3: SUPERVISOR → endorse API 호출 (`PENDING`만)
 - O3: ADMIN → approve API 호출 (`ENDORSED`만)
 
-### 5.2 Task / Distribution (기존 16개 + 모바일 12개)
+### 5.2 Task / Distribution (기존 17개 + 모바일 12개)
 - init-week 최초 → carry-over 생성(`created_count > 0`)
 - init-week 재호출 → idempotent(`created_count=0`, `skipped_count > 0`)
 - `COMPLETED` / `is_deleted=true` / `is_active=false` task는 carry-over 제외
 - carry-over 시 `mh_incurred_hours` 이전 주 값 복사 확인
 - carry-over 시 `supervisor_updated_at = NULL` 초기화 확인
+- NEEDS UPDATE badge: `supervisor_updated_at`가 `needs_update_threshold_hours`(기본 72h)보다 오래되면 표시되고, 설정 변경 시 판정이 즉시 반영되는지 확인
 - snapshots list with `airline_category` / `work_package_id` / `assigned_supervisor_id` 필터
 - create task with `work_package_id`, `assigned_supervisor_id`, `planned_mh` → `distributed_at` 자동 설정
 - update snapshot version 충돌 409
@@ -1017,6 +1027,14 @@ MiniPatch 12 추가 views:
   - 더보기 탭(RFO 요약 / 도움말 / 글자 크기 / 내 계정 / 로그아웃) 추가
   - M5 작업 상세(읽기전용) + 모바일 접근성 규칙 반영
   - OT / Task 모바일 테스트와 shell → OT mobile → Data Entry 의존성 반영
+- MiniPatch 12b-fix2 반영:
+  - §6.3 Data Entry RBAC: Init-week/Soft delete를 Task Manager 전용으로 분리, Save & Next 행 추가
+  - §9.5 full-screen modal 전환 규칙 복원 (입력 필드 4개 이상 → 모바일 full-screen)
+- MiniPatch 12b-fix1 반영:
+  - D11 NEEDS UPDATE 배지 규칙 복원 (`supervisor_updated_at` + `needs_update_threshold_hours` 기본 72h)
+  - Branch 01 system_config seed에 `needs_update_threshold_hours` 추가
+  - Branch 09 `/admin/settings`에 Data Entry badge threshold 설정 추가
+  - Task / Data Entry 테스트에 NEEDS UPDATE threshold 시나리오 추가
 - 기존 MiniPatch 8~10 유지:
   - MSSQL/Azure SQL + ODBC18
   - Azure AD OAuth2 + session + CSRF + rate limit
@@ -1029,16 +1047,19 @@ MiniPatch 12 추가 views:
 
 다음 항목이 본 문서에 반영되어 있어야 한다.
 
-- [x] 문서 제목 / 기준 SSOT가 **MiniPatch 1~12b**로 갱신됨
+- [x] 문서 제목 / 기준 SSOT가 **MiniPatch 1~12b-fix2**로 갱신됨
 - [x] OT 2단계 승인 / 월 72h 한도 / `rfo_no` / Reference CSV import 반영
 - [x] Task Distribution 스키마(`assigned_*`, `distributed_at`, `planned_mh`, `supervisor_updated_at`) 반영
 - [x] `/api/tasks/import`, `/api/tasks/import/confirm`, `/api/tasks/{id}/assign`, `/api/tasks/bulk-assign`, `/api/tasks/{id}/assign-worker` 반영
 - [x] `/tasks` Task Manager / `/tasks/entry` Data Entry / `/rfo/{id}` RFO Detail 반영
 - [x] Branch 04 commit 6: OT mobile segments(O1 / O2 / O3) 반영
 - [x] Branch 09 commit 4-a ~ 4-e: mobile shell / more / M5 / accessibility 반영
+- [x] D11 NEEDS UPDATE 규칙 + `needs_update_threshold_hours` seed / settings / test 반영
 - [x] OT 모바일 테스트 6건 + Task 모바일 셸 / 접근성 테스트 12건 반영
 - [x] shell → OT mobile → Data Entry 순서 의존성 반영
 - [x] `/api/stats/ot-monthly-usage`, `/api/stats/ot-by-reason`, `/api/stats/ot-weekly-trend`, `/api/rfo/{id}/metrics` 반영
 - [x] reporting views 5종(`vw_fact_ot_by_reason`, `vw_fact_ot_weekly`, `vw_rfo_efficiency`, `vw_rfo_burndown`, `vw_task_distribution`) 반영
+- [x] §6.3 Data Entry RBAC에서 Init-week/Soft delete 제거 + Save & Next 추가 + Task Manager 전용 disclaimer 반영
+- [x] §9.5 full-screen modal 전환 규칙 (입력 필드 4개 이상) 반영
 - [x] 기존 MiniPatch 8~10 핵심 규칙(auth, config, airline, audit, MSSQL) 유지
 
