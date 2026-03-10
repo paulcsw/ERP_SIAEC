@@ -1,0 +1,518 @@
+{% extends "base.html" %}
+
+{% block title %}Task Manager - CIS ERP{% endblock %}
+{% block breadcrumb %}Tasks &rsaquo; Task Manager{% endblock %}
+
+{% block head %}
+<style>
+.task-tbl{table-layout:fixed;width:100%}
+.task-tbl .col-acrfo{width:130px}
+.task-tbl .col-task{width:auto}
+.task-tbl .col-assigned{width:100px}
+.task-tbl .col-status{width:100px}
+.task-tbl .col-mh{width:90px}
+.task-tbl .col-deadline{width:90px}
+.task-tbl .col-actions{width:50px}
+/* Kanban columns */
+.kanban-col{flex:1;min-width:0;background:#f5f7fa;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.kanban-card{background:#fff;border:1px solid #dee4ed;border-radius:8px;padding:12px;cursor:pointer;transition:box-shadow .15s}
+.kanban-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.08)}
+/* RFO accordion */
+.rfo-group-header{cursor:pointer;user-select:none}
+.rfo-group-header:hover{background:#eef1f6}
+.rfo-group-body{display:none}
+.rfo-group-body.open{display:table-row-group}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="p-4 lg:p-5 flex flex-col gap-4 h-full">
+
+  {# ── Header ── #}
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <h1 class="text-xl font-semibold text-navy-900">Task Manager</h1>
+      <p class="text-sm text-surf-400 mt-0.5">Create, distribute, and audit tasks across shops</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <button class="btn-outline btn-sm" onclick="document.getElementById('importRfoModal').classList.remove('hidden')">
+        <svg class="w-4 h-4 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+        Import RFO
+      </button>
+      <button class="btn-primary btn-sm" onclick="document.getElementById('createModal').classList.remove('hidden')">
+        <svg class="w-4 h-4 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        Create &amp; Assign
+      </button>
+    </div>
+  </div>
+
+  {# ── Filters ── #}
+  <div class="card p-3">
+    <div class="flex flex-wrap items-center gap-3">
+      <div class="flex items-center gap-2">
+        <label class="text-xs font-medium text-surf-400 uppercase tracking-wide">Meeting Date</label>
+        <input type="date" id="filterMeetingDate" class="inp text-sm py-1.5" value="{{ meeting_date or '' }}"
+               hx-get="/tasks" hx-target="#task-table-body" hx-select="#task-table-body"
+               hx-include="[id^=filter]" hx-push-url="true">
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="text-xs font-medium text-surf-400 uppercase tracking-wide">Shop</label>
+        <select id="filterShop" class="inp text-sm py-1.5">
+          <option value="">All Shops</option>
+          {% for s in shops %}
+          <option value="{{ s.id }}" {% if shop_id == s.id %}selected{% endif %}>{{ s.code }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="text-xs font-medium text-surf-400 uppercase tracking-wide">Airline</label>
+        <select id="filterAirline" class="inp text-sm py-1.5">
+          <option value="">All</option>
+          <option value="SQ" {% if airline_filter == 'SQ' %}selected{% endif %}>SQ</option>
+          <option value="3RD" {% if airline_filter == '3RD' %}selected{% endif %}>3rd Party</option>
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="text-xs font-medium text-surf-400 uppercase tracking-wide">Supervisor</label>
+        <select id="filterSupervisor" class="inp text-sm py-1.5">
+          <option value="">All Supervisors</option>
+          {% for sv in supervisors %}
+          <option value="{{ sv.id }}">{{ sv.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="flex-1"></div>
+
+      {# View toggle pills #}
+      <div class="flex items-center gap-1 bg-surf-100 rounded-lg p-1" id="viewToggle">
+        <button class="view-pill active" data-view="table" onclick="switchView('table')">
+          <svg class="w-4 h-4 inline -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+          Table
+        </button>
+        <button class="view-pill" data-view="kanban" onclick="switchView('kanban')">
+          <svg class="w-4 h-4 inline -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>
+          Kanban
+        </button>
+        <button class="view-pill" data-view="rfo" onclick="switchView('rfo')">
+          <svg class="w-4 h-4 inline -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+          RFO
+        </button>
+      </div>
+    </div>
+  </div>
+
+  {# ── Table View ── #}
+  <div id="view-table" class="card flex-1 flex flex-col min-h-0">
+    <div class="flex-1 overflow-auto">
+      <table class="tbl task-tbl">
+        <thead>
+          <tr>
+            <th class="col-acrfo">
+              <input type="checkbox" class="chk" id="selectAll" onclick="toggleSelectAll(this)">
+              AC / RFO
+            </th>
+            <th class="col-task">Task</th>
+            <th class="col-assigned">Assigned</th>
+            <th class="col-status">Status</th>
+            <th class="col-mh">MH</th>
+            <th class="col-deadline">Deadline</th>
+            <th class="col-actions"></th>
+          </tr>
+        </thead>
+        <tbody id="task-table-body">
+          {% if snapshots %}
+          {% for snap in snapshots %}
+          <tr class="cursor-pointer" hx-get="/tasks/{{ snap.task_id }}/panel" hx-target="#detailPanel" hx-swap="innerHTML" onclick="openDetailPanel()">
+            <td class="col-acrfo">
+              <div class="flex items-center gap-2">
+                <input type="checkbox" class="chk task-chk" value="{{ snap.task_id }}" onclick="event.stopPropagation()">
+                <div>
+                  <div class="font-medium text-sm">{{ snap.ac_reg or '-' }}</div>
+                  <div class="text-xs text-surf-400">{{ snap.rfo_no or '-' }}</div>
+                </div>
+              </div>
+            </td>
+            <td class="col-task">
+              <div class="text-sm truncate" title="{{ snap.task_text }}">{{ snap.task_text }}</div>
+              {% if snap.has_issue %}
+              <span class="inline-flex items-center gap-1 text-[11px] text-st-red font-medium mt-0.5">
+                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                Issue
+              </span>
+              {% endif %}
+            </td>
+            <td class="col-assigned">
+              <span class="text-sm">{{ snap.assigned_worker or '-' }}</span>
+            </td>
+            <td class="col-status">
+              {% if snap.status == 'NOT_STARTED' %}
+              <span class="badge badge-not-started">Not Started</span>
+              {% elif snap.status == 'IN_PROGRESS' %}
+              <span class="badge badge-in-progress">In Progress</span>
+              {% elif snap.status == 'WAITING' %}
+              <span class="badge badge-waiting">Waiting</span>
+              {% elif snap.status == 'COMPLETED' %}
+              <span class="badge badge-completed">Completed</span>
+              {% endif %}
+            </td>
+            <td class="col-mh">
+              <span class="text-sm font-mono">{{ snap.mh_incurred_hours }}</span>
+            </td>
+            <td class="col-deadline">
+              <span class="text-sm {% if snap.is_overdue %}text-st-red font-medium{% endif %}">{{ snap.deadline_date or '-' }}</span>
+            </td>
+            <td class="col-actions">
+              <button class="p-1 rounded hover:bg-surf-50" onclick="event.stopPropagation()">
+                <svg class="w-4 h-4 text-surf-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01"/></svg>
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+          {% else %}
+          <tr>
+            <td colspan="7" class="text-center py-12 text-surf-400">
+              <svg class="w-10 h-10 mx-auto mb-2 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+              <p class="text-sm">No tasks found for the selected filters.</p>
+              <p class="text-xs mt-1">Try changing the meeting date or shop filter.</p>
+            </td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    {# ── Bottom bar ── #}
+    <div class="border-t border-surf-200 px-4 py-2 flex items-center justify-between text-sm shrink-0">
+      <div class="flex items-center gap-3">
+        <span class="text-surf-400 text-xs">
+          {% if total > 0 %}
+          {{ ((page - 1) * per_page) + 1 }}-{{ [page * per_page, total] | min }} of {{ total }} tasks
+          {% else %}
+          0 tasks
+          {% endif %}
+        </span>
+        <button class="btn-outline btn-sm" id="bulkAssignBtn" style="display:none" onclick="document.getElementById('bulkAssignModal').classList.remove('hidden')">
+          Bulk Assign
+        </button>
+      </div>
+      <div class="flex items-center gap-2">
+        <button class="btn-outline btn-sm">
+          <svg class="w-3.5 h-3.5 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Export CSV
+        </button>
+        <button class="btn-outline btn-sm">
+          <svg class="w-3.5 h-3.5 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Audit Log
+        </button>
+        {% if total_pages > 1 %}
+        <div class="flex items-center gap-1 ml-2">
+          {% if page_num > 1 %}
+          <a href="?page={{ page_num - 1 }}" class="pg-btn">&laquo;</a>
+          {% endif %}
+          {% for p in range(1, total_pages + 1) %}
+          <a href="?page={{ p }}" class="pg-btn {% if p == page_num %}active{% endif %}">{{ p }}</a>
+          {% endfor %}
+          {% if page_num < total_pages %}
+          <a href="?page={{ page_num + 1 }}" class="pg-btn">&raquo;</a>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ── Kanban View (hidden by default) ── #}
+  <div id="view-kanban" class="flex-1 min-h-0 overflow-auto" style="display:none">
+    <div class="flex gap-4 h-full">
+      {% set statuses = [('NOT_STARTED', 'Not Started', 'badge-not-started'), ('IN_PROGRESS', 'In Progress', 'badge-in-progress'), ('WAITING', 'Waiting', 'badge-waiting'), ('COMPLETED', 'Completed', 'badge-completed')] %}
+      {% for status_key, status_label, badge_cls in statuses %}
+      <div class="kanban-col">
+        <div class="flex items-center justify-between mb-2">
+          <span class="badge {{ badge_cls }}">{{ status_label }}</span>
+          <span class="text-xs text-surf-400">
+            {{ snapshots | selectattr('status', 'equalto', status_key) | list | length if snapshots else 0 }}
+          </span>
+        </div>
+        <div class="flex-1 overflow-y-auto space-y-2">
+          {% if snapshots %}
+          {% for snap in snapshots if snap.status == status_key %}
+          <div class="kanban-card" hx-get="/tasks/{{ snap.task_id }}/panel" hx-target="#detailPanel" hx-swap="innerHTML" onclick="openDetailPanel()">
+            <div class="text-xs text-surf-400 mb-1">{{ snap.ac_reg or '-' }} &middot; {{ snap.rfo_no or '-' }}</div>
+            <div class="text-sm font-medium truncate">{{ snap.task_text }}</div>
+            <div class="flex items-center justify-between mt-2">
+              <span class="text-xs text-surf-400">{{ snap.assigned_worker or 'Unassigned' }}</span>
+              <span class="text-xs font-mono text-navy-600">{{ snap.mh_incurred_hours }}h</span>
+            </div>
+            {% if snap.has_issue %}
+            <div class="flex items-center gap-1 text-[11px] text-st-red font-medium mt-1">
+              <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+              Issue flagged
+            </div>
+            {% endif %}
+          </div>
+          {% endfor %}
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# ── RFO View (hidden by default) ── #}
+  <div id="view-rfo" class="card flex-1 flex flex-col min-h-0 overflow-auto" style="display:none">
+    <table class="tbl">
+      {% if rfo_groups %}
+      {% for rfo_no, tasks in rfo_groups.items() %}
+      <tbody>
+        <tr class="rfo-group-header" onclick="this.nextElementSibling.classList.toggle('open')">
+          <td colspan="6" class="py-3 px-4">
+            <div class="flex items-center gap-3">
+              <svg class="w-4 h-4 text-surf-400 transition-transform rfo-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+              <span class="font-semibold text-navy-700">{{ rfo_no or 'No RFO' }}</span>
+              <span class="badge badge-not-started text-[10px]">{{ tasks | length }} tasks</span>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+      <tbody class="rfo-group-body">
+        {% for snap in tasks %}
+        <tr class="cursor-pointer" hx-get="/tasks/{{ snap.task_id }}/panel" hx-target="#detailPanel" hx-swap="innerHTML" onclick="openDetailPanel()">
+          <td class="pl-12">{{ snap.ac_reg or '-' }}</td>
+          <td>
+            <div class="text-sm truncate">{{ snap.task_text }}</div>
+          </td>
+          <td>{{ snap.assigned_worker or '-' }}</td>
+          <td>
+            {% if snap.status == 'NOT_STARTED' %}
+            <span class="badge badge-not-started">Not Started</span>
+            {% elif snap.status == 'IN_PROGRESS' %}
+            <span class="badge badge-in-progress">In Progress</span>
+            {% elif snap.status == 'WAITING' %}
+            <span class="badge badge-waiting">Waiting</span>
+            {% elif snap.status == 'COMPLETED' %}
+            <span class="badge badge-completed">Completed</span>
+            {% endif %}
+          </td>
+          <td class="font-mono text-sm">{{ snap.mh_incurred_hours }}</td>
+          <td>{{ snap.deadline_date or '-' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      {% endfor %}
+      {% else %}
+      <tbody>
+        <tr>
+          <td colspan="6" class="text-center py-12 text-surf-400 text-sm">No RFO groups found.</td>
+        </tr>
+      </tbody>
+      {% endif %}
+    </table>
+  </div>
+</div>
+
+{# ── Detail Side Panel ── #}
+<div class="side-panel" id="detailPanelWrap">
+  <div class="flex items-center justify-between p-4 border-b border-surf-200 sticky top-0 bg-white z-10">
+    <h3 class="text-base font-semibold text-navy-900">Task Detail</h3>
+    <button onclick="closeDetailPanel()" class="p-1.5 rounded-lg hover:bg-surf-50">
+      <svg class="w-5 h-5 text-surf-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div id="detailPanel" class="p-4">
+    <div class="text-center py-12 text-surf-400 text-sm">Select a task to view details.</div>
+  </div>
+</div>
+
+{# ── Create & Assign Modal ── #}
+<div id="createModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/30" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="card p-6 w-full max-w-lg mx-4 shadow-xl" onclick="event.stopPropagation()">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-semibold text-navy-900">Create &amp; Assign Task</h3>
+      <button onclick="this.closest('#createModal').classList.add('hidden')" class="p-1 rounded hover:bg-surf-50">
+        <svg class="w-5 h-5 text-surf-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <form hx-post="/api/tasks" hx-target="#task-table-body" hx-swap="innerHTML" class="space-y-4"
+          hx-on::after-request="if(event.detail.successful){this.closest('#createModal').classList.add('hidden');showToast('Created','Task created successfully','green')}">
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs font-medium text-surf-400 block mb-1">AC Reg</label>
+          <select name="aircraft_id" class="inp w-full text-sm" required>
+            <option value="">Select Aircraft</option>
+            {% for ac in aircraft_list %}
+            <option value="{{ ac.id }}">{{ ac.ac_reg }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-surf-400 block mb-1">RFO No</label>
+          <select name="work_package_id" class="inp w-full text-sm">
+            <option value="">Select RFO</option>
+            {% for wp in work_packages %}
+            <option value="{{ wp.id }}">{{ wp.rfo_no or wp.title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs font-medium text-surf-400 block mb-1">Shop</label>
+          <select name="shop_id" class="inp w-full text-sm" required>
+            <option value="">Select Shop</option>
+            {% for s in shops %}
+            <option value="{{ s.id }}">{{ s.code }} - {{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-surf-400 block mb-1">Supervisor</label>
+          <select name="assigned_supervisor_id" class="inp w-full text-sm">
+            <option value="">Select Supervisor</option>
+            {% for sv in supervisors %}
+            <option value="{{ sv.id }}">{{ sv.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="text-xs font-medium text-surf-400 block mb-1">Description</label>
+        <textarea name="task_text" class="inp w-full text-sm" rows="3" required placeholder="Task description..."></textarea>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs font-medium text-surf-400 block mb-1">Deadline</label>
+          <input type="date" name="deadline_date" class="inp w-full text-sm">
+        </div>
+        <div>
+          <label class="text-xs font-medium text-surf-400 block mb-1">Initial MH</label>
+          <input type="number" name="planned_mh" class="inp w-full text-sm" step="0.5" min="0" placeholder="0.0">
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" class="btn-outline" onclick="this.closest('#createModal').classList.add('hidden')">Cancel</button>
+        <button type="submit" class="btn-primary">Create Task</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# ── Import RFO Modal ── #}
+<div id="importRfoModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/30" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="card p-6 w-full max-w-2xl mx-4 shadow-xl" onclick="event.stopPropagation()">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-semibold text-navy-900">Import RFO</h3>
+      <button onclick="this.closest('#importRfoModal').classList.add('hidden')" class="p-1 rounded hover:bg-surf-50">
+        <svg class="w-5 h-5 text-surf-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="border-2 border-dashed border-surf-200 rounded-lg p-8 text-center mb-4">
+      <svg class="w-10 h-10 mx-auto mb-2 text-surf-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+      <p class="text-sm text-surf-400">Drag &amp; drop CSV/Excel file or</p>
+      <label class="btn-outline btn-sm mt-2 inline-block cursor-pointer">
+        Browse Files
+        <input type="file" class="hidden" accept=".csv,.xlsx,.xls" id="rfoFileInput">
+      </label>
+    </div>
+    <div id="rfoPreview" class="hidden">
+      <div class="text-sm font-medium text-navy-700 mb-2">Preview</div>
+      <div class="overflow-auto max-h-48 border border-surf-200 rounded-lg">
+        <table class="tbl text-xs" id="rfoPreviewTable">
+          <thead><tr><th>AC Reg</th><th>RFO</th><th>Task</th><th>Shop</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="flex justify-end gap-2 pt-4">
+      <button type="button" class="btn-outline" onclick="this.closest('#importRfoModal').classList.add('hidden')">Cancel</button>
+      <button type="button" class="btn-primary" id="rfoImportBtn" disabled>Import Tasks</button>
+    </div>
+  </div>
+</div>
+
+{# ── Bulk Assign Modal ── #}
+<div id="bulkAssignModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/30" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="card p-6 w-full max-w-sm mx-4 shadow-xl" onclick="event.stopPropagation()">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-semibold text-navy-900">Bulk Assign Supervisor</h3>
+      <button onclick="this.closest('#bulkAssignModal').classList.add('hidden')" class="p-1 rounded hover:bg-surf-50">
+        <svg class="w-5 h-5 text-surf-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="mb-4">
+      <label class="text-xs font-medium text-surf-400 block mb-1">Assign to Supervisor</label>
+      <select id="bulkSupervisorSelect" class="inp w-full text-sm">
+        <option value="">Select Supervisor</option>
+        {% for sv in supervisors %}
+        <option value="{{ sv.id }}">{{ sv.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <p class="text-xs text-surf-400 mb-4" id="bulkAssignCount">0 tasks selected</p>
+    <div class="flex justify-end gap-2">
+      <button type="button" class="btn-outline" onclick="this.closest('#bulkAssignModal').classList.add('hidden')">Cancel</button>
+      <button type="button" class="btn-primary" onclick="bulkAssign()">Assign</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// View switching
+function switchView(view) {
+  document.getElementById('view-table').style.display = view === 'table' ? 'flex' : 'none';
+  document.getElementById('view-kanban').style.display = view === 'kanban' ? 'block' : 'none';
+  document.getElementById('view-rfo').style.display = view === 'rfo' ? 'flex' : 'none';
+  document.querySelectorAll('#viewToggle .view-pill').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === view);
+  });
+}
+
+// Detail panel
+function openDetailPanel() {
+  document.getElementById('detailPanelWrap').classList.add('open');
+}
+function closeDetailPanel() {
+  document.getElementById('detailPanelWrap').classList.remove('open');
+}
+
+// Select all checkboxes
+function toggleSelectAll(el) {
+  document.querySelectorAll('.task-chk').forEach(chk => { chk.checked = el.checked; });
+  updateBulkUI();
+}
+
+// Update bulk assign button visibility
+document.addEventListener('change', function(e) {
+  if (e.target.classList.contains('task-chk')) updateBulkUI();
+});
+function updateBulkUI() {
+  const checked = document.querySelectorAll('.task-chk:checked');
+  const btn = document.getElementById('bulkAssignBtn');
+  btn.style.display = checked.length > 0 ? 'inline-flex' : 'none';
+  document.getElementById('bulkAssignCount').textContent = checked.length + ' tasks selected';
+}
+
+// Bulk assign
+function bulkAssign() {
+  const svId = document.getElementById('bulkSupervisorSelect').value;
+  if (!svId) { showToast('Error', 'Please select a supervisor', 'red'); return; }
+  const taskIds = Array.from(document.querySelectorAll('.task-chk:checked')).map(c => c.value);
+  fetch('/api/tasks/bulk-assign', {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || ''},
+    body: JSON.stringify({task_ids: taskIds.map(Number), assigned_supervisor_id: Number(svId)})
+  }).then(r => {
+    if (r.ok) { showToast('Assigned', taskIds.length + ' tasks assigned', 'green'); document.getElementById('bulkAssignModal').classList.add('hidden'); location.reload(); }
+    else { r.json().then(d => showToast('Error', d.detail || 'Assignment failed', 'red')); }
+  });
+}
+
+// Close panel on Escape
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeDetailPanel();
+});
+</script>
+{% endblock %}

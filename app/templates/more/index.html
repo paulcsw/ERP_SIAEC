@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}More - CIS ERP{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-center h-full text-surf-400">
+  <p>This page is available on mobile devices.</p>
+</div>
+{% endblock %}
+
+{% block mobile_content %}
+<div class="mob-page active" id="mob-more">
+  <div class="flex flex-col h-full">
+    <div id="more-stage">
+      {# More: Main List #}
+      <div class="flex flex-col h-full">
+        <div class="p-4 bg-white border-b border-surf-200 shrink-0">
+          <h1 class="text-lg font-bold text-navy-900">More</h1>
+        </div>
+        <div class="flex-1 overflow-y-auto">
+          <div class="divide-y divide-surf-100">
+            {# RFO Summary — SUP+ only #}
+            {% if 'SUPERVISOR' in current_user.roles or 'ADMIN' in current_user.roles %}
+            <a href="/more/rfo-summary" class="px-4 py-4 bg-white cursor-pointer active:bg-surf-50 flex items-center justify-between" style="text-decoration:none">
+              <div class="flex items-center gap-3">
+                <span class="text-xl">&#128202;</span>
+                <span class="text-base font-medium text-navy-900">RFO Summary</span>
+              </div>
+              <svg class="w-4 h-4 text-surf-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+              </svg>
+            </a>
+            {% endif %}
+            {# Help #}
+            <a href="/more/help" class="px-4 py-4 bg-white cursor-pointer active:bg-surf-50 flex items-center justify-between" style="text-decoration:none">
+              <div class="flex items-center gap-3">
+                <span class="text-xl">&#10067;</span>
+                <span class="text-base font-medium text-navy-900">Help</span>
+              </div>
+              <svg class="w-4 h-4 text-surf-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+              </svg>
+            </a>
+            {# Font Size #}
+            <a href="/more/font-size" class="px-4 py-4 bg-white cursor-pointer active:bg-surf-50 flex items-center justify-between" style="text-decoration:none">
+              <div class="flex items-center gap-3">
+                <span class="text-xl">&#128292;</span>
+                <span class="text-base font-medium text-navy-900">Font Size</span>
+              </div>
+              <svg class="w-4 h-4 text-surf-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+              </svg>
+            </a>
+            {# My Account #}
+            <a href="/more/account" class="px-4 py-4 bg-white cursor-pointer active:bg-surf-50 flex items-center justify-between" style="text-decoration:none">
+              <div class="flex items-center gap-3">
+                <span class="text-xl">&#128100;</span>
+                <span class="text-base font-medium text-navy-900">My Account</span>
+              </div>
+              <svg class="w-4 h-4 text-surf-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+              </svg>
+            </a>
+          </div>
+          {# Logout button #}
+          <div class="p-4">
+            <a href="/logout" class="btn-outline w-full h-12 text-base flex items-center justify-center" style="color:#b93a3a;border-color:#b93a3a;text-decoration:none">Log out</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}Task Detail - CIS ERP{% endblock %}
+{% block breadcrumb %}Tasks &rsaquo; Detail &rsaquo; #{{ task.id if task else '?' }}{% endblock %}
+
+{% block content %}
+<div class="p-4 lg:p-5 max-w-5xl mx-auto">
+
+  {% if not task %}
+  <div class="card p-8 text-center">
+    <svg class="w-12 h-12 mx-auto mb-3 text-surf-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M12 2a10 10 0 100 20 10 10 0 000-20z"/></svg>
+    <p class="text-sm text-surf-400">Task not found.</p>
+    <a href="/tasks" class="btn-outline btn-sm mt-3 inline-block">Back to Task Manager</a>
+  </div>
+  {% else %}
+
+  {# ── Task Header ── #}
+  <div class="card p-5 mb-4">
+    <div class="flex items-start justify-between gap-4">
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-3 mb-2">
+          {% if task.status == 'NOT_STARTED' %}
+          <span class="badge badge-not-started">Not Started</span>
+          {% elif task.status == 'IN_PROGRESS' %}
+          <span class="badge badge-in-progress">In Progress</span>
+          {% elif task.status == 'WAITING' %}
+          <span class="badge badge-waiting">Waiting</span>
+          {% elif task.status == 'COMPLETED' %}
+          <span class="badge badge-completed">Completed</span>
+          {% endif %}
+          {% if task.has_issue %}
+          <span class="inline-flex items-center gap-1 text-xs text-st-red font-medium">
+            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92z" clip-rule="evenodd"/></svg>
+            Active Issue
+          </span>
+          {% endif %}
+        </div>
+        <h1 class="text-lg font-semibold text-navy-900 mb-1">{{ task.task_text }}</h1>
+        <div class="flex items-center gap-4 text-sm text-surf-400">
+          <span>AC: <span class="font-medium text-navy-700">{{ task.ac_reg or '-' }}</span></span>
+          <span>RFO: <span class="font-medium text-navy-700">{{ task.rfo_no or '-' }}</span></span>
+          <span>Shop: <span class="font-medium text-navy-700">{{ task.shop_code or '-' }}</span></span>
+        </div>
+      </div>
+      <a href="/tasks" class="btn-outline btn-sm">
+        <svg class="w-4 h-4 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+        Back
+      </a>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-3 gap-4">
+
+    {# ── Left Column: Snapshot History ── #}
+    <div class="col-span-2 space-y-4">
+      <div class="card">
+        <div class="p-4 border-b border-surf-200">
+          <h3 class="text-sm font-semibold text-navy-900">Snapshot History</h3>
+          <p class="text-xs text-surf-400 mt-0.5">Weekly snapshots showing status, MH, and remarks changes</p>
+        </div>
+        <div class="p-4">
+          {% if snapshots %}
+          <div class="relative">
+            {# Timeline line #}
+            <div class="absolute left-4 top-0 bottom-0 w-px bg-surf-200"></div>
+
+            {% for snap in snapshots %}
+            <div class="relative pl-10 pb-6 {% if loop.last %}pb-0{% endif %}">
+              {# Timeline dot #}
+              <div class="absolute left-2.5 top-1 w-3 h-3 rounded-full border-2 border-white
+                {% if snap.status == 'COMPLETED' %}bg-st-green{% elif snap.status == 'IN_PROGRESS' %}bg-navy-600{% elif snap.status == 'WAITING' %}bg-gold-500{% else %}bg-surf-300{% endif %}
+                shadow-sm"></div>
+
+              <div class="card p-3">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-semibold text-navy-900">{{ snap.meeting_date }}</span>
+                    {% if snap.status == 'NOT_STARTED' %}
+                    <span class="badge badge-not-started text-[10px]">Not Started</span>
+                    {% elif snap.status == 'IN_PROGRESS' %}
+                    <span class="badge badge-in-progress text-[10px]">In Progress</span>
+                    {% elif snap.status == 'WAITING' %}
+                    <span class="badge badge-waiting text-[10px]">Waiting</span>
+                    {% elif snap.status == 'COMPLETED' %}
+                    <span class="badge badge-completed text-[10px]">Completed</span>
+                    {% endif %}
+                  </div>
+                  <span class="text-xs text-surf-400">v{{ snap.version }}</span>
+                </div>
+                <div class="grid grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <span class="text-surf-400">MH Incurred:</span>
+                    <span class="font-mono font-medium text-navy-700 ml-1">{{ snap.mh_incurred_hours }}</span>
+                  </div>
+                  <div>
+                    <span class="text-surf-400">Deadline:</span>
+                    <span class="ml-1">{{ snap.deadline_date or '-' }}</span>
+                  </div>
+                  <div>
+                    <span class="text-surf-400">Issue:</span>
+                    <span class="ml-1">{{ 'Yes' if snap.has_issue else 'No' }}</span>
+                  </div>
+                </div>
+                {% if snap.remarks %}
+                <div class="mt-2 text-xs text-surf-400">
+                  <span class="font-medium">Remarks:</span> {{ snap.remarks }}
+                </div>
+                {% endif %}
+                {% if snap.critical_issue %}
+                <div class="mt-1 text-xs text-st-red">
+                  <span class="font-medium">Critical:</span> {{ snap.critical_issue }}
+                </div>
+                {% endif %}
+                {% if snap.correction_reason %}
+                <div class="mt-1 text-xs text-gold-500">
+                  <span class="font-medium">Correction:</span> {{ snap.correction_reason }}
+                </div>
+                {% endif %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="text-sm text-surf-400 text-center py-6">No snapshots recorded yet.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {# ── Right Column: Distribution + Audit ── #}
+    <div class="space-y-4">
+      {# Distribution info #}
+      <div class="card p-4">
+        <h3 class="text-sm font-semibold text-navy-900 mb-3">Distribution</h3>
+        <div class="space-y-3 text-sm">
+          <div class="flex items-center justify-between">
+            <span class="text-surf-400">Supervisor</span>
+            <span class="font-medium text-navy-700">{{ task.supervisor_name or '-' }}</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-surf-400">Worker</span>
+            <span class="font-medium text-navy-700">{{ task.worker_name or '-' }}</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-surf-400">Distributed</span>
+            <span class="font-medium text-navy-700">{{ task.distributed_at or 'Not yet' }}</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-surf-400">Planned MH</span>
+            <span class="font-mono font-medium text-navy-700">{{ task.planned_mh or '-' }}</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-surf-400">Created</span>
+            <span class="text-navy-700">{{ task.created_at }}</span>
+          </div>
+        </div>
+      </div>
+
+      {# Audit Trail #}
+      <div class="card">
+        <div class="p-4 border-b border-surf-200">
+          <h3 class="text-sm font-semibold text-navy-900">Audit Trail</h3>
+          <p class="text-xs text-surf-400">Recent 10 entries</p>
+        </div>
+        <div class="p-3 max-h-[400px] overflow-y-auto">
+          {% if audit_logs %}
+          <div class="space-y-2">
+            {% for log in audit_logs %}
+            <div class="p-2 rounded-lg bg-surf-50 text-xs">
+              <div class="flex items-center justify-between mb-0.5">
+                <span class="font-medium text-navy-700">{{ log.action }}</span>
+                <span class="text-surf-400">{{ log.created_at }}</span>
+              </div>
+              {% if log.actor_name %}
+              <span class="text-surf-400">by {{ log.actor_name }}</span>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="text-xs text-surf-400 text-center py-4">No audit entries.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

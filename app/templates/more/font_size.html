@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Font Size - CIS ERP{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-center h-full text-surf-400">
+  <p>This page is available on mobile devices.</p>
+</div>
+{% endblock %}
+
+{% block mobile_content %}
+<div class="mob-page active">
+  <div class="flex flex-col h-full">
+    <div class="p-4 bg-white border-b border-surf-200 shrink-0">
+      <a href="/more" class="flex items-center gap-1 text-sm text-navy-600 mb-2" style="text-decoration:none">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+        </svg> More
+      </a>
+      <h2 class="text-lg font-bold text-navy-900">Font Size</h2>
+    </div>
+    <div class="flex-1 overflow-y-auto p-4 space-y-3">
+      <label class="card p-4 flex items-center gap-3 cursor-pointer" onclick="setMobFontSize('default')">
+        <input type="radio" name="fontsize" value="default" class="w-5 h-5"/>
+        <div>
+          <div class="text-base font-medium">Default</div>
+          <div class="text-sm text-surf-400" style="font-size:16px">Sample text at 16px</div>
+        </div>
+      </label>
+      <label class="card p-4 flex items-center gap-3 cursor-pointer" onclick="setMobFontSize('large')">
+        <input type="radio" name="fontsize" value="large" class="w-5 h-5"/>
+        <div>
+          <div class="text-base font-medium">Large</div>
+          <div class="text-surf-400" style="font-size:18px">Sample text at 18px</div>
+        </div>
+      </label>
+      <label class="card p-4 flex items-center gap-3 cursor-pointer" onclick="setMobFontSize('xlarge')">
+        <input type="radio" name="fontsize" value="xlarge" class="w-5 h-5"/>
+        <div>
+          <div class="text-base font-medium">Extra Large</div>
+          <div class="text-surf-400" style="font-size:20px">Sample text at 20px</div>
+        </div>
+      </label>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  var current = localStorage.getItem('mob_font_size') || 'default';
+  var radios = document.querySelectorAll('input[name="fontsize"]');
+  radios.forEach(function(r){ if(r.value === current) r.checked = true; });
+})();
+</script>
+{% endblock %}

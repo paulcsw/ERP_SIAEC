@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Help - CIS ERP{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-center h-full text-surf-400">
+  <p>This page is available on mobile devices.</p>
+</div>
+{% endblock %}
+
+{% block mobile_content %}
+<div class="mob-page active">
+  <div class="flex flex-col h-full">
+    <div class="p-4 bg-white border-b border-surf-200 shrink-0">
+      <a href="/more" class="flex items-center gap-1 text-sm text-navy-600 mb-2" style="text-decoration:none">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+        </svg> More
+      </a>
+      <h2 class="text-lg font-bold text-navy-900">Help</h2>
+    </div>
+    <div class="flex-1 overflow-y-auto p-4 space-y-3">
+      {# 1. How to update tasks #}
+      <details class="card overflow-hidden">
+        <summary class="p-4 cursor-pointer font-medium text-navy-900 text-sm flex items-center justify-between">
+          How to Update Tasks
+          <svg class="w-4 h-4 text-surf-400 shrink-0 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </summary>
+        <div class="px-4 pb-4 text-sm text-surf-500 space-y-2">
+          <p>1. Go to <strong>Tasks</strong> tab and select an aircraft.</p>
+          <p>2. Tap on a task card to open <strong>Quick Update</strong>.</p>
+          <p>3. Update the status using the 4-button grid.</p>
+          <p>4. Adjust Man-Hours using the +/- stepper (cumulative).</p>
+          <p>5. Tap <strong>Save</strong> to update, or <strong>Save &amp; Next</strong> to move to the next task.</p>
+        </div>
+      </details>
+      {# 2. How to submit OT #}
+      <details class="card overflow-hidden">
+        <summary class="p-4 cursor-pointer font-medium text-navy-900 text-sm flex items-center justify-between">
+          How to Submit OT
+          <svg class="w-4 h-4 text-surf-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </summary>
+        <div class="px-4 pb-4 text-sm text-surf-500 space-y-2">
+          <p>1. Go to <strong>OT</strong> tab &rarr; <strong>Submit</strong> segment.</p>
+          <p>2. Fill in date, start/end time, reason, and optional details.</p>
+          <p>3. Check your monthly OT usage at the top (max 72h/month).</p>
+          <p>4. Tap <strong>Submit</strong>. Your supervisor will be notified for endorsement.</p>
+          <p>5. After endorsement, an admin will give final approval.</p>
+        </div>
+      </details>
+      {# 3. Save failure troubleshooting #}
+      <details class="card overflow-hidden">
+        <summary class="p-4 cursor-pointer font-medium text-navy-900 text-sm flex items-center justify-between">
+          When Save Fails
+          <svg class="w-4 h-4 text-surf-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </summary>
+        <div class="px-4 pb-4 text-sm text-surf-500 space-y-2">
+          <p><strong>Version Conflict:</strong> Another user modified the same task. Refresh and try again.</p>
+          <p><strong>MH Decrease Forbidden:</strong> MH is cumulative and cannot be lowered. Contact your admin if a correction is needed.</p>
+          <p><strong>Network Error:</strong> Check your internet connection and try again. Your input is preserved.</p>
+          <p><strong>Permission Denied:</strong> You may not have edit access to this shop. Contact your admin.</p>
+        </div>
+      </details>
+      {# 4. Contact information #}
+      <details class="card overflow-hidden">
+        <summary class="p-4 cursor-pointer font-medium text-navy-900 text-sm flex items-center justify-between">
+          Contact &amp; Support
+          <svg class="w-4 h-4 text-surf-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </summary>
+        <div class="px-4 pb-4 text-sm text-surf-500 space-y-2">
+          <p><strong>System Admin:</strong> admin@siaec.com.sg</p>
+          <p><strong>IT Support:</strong> it-helpdesk@siaec.com.sg</p>
+          <p><strong>MRO Operations:</strong> mro-ops@siaec.com.sg</p>
+        </div>
+      </details>
+    </div>
+  </div>
+</div>
+{% endblock %}

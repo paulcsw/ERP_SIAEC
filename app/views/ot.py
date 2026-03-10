@@ -124,6 +124,8 @@ async def _enrich_ot_list(db: AsyncSession, rows: list) -> list[dict]:
 
 def _ctx(request, user, **kw):
     """Build base template context."""
+    # Map active_page → page for sidebar highlighting
+    page = kw.get("active_page", "")
     return {
         "request": request,
         "current_user": {
@@ -134,6 +136,7 @@ def _ctx(request, user, **kw):
             "employee_no": user.get("employee_no", ""),
         },
         "active_tab": "ot",
+        "page": page,
         **kw,
     }
 

@@ -1,0 +1,346 @@
+{% extends "base.html" %}
+
+{% block title %}Data Entry - CIS ERP{% endblock %}
+{% block breadcrumb %}Tasks &rsaquo; Data Entry{% endblock %}
+
+{% block head %}
+<style>
+.ac-card{background:#fff;border:1px solid #dee4ed;border-radius:8px;padding:10px 12px;cursor:pointer;transition:all .15s}
+.ac-card:hover{border-color:#aebdd2;background:#f5f7fa}
+.ac-card.selected{border-color:#2e5a8a;background:#eef2f7;box-shadow:0 0 0 2px rgba(46,90,138,.15)}
+.task-card{background:#fff;border:1px solid #dee4ed;border-radius:10px;padding:14px;cursor:pointer;transition:all .15s}
+.task-card:hover{border-color:#aebdd2}
+.task-card.editing{border-color:#2e5a8a;box-shadow:0 0 0 2px rgba(46,90,138,.15)}
+.badge-new{background:#c8850a;color:#fff;font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;letter-spacing:.3px}
+.badge-needs-update{background:#fdf5e0;color:#a07d12;font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;letter-spacing:.3px}
+.badge-uptodate{color:#2d7a4f;font-size:11px;font-weight:500}
+.status-btn{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:500;border:1px solid #dee4ed;background:#fff;cursor:pointer;transition:all .15s}
+.status-btn:hover{background:#f5f7fa}
+.status-btn.active-not-started{background:#eef1f6;color:#7c8694;border-color:#c8d1de}
+.status-btn.active-in-progress{background:#eef2f7;color:#2e5a8a;border-color:#2e5a8a}
+.status-btn.active-waiting{background:#fdf5e0;color:#a07d12;border-color:#d4a017}
+.status-btn.active-completed{background:#ecf7f0;color:#2d7a4f;border-color:#2d7a4f}
+.quick-update-card{background:#fff;border:1px solid #dee4ed;border-left:4px solid #c8850a;border-radius:10px}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="flex h-full min-h-0">
+
+  {# ── Left Panel: Aircraft List ── #}
+  <div class="w-[280px] shrink-0 border-r border-surf-200 bg-white flex flex-col h-full">
+    <div class="p-4 border-b border-surf-200">
+      <h2 class="text-base font-semibold text-navy-900">My Assigned Tasks</h2>
+      <p class="text-xs text-surf-400 mt-0.5">{{ shop_context or 'All Shops' }}</p>
+    </div>
+
+    {# Status filter chips #}
+    <div class="px-4 py-3 flex flex-wrap gap-1.5 border-b border-surf-100">
+      <button class="entry-chip {% if not status_filter %}active{% endif %}"
+              hx-get="/tasks/entry" hx-target="body" hx-push-url="true">All</button>
+      <button class="entry-chip {% if status_filter == 'NOT_STARTED' %}active{% endif %}"
+              hx-get="/tasks/entry?status=NOT_STARTED" hx-target="body" hx-push-url="true">Not Started</button>
+      <button class="entry-chip {% if status_filter == 'IN_PROGRESS' %}active{% endif %}"
+              hx-get="/tasks/entry?status=IN_PROGRESS" hx-target="body" hx-push-url="true">In Progress</button>
+      <button class="entry-chip {% if status_filter == 'WAITING' %}active{% endif %}"
+              hx-get="/tasks/entry?status=WAITING" hx-target="body" hx-push-url="true">Waiting</button>
+      <button class="entry-chip {% if status_filter == 'COMPLETED' %}active{% endif %}"
+              hx-get="/tasks/entry?status=COMPLETED" hx-target="body" hx-push-url="true">Completed</button>
+    </div>
+
+    {# Quick filter chips #}
+    <div class="px-4 py-2 flex gap-1.5 border-b border-surf-100">
+      <button class="entry-chip {% if quick_filter == 'issue' %}active{% endif %}"
+              hx-get="/tasks/entry?quick=issue" hx-target="body" hx-push-url="true">
+        <svg class="w-3 h-3 inline -mt-0.5 mr-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92z" clip-rule="evenodd"/></svg>
+        Issue
+      </button>
+      <button class="entry-chip {% if quick_filter == 'new' %}active{% endif %}"
+              hx-get="/tasks/entry?quick=new" hx-target="body" hx-push-url="true">
+        <svg class="w-3 h-3 inline -mt-0.5 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        New
+      </button>
+    </div>
+
+    {# Aircraft cards #}
+    <div class="flex-1 overflow-y-auto p-3 space-y-2" id="acList">
+      {% if ac_groups %}
+      {% for ac in ac_groups %}
+      <div class="ac-card {% if selected_ac == ac.ac_reg %}selected{% endif %}"
+           hx-get="/tasks/entry?ac={{ ac.ac_reg }}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+           hx-target="body" hx-push-url="true">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-sm font-semibold text-navy-900">{{ ac.ac_reg }}</div>
+            <div class="text-xs text-surf-400">{{ ac.task_count }} task{{ 's' if ac.task_count != 1 else '' }}</div>
+          </div>
+          <div class="flex items-center gap-1.5">
+            {% if ac.has_new %}
+            <span class="badge-new">NEW</span>
+            {% endif %}
+            {% if ac.needs_update %}
+            <span class="badge-needs-update">NEEDS UPDATE</span>
+            {% endif %}
+            {% if not ac.has_new and not ac.needs_update and ac.task_count > 0 %}
+            <span class="badge-uptodate">&#10003;</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="text-center py-8 text-surf-400 text-sm">
+        <p>No aircraft assigned.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Right Panel: Task List + Edit ── #}
+  <div class="flex-1 flex flex-col min-h-0 min-w-0">
+
+    {# Aircraft context header #}
+    {% if selected_ac %}
+    <div class="px-5 py-3 border-b border-surf-200 bg-white flex items-center justify-between">
+      <div>
+        <h3 class="text-lg font-semibold text-navy-900">{{ selected_ac }}</h3>
+        <p class="text-xs text-surf-400">{{ selected_rfo or 'All RFOs' }} &middot; {{ tasks | length if tasks else 0 }} tasks</p>
+      </div>
+      <button class="btn-primary btn-sm" onclick="document.getElementById('addTaskModal').classList.remove('hidden')">
+        <svg class="w-4 h-4 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        Add Task
+      </button>
+    </div>
+    {% endif %}
+
+    {# Task cards + edit area #}
+    <div class="flex-1 overflow-y-auto p-5">
+      {% if tasks %}
+      <div class="space-y-3" id="taskCardList">
+        {% for task in tasks %}
+        <div class="task-card {% if editing_task_id == task.task_id %}editing{% endif %}"
+             id="task-card-{{ task.task_id }}"
+             hx-get="/tasks/entry?ac={{ selected_ac }}&edit={{ task.task_id }}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+             hx-target="body" hx-push-url="true">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-1">
+                {% if task.status == 'NOT_STARTED' %}
+                <span class="badge badge-not-started text-[11px]">Not Started</span>
+                {% elif task.status == 'IN_PROGRESS' %}
+                <span class="badge badge-in-progress text-[11px]">In Progress</span>
+                {% elif task.status == 'WAITING' %}
+                <span class="badge badge-waiting text-[11px]">Waiting</span>
+                {% elif task.status == 'COMPLETED' %}
+                <span class="badge badge-completed text-[11px]">Completed</span>
+                {% endif %}
+                {% if task.is_new %}
+                <span class="badge-new">NEW</span>
+                {% endif %}
+                {% if task.needs_update %}
+                <span class="badge-needs-update">NEEDS UPDATE</span>
+                {% endif %}
+              </div>
+              <p class="text-sm font-medium text-navy-900 truncate">{{ task.task_text }}</p>
+              <div class="flex items-center gap-3 mt-1.5 text-xs text-surf-400">
+                <span>MH: <span class="font-mono font-medium text-navy-700">{{ task.mh_incurred_hours }}</span></span>
+                {% if task.deadline_date %}
+                <span>Due: {{ task.deadline_date }}</span>
+                {% endif %}
+                {% if task.assigned_worker %}
+                <span>{{ task.assigned_worker }}</span>
+                {% endif %}
+              </div>
+            </div>
+            {% if task.has_issue %}
+            <svg class="w-5 h-5 text-st-red shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      {# ── Edit Panel (shown when task selected) ── #}
+      {% if editing_task %}
+      <div class="max-w-4xl mx-auto mt-6" id="editPanel">
+        <div class="quick-update-card p-5 mb-4">
+          <h4 class="text-sm font-semibold text-navy-900 mb-3">Quick Update</h4>
+          <form hx-patch="/api/tasks/{{ editing_task.task_id }}/snapshots/{{ editing_task.snapshot_id }}"
+                hx-target="body" hx-push-url="false"
+                hx-headers='js:{"X-CSRFToken": document.cookie.match(/csrftoken=([^;]+)/)?.[1] || ""}'
+                hx-on::after-request="if(event.detail.successful){showToast('Saved','Task updated successfully','green')}">
+            <input type="hidden" name="version" value="{{ editing_task.version }}">
+
+            <div class="grid grid-cols-2 gap-4 mb-4">
+              {# Left: Status + MH + Issue #}
+              <div class="space-y-3">
+                <div>
+                  <label class="text-xs font-medium text-surf-400 block mb-1.5">Status</label>
+                  <div class="flex flex-wrap gap-2" id="statusButtons">
+                    <button type="button" class="status-btn {% if editing_task.status == 'NOT_STARTED' %}active-not-started{% endif %}" data-status="NOT_STARTED" onclick="setStatus(this,'NOT_STARTED')">Not Started</button>
+                    <button type="button" class="status-btn {% if editing_task.status == 'IN_PROGRESS' %}active-in-progress{% endif %}" data-status="IN_PROGRESS" onclick="setStatus(this,'IN_PROGRESS')">In Progress</button>
+                    <button type="button" class="status-btn {% if editing_task.status == 'WAITING' %}active-waiting{% endif %}" data-status="WAITING" onclick="setStatus(this,'WAITING')">Waiting</button>
+                    <button type="button" class="status-btn {% if editing_task.status == 'COMPLETED' %}active-completed{% endif %}" data-status="COMPLETED" onclick="setStatus(this,'COMPLETED')">Completed</button>
+                  </div>
+                  <input type="hidden" name="status" id="statusInput" value="{{ editing_task.status }}">
+                </div>
+                <div>
+                  <label class="text-xs font-medium text-surf-400 block mb-1">MH Incurred (cumulative)</label>
+                  <input type="number" name="mh_incurred_hours" class="inp w-full text-sm" step="0.5" min="0"
+                         value="{{ editing_task.mh_incurred_hours }}">
+                </div>
+                <div class="flex items-center gap-2">
+                  <input type="checkbox" name="has_issue" class="chk" id="hasIssueChk" {% if editing_task.has_issue %}checked{% endif %} value="true">
+                  <label for="hasIssueChk" class="text-sm text-navy-700">Has Active Issue</label>
+                </div>
+              </div>
+
+              {# Right: Worker Assignment #}
+              <div>
+                <label class="text-xs font-medium text-surf-400 block mb-1.5">Worker Assignment</label>
+                <select name="assigned_worker_id" class="inp w-full text-sm">
+                  <option value="">Unassigned</option>
+                  {% for w in workers %}
+                  <option value="{{ w.id }}" {% if editing_task.assigned_worker_id == w.id %}selected{% endif %}>{{ w.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4 mb-4">
+              <div>
+                <label class="text-xs font-medium text-surf-400 block mb-1">Deadline</label>
+                <input type="date" name="deadline_date" class="inp w-full text-sm"
+                       value="{{ editing_task.deadline_date or '' }}">
+              </div>
+              <div>
+                <label class="text-xs font-medium text-surf-400 block mb-1">Remarks</label>
+                <textarea name="remarks" class="inp w-full text-sm" rows="2" placeholder="Add remarks...">{{ editing_task.remarks or '' }}</textarea>
+              </div>
+              <div>
+                <label class="text-xs font-medium text-surf-400 block mb-1">Critical Issue</label>
+                <textarea name="critical_issue" class="inp w-full text-sm" rows="2" placeholder="Describe critical issue...">{{ editing_task.critical_issue or '' }}</textarea>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] text-surf-400">Version {{ editing_task.version }}</span>
+              <button type="submit" class="btn-gold">
+                Save &amp; Next
+                <svg class="w-4 h-4 inline ml-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+      {% endif %}
+
+      {% elif selected_ac %}
+      <div class="text-center py-16 text-surf-400">
+        <svg class="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+        <p class="text-sm">No tasks found for {{ selected_ac }}.</p>
+        <button class="btn-primary btn-sm mt-3" onclick="document.getElementById('addTaskModal').classList.remove('hidden')">Add First Task</button>
+      </div>
+      {% else %}
+      <div class="text-center py-16 text-surf-400">
+        <svg class="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/></svg>
+        <p class="text-sm">Select an aircraft from the left panel to view tasks.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{# ── Add Task Modal ── #}
+<div id="addTaskModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/30" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="card p-6 w-full max-w-lg mx-4 shadow-xl" onclick="event.stopPropagation()">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-lg font-semibold text-navy-900">Add Task</h3>
+      <button onclick="this.closest('#addTaskModal').classList.add('hidden')" class="p-1 rounded hover:bg-surf-50">
+        <svg class="w-5 h-5 text-surf-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <form hx-post="/api/tasks" hx-target="body"
+          hx-on::after-request="if(event.detail.successful){this.closest('#addTaskModal').classList.add('hidden');showToast('Created','Task added','green')}">
+      {% if selected_ac_id %}
+      <input type="hidden" name="aircraft_id" value="{{ selected_ac_id }}">
+      {% endif %}
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs font-medium text-surf-400 block mb-1">Description</label>
+          <textarea name="task_text" class="inp w-full text-sm" rows="3" required placeholder="Task description..."></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-medium text-surf-400 block mb-1">Status</label>
+            <select name="status" class="inp w-full text-sm">
+              <option value="NOT_STARTED">Not Started</option>
+              <option value="IN_PROGRESS">In Progress</option>
+              <option value="WAITING">Waiting</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs font-medium text-surf-400 block mb-1">Deadline</label>
+            <input type="date" name="deadline_date" class="inp w-full text-sm">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-medium text-surf-400 block mb-1">Estimated MH</label>
+            <input type="number" name="planned_mh" class="inp w-full text-sm" step="0.5" min="0" placeholder="0.0">
+          </div>
+          <div>
+            <label class="text-xs font-medium text-surf-400 block mb-1">Assign Worker</label>
+            <select name="assigned_worker_id" class="inp w-full text-sm">
+              <option value="">Unassigned</option>
+              {% for w in workers %}
+              <option value="{{ w.id }}">{{ w.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-surf-400 block mb-1">Remarks</label>
+          <textarea name="remarks" class="inp w-full text-sm" rows="2" placeholder="Optional remarks..."></textarea>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 pt-4">
+        <button type="button" class="btn-outline" onclick="this.closest('#addTaskModal').classList.add('hidden')">Cancel</button>
+        <button type="submit" class="btn-primary">Add Task</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block mobile_content %}
+{# ===== MOBILE DATA ENTRY ===== #}
+<div class="mob-page active" id="mob-tasks">
+  <div class="flex flex-col h-full relative overflow-hidden" id="mob-entry-wrap">
+    <div id="mob-entry-stage">
+      {# M1: Aircraft List — initial mobile view #}
+      {% include "tasks/partials/_m1_aircraft.html" %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Status button toggling (desktop)
+function setStatus(btn, status) {
+  document.getElementById('statusInput').value = status;
+  document.querySelectorAll('#statusButtons .status-btn').forEach(b => {
+    b.className = 'status-btn';
+  });
+  const cls = {
+    'NOT_STARTED': 'active-not-started',
+    'IN_PROGRESS': 'active-in-progress',
+    'WAITING': 'active-waiting',
+    'COMPLETED': 'active-completed'
+  };
+  btn.classList.add(cls[status] || '');
+}
+</script>
+{% endblock %}

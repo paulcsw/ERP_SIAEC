@@ -1,0 +1,103 @@
+{# M2: Task List — mobile #}
+<div id="mob-m2" class="flex flex-col h-full bg-surf-50">
+  <div class="p-4 bg-white border-b border-surf-200 shrink-0">
+    <button hx-get="/tasks/entry/mobile/m1{% if status_filter %}?status={{ status_filter }}{% endif %}"
+            hx-target="#mob-entry-stage"
+            class="flex items-center gap-1 text-sm text-navy-600 mb-2">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+      </svg> Aircraft
+    </button>
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="text-lg font-bold text-navy-900">{{ ac_reg }}</h2>
+        {% if ac_info %}<div class="text-sm text-surf-400">{{ ac_info }}</div>{% endif %}
+        {% if rfo_no %}<div class="text-sm font-mono text-navy-600 mt-0.5">{{ rfo_no }}</div>{% endif %}
+        <div class="text-sm text-surf-400 mt-0.5">{{ tasks_summary }}</div>
+      </div>
+      <button class="btn-gold btn-sm text-sm" onclick="document.getElementById('mob-m4-modal').style.display='flex'">+ Add Task</button>
+    </div>
+  </div>
+  {# Filters #}
+  <div class="px-4 py-2 bg-white border-b border-surf-100 shrink-0 space-y-1.5">
+    <div class="flex flex-wrap gap-1.5">
+      <button class="entry-chip {% if not status_filter %}active{% endif %}"
+              hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}" hx-target="#mob-entry-stage">All</button>
+      <button class="entry-chip {% if status_filter == 'NOT_STARTED' %}active{% endif %}"
+              hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}&amp;status=NOT_STARTED" hx-target="#mob-entry-stage">Not Started</button>
+      <button class="entry-chip {% if status_filter == 'IN_PROGRESS' %}active{% endif %}"
+              hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}&amp;status=IN_PROGRESS" hx-target="#mob-entry-stage">In Progress</button>
+      <button class="entry-chip {% if status_filter == 'WAITING' %}active{% endif %}"
+              hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}&amp;status=WAITING" hx-target="#mob-entry-stage">Waiting</button>
+      <button class="entry-chip {% if status_filter == 'COMPLETED' %}active{% endif %}"
+              hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}&amp;status=COMPLETED" hx-target="#mob-entry-stage">Completed</button>
+    </div>
+    <div class="flex gap-1.5">
+      <button class="entry-qchip" onclick="this.classList.toggle('on')">⚠ Issue</button>
+      <button class="entry-qchip" onclick="this.classList.toggle('on')">🔔 New</button>
+    </div>
+  </div>
+  {# Task cards #}
+  <div class="flex-1 overflow-y-auto">
+    <div class="divide-y divide-surf-100">
+      {% for task in tasks %}
+      <div class="px-4 py-3 bg-white cursor-pointer active:bg-surf-50"
+           hx-get="/tasks/entry/mobile/m3?snapshot_id={{ task.snapshot_id }}&amp;ac={{ ac_reg }}"
+           hx-target="#mob-entry-stage"
+           hx-push-url="/tasks/entry?ac={{ ac_reg }}&amp;edit={{ task.task_id }}">
+        <div class="flex items-center justify-between">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-0.5">
+              <span class="text-base font-medium text-navy-900 truncate">{{ task.task_text }}</span>
+            </div>
+            {% if task.is_new %}
+            <span class="badge-new text-xs px-2 py-0.5 rounded-full" style="background:#fdf0f0;color:#b93a3a">NEW</span>
+            {% endif %}
+            {% if task.needs_update %}
+            <span class="badge-needs-update">NEEDS UPDATE</span>
+            {% endif %}
+          </div>
+          <svg class="w-4 h-4 text-surf-300 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </div>
+        <div class="flex items-center gap-3 mt-1 text-sm">
+          {% if task.status == 'NOT_STARTED' %}
+          <span style="color:#7c8694">&#9679; Not Started</span>
+          {% elif task.status == 'IN_PROGRESS' %}
+          <span style="color:#a07d12">&#9679; In Progress</span>
+          {% elif task.status == 'WAITING' %}
+          <span style="color:#a07d12">&#9679; Waiting</span>
+          {% elif task.status == 'COMPLETED' %}
+          <span style="color:#2d7a4f">&#9679; Completed</span>
+          {% endif %}
+          <span class="text-surf-400">{{ task.mh_incurred_hours }} MH</span>
+          {% if task.deadline_date %}
+          <span class="text-surf-400">Due {{ task.deadline_date }}</span>
+          {% endif %}
+        </div>
+        {% if task.assigned_worker %}
+        <div class="flex items-center justify-between mt-1">
+          <span class="text-sm text-navy-600">&rarr; {{ task.assigned_worker }}</span>
+          {% if task.last_updated_display %}
+          <span class="text-xs text-surf-400">{{ task.last_updated_display }}</span>
+          {% endif %}
+        </div>
+        {% endif %}
+        {% if task.remarks %}
+        <div class="text-xs text-surf-400 mt-1 truncate">&#128172; {{ task.remarks }}</div>
+        {% endif %}
+        {% if task.critical_issue %}
+        <div class="text-xs mt-0.5" style="color:#b93a3a">⚠ {{ task.critical_issue }}</div>
+        {% endif %}
+      </div>
+      {% else %}
+      <div class="text-center py-12 text-surf-400">
+        <p class="text-sm">No tasks for {{ ac_reg }}.</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {# M4 Add Task modal placeholder #}
+  {% include "tasks/partials/_m4_add_task.html" %}
+</div>

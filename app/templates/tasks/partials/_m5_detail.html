@@ -1,0 +1,132 @@
+{# M5: Task Detail — read-only mobile #}
+<div id="mob-m5" class="flex flex-col h-full bg-white">
+  <div class="p-4 bg-white border-b border-surf-200 shrink-0">
+    <button hx-get="/tasks/entry/mobile/m3?snapshot_id={{ task.snapshot_id }}&amp;ac={{ ac_reg }}"
+            hx-target="#mob-entry-stage"
+            class="flex items-center gap-1 text-sm text-navy-600">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+      </svg> Back to Quick Update
+    </button>
+  </div>
+  <div class="flex-1 overflow-y-auto p-4 space-y-4">
+    {# Title + status #}
+    <div>
+      <h2 class="text-lg font-bold text-navy-900">{{ task.task_text }}</h2>
+      <div class="flex items-center gap-2 mt-1">
+        <span class="text-sm font-medium"
+          {% if task.status == 'IN_PROGRESS' %}style="color:#a07d12"
+          {% elif task.status == 'COMPLETED' %}style="color:#2d7a4f"
+          {% elif task.status == 'WAITING' %}style="color:#a07d12"
+          {% else %}style="color:#7c8694"{% endif %}>&#9679; {{ task.status | replace('_', ' ') | title }}</span>
+        <span class="text-sm text-surf-400">&middot; {{ task.mh_incurred_hours }} MH</span>
+      </div>
+    </div>
+    {# Context card #}
+    <div class="card p-4 space-y-2 text-sm">
+      <div class="flex justify-between">
+        <span class="text-surf-400">Aircraft</span>
+        <span class="font-medium font-mono">{{ task.ac_reg or 'N/A' }}</span>
+      </div>
+      {% if task.rfo_no %}
+      <div class="flex justify-between">
+        <span class="text-surf-400">RFO</span>
+        <span class="font-medium font-mono">{{ task.rfo_no }}</span>
+      </div>
+      {% endif %}
+      <div class="flex justify-between">
+        <span class="text-surf-400">Shop</span>
+        <span class="font-medium">{{ task.shop_code or 'N/A' }}</span>
+      </div>
+      {% if task.deadline_date %}
+      <div class="flex justify-between">
+        <span class="text-surf-400">Deadline</span>
+        <span class="font-medium">{{ task.deadline_date }}</span>
+      </div>
+      {% endif %}
+    </div>
+    {# Remarks (full, no truncate) #}
+    {% if task.remarks %}
+    <div class="card p-4">
+      <div class="text-sm font-semibold text-navy-900 mb-2">Remarks</div>
+      <div class="text-sm text-surf-500">{{ task.remarks }}</div>
+    </div>
+    {% endif %}
+    {# Critical Issue #}
+    {% if task.critical_issue %}
+    <div class="card p-4" style="border-left:3px solid #b93a3a">
+      <div class="text-sm font-semibold mb-2" style="color:#b93a3a">⚠ Critical Issue</div>
+      <div class="text-sm text-surf-500">{{ task.critical_issue }}</div>
+    </div>
+    {% endif %}
+    {# Assignment info #}
+    <div class="card p-4 space-y-2 text-sm">
+      <div class="text-sm font-semibold text-navy-900 mb-1">Assignment</div>
+      {% if task.supervisor_name %}
+      <div class="flex justify-between">
+        <span class="text-surf-400">Supervisor</span>
+        <span class="font-medium">{{ task.supervisor_name }}</span>
+      </div>
+      {% endif %}
+      {% if task.worker_name %}
+      <div class="flex justify-between">
+        <span class="text-surf-400">Worker</span>
+        <span class="font-medium">{{ task.worker_name }}</span>
+      </div>
+      {% endif %}
+      {% if task.distributed_at %}
+      <div class="flex justify-between">
+        <span class="text-surf-400">Distributed</span>
+        <span class="font-medium">{{ task.distributed_at }}</span>
+      </div>
+      {% endif %}
+      {% if task.last_updated_at %}
+      <div class="flex justify-between">
+        <span class="text-surf-400">Last updated</span>
+        <span class="font-medium">{{ task.last_updated_at }}</span>
+      </div>
+      {% endif %}
+    </div>
+    {# Snapshot History Timeline #}
+    {% if snapshots %}
+    <div>
+      <div class="text-sm font-semibold text-navy-900 mb-3">Snapshot History</div>
+      <div class="space-y-3">
+        {% for snap in snapshots %}
+        <div class="flex gap-3">
+          <div class="flex flex-col items-center">
+            <div class="w-2.5 h-2.5 rounded-full"
+              {% if snap.status == 'COMPLETED' %}style="background:#2d7a4f"
+              {% elif snap.status == 'IN_PROGRESS' %}style="background:#a07d12"
+              {% elif snap.status == 'WAITING' %}style="background:#a07d12"
+              {% else %}style="background:#94a3b8"{% endif %}></div>
+            {% if not loop.last %}<div class="w-0.5 flex-1 bg-surf-200"></div>{% endif %}
+          </div>
+          <div class="pb-3">
+            <div class="text-sm font-medium">{{ snap.meeting_date }}{% if loop.first %} (current){% endif %}</div>
+            <div class="text-xs text-surf-400 mt-0.5">{{ snap.status | replace('_', ' ') | title }} &middot; {{ snap.mh_incurred_hours }} MH</div>
+            {% if snap.remarks %}
+            <div class="text-xs text-surf-400">"{{ snap.remarks | truncate(80) }}"</div>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    {# Audit Trail #}
+    {% if audit_logs %}
+    <div>
+      <div class="text-sm font-semibold text-navy-900 mb-3">Audit Trail</div>
+      <div class="space-y-2">
+        {% for log in audit_logs %}
+        <div class="card p-3">
+          <div class="text-xs text-surf-400">{{ log.created_at }} &middot; {{ log.actor_name or 'System' }}</div>
+          <div class="text-sm mt-0.5">{{ log.action }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>

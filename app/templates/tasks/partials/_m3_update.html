@@ -1,0 +1,171 @@
+{# M3: Quick Update — mobile #}
+<div id="mob-m3" class="flex flex-col h-full bg-surf-50">
+  {# Header #}
+  <div class="p-4 bg-white border-b border-surf-200 shrink-0">
+    <div class="flex items-center justify-between">
+      <button hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}"
+              hx-target="#mob-entry-stage"
+              class="flex items-center gap-1 text-sm text-navy-600">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+        </svg> Tasks
+      </button>
+      <div class="relative">
+        <button class="text-surf-400 text-lg px-2" onclick="var m=this.nextElementSibling;m.style.display=m.style.display==='none'?'':'none'">&#8943;</button>
+        <div style="display:none;position:absolute;right:0;top:100%;margin-top:4px;z-index:20;min-width:180px" class="card shadow-xl overflow-hidden">
+          <button class="w-full text-left px-4 py-3 text-sm font-medium text-navy-900 hover:bg-surf-50 border-b border-surf-100"
+                  onclick="this.parentElement.style.display='none';document.getElementById('mob-m4-modal').style.display='flex'">+ Add Task</button>
+          <button class="w-full text-left px-4 py-3 text-sm font-medium text-navy-900 hover:bg-surf-50"
+                  hx-get="/tasks/entry/mobile/m5?snapshot_id={{ task.snapshot_id }}&amp;ac={{ ac_reg }}"
+                  hx-target="#mob-entry-stage"
+                  onclick="this.parentElement.style.display='none'">View Task Detail</button>
+        </div>
+      </div>
+    </div>
+    <h2 class="text-lg font-bold text-navy-900 mt-2">{{ task.task_text }}</h2>
+    <span class="text-sm"
+      {% if task.status == 'IN_PROGRESS' %}style="color:#a07d12"
+      {% elif task.status == 'COMPLETED' %}style="color:#2d7a4f"
+      {% elif task.status == 'WAITING' %}style="color:#a07d12"
+      {% else %}style="color:#7c8694"{% endif %}>{{ task.status | replace('_', ' ') | title }}</span>
+    <details class="mt-1">
+      <summary class="text-xs text-surf-400 cursor-pointer">Ver {{ task.version }} &middot; Last sync {{ task.last_sync or 'N/A' }}</summary>
+      <div class="text-xs text-surf-300 mt-1">snapshot_id: {{ task.snapshot_id }} &middot; task_id: {{ task.task_id }}</div>
+    </details>
+  </div>
+  {# Scrollable form content #}
+  <div class="flex-1 overflow-y-auto p-4 space-y-4" id="m3-form-area">
+    {# Quick Update card with gold border #}
+    <div class="card p-4 space-y-3" style="border-left:4px solid #c8850a">
+      <div class="text-sm font-semibold text-navy-900">Quick Update</div>
+      {# Status 2x2 grid #}
+      <div>
+        <div class="mob-label">Status</div>
+        <div class="grid grid-cols-2 gap-2" id="mob-status-grid">
+          <button type="button" class="status-btn {% if task.status == 'NOT_STARTED' %}active{% endif %}" onclick="mobSelectStatus(this,'NOT_STARTED')">Not Started</button>
+          <button type="button" class="status-btn {% if task.status == 'IN_PROGRESS' %}active{% endif %}" onclick="mobSelectStatus(this,'IN_PROGRESS')">In Progress</button>
+          <button type="button" class="status-btn {% if task.status == 'WAITING' %}active{% endif %}" onclick="mobSelectStatus(this,'WAITING')">Waiting</button>
+          <button type="button" class="status-btn {% if task.status == 'COMPLETED' %}active{% endif %}" onclick="mobSelectStatus(this,'COMPLETED')">Completed</button>
+        </div>
+        <input type="hidden" id="mob-status-input" value="{{ task.status }}"/>
+      </div>
+      {# MH stepper #}
+      <div>
+        <div class="mob-label">Man-Hours <span style="color:#c8850a">(cumulative)</span></div>
+        <div class="flex items-center gap-3">
+          <button type="button" class="btn-outline w-12 h-12 text-xl" onclick="mobStepMH(-0.5)">&minus;</button>
+          <input type="number" id="mob-mh" value="{{ task.mh_incurred_hours }}" step="0.5" class="inp text-center font-mono text-xl h-12 w-28"/>
+          <button type="button" class="btn-outline w-12 h-12 text-xl" onclick="mobStepMH(0.5)">+</button>
+        </div>
+      </div>
+    </div>
+    {# Worker dropdown — +Add hidden on mobile per spec #}
+    <div>
+      <div class="mob-label">Worker</div>
+      <select class="inp w-full h-12 text-base" id="mob-worker-select">
+        <option value="">— Unassigned —</option>
+        {% for w in workers %}
+        <option value="{{ w.id }}" {% if task.assigned_worker_id == w.id %}selected{% endif %}>{{ w.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {# Deadline #}
+    <div>
+      <div class="mob-label">Deadline</div>
+      <input type="date" id="mob-deadline" value="{{ task.deadline_date or '' }}" class="inp w-full h-12 text-base"/>
+    </div>
+    {# Remarks #}
+    <div>
+      <div class="mob-label">Remarks</div>
+      <textarea id="mob-remarks" class="inp w-full text-base h-20 resize-none">{{ task.remarks or '' }}</textarea>
+    </div>
+    {# Critical Issue toggle #}
+    <div>
+      <label class="flex items-center gap-2 text-sm font-medium">
+        <input type="checkbox" id="mob-has-issue" {% if task.has_issue %}checked{% endif %} class="w-5 h-5 rounded"
+               onchange="document.getElementById('mob-issue-detail').style.display=this.checked?'':'none'"/>
+        Has critical issue
+      </label>
+      <div class="mt-2" id="mob-issue-detail" {% if not task.has_issue %}style="display:none"{% endif %}>
+        <div class="mob-label" style="color:#b93a3a">Critical Issue</div>
+        <input id="mob-critical-issue" class="inp w-full h-12 text-base"
+               style="border-color:rgba(185,58,58,.3);background:rgba(185,58,58,.05)"
+               value="{{ task.critical_issue or '' }}"/>
+      </div>
+    </div>
+  </div>
+  {# Fixed bottom buttons — Save & Next + Save #}
+  <div class="p-4 border-t border-surf-200 bg-white shrink-0 flex gap-3 mob-safe-bottom">
+    <button type="button" class="btn-outline flex-1 h-12 text-base" onclick="mobSaveTask(true)">Save &amp; Next</button>
+    <button type="button" class="btn-gold flex-1 h-12 text-base font-semibold" onclick="mobSaveTask(false)">Save</button>
+  </div>
+  {# Hidden data #}
+  <input type="hidden" id="mob-snapshot-id" value="{{ task.snapshot_id }}"/>
+  <input type="hidden" id="mob-task-id" value="{{ task.task_id }}"/>
+  <input type="hidden" id="mob-version" value="{{ task.version }}"/>
+  <input type="hidden" id="mob-ac-reg" value="{{ ac_reg }}"/>
+  <input type="hidden" id="mob-next-snapshot" value="{{ next_snapshot_id or '' }}"/>
+  {# M4 Add Task modal #}
+  {% include "tasks/partials/_m4_add_task.html" %}
+</div>
+<script>
+function mobSelectStatus(btn, status) {
+  document.querySelectorAll('#mob-status-grid .status-btn').forEach(function(b){b.classList.remove('active')});
+  btn.classList.add('active');
+  document.getElementById('mob-status-input').value = status;
+}
+function mobStepMH(delta) {
+  var inp = document.getElementById('mob-mh');
+  var v = parseFloat(inp.value) || 0;
+  v = Math.max(0, Math.round((v + delta) * 10) / 10);
+  inp.value = v;
+}
+function mobSaveTask(goNext) {
+  var snapshotId = document.getElementById('mob-snapshot-id').value;
+  var taskId = document.getElementById('mob-task-id').value;
+  var payload = {
+    version: parseInt(document.getElementById('mob-version').value),
+    status: document.getElementById('mob-status-input').value,
+    mh_incurred_hours: parseFloat(document.getElementById('mob-mh').value) || 0,
+    deadline_date: document.getElementById('mob-deadline').value || null,
+    remarks: document.getElementById('mob-remarks').value || null,
+    has_issue: document.getElementById('mob-has-issue').checked,
+    critical_issue: document.getElementById('mob-critical-issue').value || null
+  };
+  var csrf = (document.cookie.match(/csrftoken=([^;]+)/)||[])[1] || '';
+  // Step 1: PATCH snapshot
+  fetch('/api/tasks/snapshots/' + snapshotId, {
+    method: 'PATCH', headers: {'Content-Type':'application/json','X-CSRFToken':csrf},
+    body: JSON.stringify(payload)
+  }).then(function(r){
+    if(!r.ok) return r.json().then(function(e){throw e});
+    return r.json();
+  }).then(function(data){
+    // Step 2: Assign worker if changed
+    var workerId = document.getElementById('mob-worker-select').value;
+    if(workerId) {
+      return fetch('/api/tasks/' + taskId + '/assign-worker', {
+        method: 'PATCH', headers: {'Content-Type':'application/json','X-CSRFToken':csrf},
+        body: JSON.stringify({assigned_worker_id: parseInt(workerId)})
+      }).then(function(r){ return r.ok ? r.json() : null; });
+    }
+  }).then(function(){
+    showToast('Saved', goNext ? 'Loading next task...' : 'Snapshot updated', 'green');
+    if(goNext) {
+      var nextId = document.getElementById('mob-next-snapshot').value;
+      var ac = document.getElementById('mob-ac-reg').value;
+      if(nextId) {
+        htmx.ajax('GET', '/tasks/entry/mobile/m3?snapshot_id=' + nextId + '&ac=' + ac, '#mob-entry-stage');
+      } else {
+        htmx.ajax('GET', '/tasks/entry/mobile/m2?ac=' + ac, '#mob-entry-stage');
+      }
+    }
+  }).catch(function(err){
+    var msg = (err && err.detail) || 'Save failed. Please try again.';
+    var code = (err && err.code) || '';
+    if(code === 'CONFLICT_VERSION') msg = 'Another user modified this task. Please refresh and try again.';
+    if(code === 'MH_DECREASE_FORBIDDEN') msg = 'MH is cumulative and cannot be decreased. Contact admin.';
+    showToast('Error', msg, 'red');
+  });
+}
+</script>

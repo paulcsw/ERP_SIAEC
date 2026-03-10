@@ -2,7 +2,7 @@
 <html lang="en" data-font-size="default">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
 <title>{% block title %}CIS ERP{% endblock %}</title>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <script src="https://cdn.tailwindcss.com"></script>
@@ -36,6 +36,10 @@ body{font-family:'Outfit',system-ui,sans-serif;background:#f5f7fa;color:#1a2332;
 .badge-approved{background:#ecf7f0;color:#2d7a4f}
 .badge-rejected{background:#fdf0f0;color:#b93a3a}
 .badge-cancelled{background:#eef1f6;color:#7c8694}
+.badge-not-started{background:#eef1f6;color:#7c8694}
+.badge-in-progress{background:#eef2f7;color:#2e5a8a}
+.badge-waiting{background:#fdf5e0;color:#a07d12}
+.badge-completed{background:#ecf7f0;color:#2d7a4f}
 .card{background:#fff;border:1px solid #dee4ed;border-radius:10px}
 .tbl{width:100%;border-collapse:collapse;font-size:14px}
 .tbl thead{background:#f5f7fa;position:sticky;top:0;z-index:5}
@@ -63,6 +67,12 @@ body{font-family:'Outfit',system-ui,sans-serif;background:#f5f7fa;color:#1a2332;
 .entry-chip{padding:4px 10px;border-radius:16px;font-size:11px;font-weight:500;background:#eef1f6;color:#94a3b8;border:1px solid transparent;cursor:pointer;white-space:nowrap;transition:all .15s}
 .entry-chip.active{background:#1e3a5f;color:#fff;border-color:#1e3a5f}
 .entry-chip:hover:not(.active){background:#dee4ed}
+.entry-qchip{padding:4px 10px;border-radius:16px;font-size:10px;font-weight:500;background:#fff;color:#94a3b8;border:1px solid #dee4ed;cursor:pointer;transition:all .15s}
+.entry-qchip.on{background:#fdf5e0;color:#a07d12;border-color:#a07d12}
+/* View toggle pills */
+.view-pill{padding:6px 14px;border-radius:6px;font-size:13px;font-weight:500;color:#94a3b8;background:transparent;border:none;cursor:pointer;transition:all .15s}
+.view-pill.active{background:#fff;color:#1e3a5f;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.view-pill:hover:not(.active){color:#5a7ba3}
 /* OT Segment Bar */
 .ot-seg-bar{display:flex;background:#eef1f6;border-radius:8px;padding:3px;gap:2px}
 .ot-seg-bar button{flex:1;padding:8px 0;border-radius:6px;font-size:13px;font-weight:500;color:#94a3b8;background:transparent;border:none;cursor:pointer;transition:all .15s}
@@ -76,6 +86,17 @@ body{font-family:'Outfit',system-ui,sans-serif;background:#f5f7fa;color:#1a2332;
 /* Mobile page containers */
 .mob-page{display:none;flex-direction:column;height:100%}
 .mob-page.active{display:flex}
+/* Mobile stage transitions */
+.mob-stage{transition:transform .25s ease,opacity .25s ease}
+.mob-stage-enter{transform:translateX(100%);opacity:0}
+.mob-stage-active{transform:translateX(0);opacity:1}
+/* Status buttons (mobile) */
+.status-btn{min-height:48px;border:1px solid #cbd5e1;border-radius:12px;font-size:15px;font-weight:600;background:#fff;color:#1e293b;cursor:pointer;transition:all .15s}
+.status-btn.active{background:#1e3a5f;color:#fff;border-color:#1e3a5f}
+.status-btn:active:not(.active){background:#f1f5f9}
+/* Badge variants */
+.badge-new{background:#fdf0f0;color:#b93a3a;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px}
+.badge-needs-update{background:#fdf5e0;color:#a07d12;font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;letter-spacing:.3px}
 /* Toast */
 @keyframes toastIn{from{transform:translateX(12px);opacity:0}to{transform:translateX(0);opacity:1}}
 .toast-anim{animation:toastIn .3s ease}
@@ -83,24 +104,85 @@ body{font-family:'Outfit',system-ui,sans-serif;background:#f5f7fa;color:#1a2332;
 ::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:#c8d1de;border-radius:3px}
-/* Mobile responsive */
+/* Side panel */
+.side-panel{position:fixed;top:0;right:-480px;width:480px;height:100vh;background:#fff;border-left:1px solid #dee4ed;z-index:50;transition:right .3s ease;overflow-y:auto;box-shadow:-4px 0 20px rgba(0,0,0,.08)}
+.side-panel.open{right:0}
+
+/* ===== Mobile Responsive (<768px) ===== */
 @media(max-width:767px){
   .sidebar{display:none!important}
   .main-wrap{display:none!important}
   #mobile-app{display:flex!important;flex-direction:column;height:100vh;width:100vw;overflow:hidden}
   #mobile-app .mob-content{flex:1;overflow:hidden;padding-bottom:calc(56px + env(safe-area-inset-bottom))}
   .mob-tab-bar{display:flex}
-  .mob-label{font-size:14px;font-weight:500;color:#64748b;margin-bottom:6px;display:block}
-  .ot-seg-bar button{min-height:44px;font-size:15px}
+
+  /* CSS Variables — font size accessibility */
+  #mobile-app{
+    --mob-xs:13px;--mob-sm:15px;--mob-base:16px;--mob-lg:20px;
+    --mob-control-h:48px;--mob-spacing:12px;
+  }
+  html[data-font-size="large"] #mobile-app{
+    --mob-xs:14px;--mob-sm:16px;--mob-base:18px;--mob-lg:22px;
+    --mob-control-h:52px;--mob-spacing:16px;
+  }
+  html[data-font-size="xlarge"] #mobile-app{
+    --mob-xs:15px;--mob-sm:17px;--mob-base:20px;--mob-lg:24px;
+    --mob-control-h:56px;--mob-spacing:20px;
+  }
+
+  /* Font size overrides */
+  #mobile-app .text-xs{font-size:var(--mob-xs)!important;line-height:1.35}
+  #mobile-app .text-sm{font-size:var(--mob-sm)!important;line-height:1.45}
+  #mobile-app .text-base{font-size:var(--mob-base)!important;line-height:1.5}
+  #mobile-app .text-lg{font-size:var(--mob-lg)!important;line-height:1.3}
+
+  /* Control height */
+  #mobile-app .inp,#mobile-app .btn-gold,#mobile-app .btn-outline,#mobile-app .btn-primary,#mobile-app .btn-purple{min-height:var(--mob-control-h)}
+
+  /* Darker grays for readability */
   #mobile-app .text-surf-400{color:#64748b!important}
-  #mobile-app .entry-chip{min-height:38px;font-size:14px;display:inline-flex;align-items:center;justify-content:center;color:#475569;padding:6px 14px}
+  #mobile-app .text-surf-300{color:#94a3b8!important}
+
+  /* Mobile label */
+  .mob-label{font-size:14px;font-weight:500;color:#64748b;margin-bottom:6px;display:block}
+
+  /* Entry chips enlarged */
+  #mobile-app .entry-chip,#mobile-app .entry-qchip{min-height:38px;font-size:14px;display:inline-flex;align-items:center;justify-content:center;color:#475569;padding:6px 14px}
   #mobile-app .entry-chip.active{color:#fff}
-  #mobile-app .inp,#mobile-app .btn-gold,#mobile-app .btn-outline,#mobile-app .btn-primary,#mobile-app .btn-purple{min-height:48px}
+  #mobile-app .entry-qchip.on{background:#fdf5e0;color:#a07d12;border-color:#a07d12}
+
+  /* OT segment bar touch-friendly */
+  .ot-seg-bar button{min-height:44px;font-size:15px}
+
+  /* Spacing scale for font-size */
+  html[data-font-size="large"] #mobile-app .py-3{padding-top:1rem;padding-bottom:1rem}
+  html[data-font-size="xlarge"] #mobile-app .py-3{padding-top:1.25rem;padding-bottom:1.25rem}
+
+  /* Status button grid */
+  #mobile-app .status-btn{font-size:var(--mob-sm)}
+  #mobile-app .status-btn.active{background:#1e3a5f;color:#fff;border-color:#1e3a5f}
+
+  /* Tab bar label fix */
+  .mob-tab-bar .tab-item{font-size:var(--mob-xs,11px)}
+
+  /* Safe area */
+  .mob-safe-bottom{padding-bottom:calc(16px + 56px + env(safe-area-inset-bottom))}
+
+  /* Full-screen modal (M4 Add Task) */
+  .mob-fullscreen-modal{position:fixed;inset:0;z-index:100;background:#fff;display:flex;flex-direction:column;overflow:hidden}
+  .mob-fullscreen-modal .modal-body{flex:1;overflow-y:auto;padding:16px}
+  .mob-fullscreen-modal .modal-footer{padding:16px;border-top:1px solid #dee4ed;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+
+  /* Hide desktop-only elements */
+  .desktop-only{display:none!important}
+  /* Show mobile-only elements */
+  .mobile-only{display:block!important}
 }
 @media(min-width:768px){
   #mobile-app{display:none!important}
+  .mobile-only{display:none!important}
 }
-/* Font size accessibility */
+/* Font size accessibility (global) */
 html[data-font-size="large"] #mobile-app{font-size:18px}
 html[data-font-size="xlarge"] #mobile-app{font-size:20px}
 </style>
@@ -118,31 +200,62 @@ html[data-font-size="xlarge"] #mobile-app{font-size:20px}
   </div>
   <div style="height:1px;background:#dee4ed"></div>
   <nav class="flex-1 overflow-y-auto py-1">
+
+    {# -- Main -- #}
     <div class="nav-section">Main</div>
-    <a href="/dashboard" class="nav-item {% if active_page == 'dashboard' %}active{% endif %}">
+    <a href="/dashboard" class="nav-item {% if page == 'dashboard' %}active{% endif %}">
       <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 13a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1h-4a1 1 0 01-1-1v-5z"/></svg>
       <span>Dashboard</span>
     </a>
+
+    {# -- Tasks -- #}
+    <div class="nav-section">Tasks</div>
+    <a href="/tasks" class="nav-item {% if page == 'tasks' %}active{% endif %}">
+      <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+      <span>Task Manager</span>
+    </a>
+    <a href="/tasks/entry" class="nav-item {% if page == 'tasks_entry' %}active{% endif %}">
+      <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+      <span>Data Entry</span>
+    </a>
+
+    {# -- Overtime -- #}
     <div class="nav-section">Overtime</div>
-    <a href="/ot/new" class="nav-item {% if active_page == 'ot_new' %}active{% endif %}">
+    <a href="/ot/new" class="nav-item {% if page == 'ot_new' %}active{% endif %}">
       <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
       <span>OT Request</span>
     </a>
-    <a href="/ot" class="nav-item {% if active_page == 'ot_list' %}active{% endif %}">
+    <a href="/ot" class="nav-item {% if page == 'ot_list' %}active{% endif %}">
       <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
       <span>OT List</span>
     </a>
     {% if 'ADMIN' in current_user.roles %}
-    <a href="/admin/ot-approve" class="nav-item {% if active_page == 'ot_approve' %}active{% endif %}">
+    <a href="/admin/ot-approve" class="nav-item {% if page == 'ot_approve' %}active{% endif %}">
       <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
       <span>OT Approve</span>
     </a>
     {% endif %}
+    <a href="/stats/ot" class="nav-item {% if page == 'ot_stats' %}active{% endif %}">
+      <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+      <span>OT Dashboard</span>
+    </a>
+
+    {# -- Admin -- #}
     <div class="nav-section">Admin</div>
     {% if 'ADMIN' in current_user.roles %}
-    <a href="/admin/users" class="nav-item {% if active_page == 'users' %}active{% endif %}">
+    <a href="/admin/users" class="nav-item {% if page == 'users' %}active{% endif %}">
       <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
       <span>Personnel</span>
+    </a>
+    {% endif %}
+    <a href="/rfo" class="nav-item {% if page == 'rfo' %}active{% endif %}">
+      <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+      <span>RFO Detail</span>
+    </a>
+    {% if 'ADMIN' in current_user.roles %}
+    <a href="/admin/settings" class="nav-item {% if page == 'settings' %}active{% endif %}">
+      <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      <span>Settings</span>
     </a>
     {% endif %}
   </nav>
@@ -164,6 +277,13 @@ html[data-font-size="xlarge"] #mobile-app{font-size:20px}
       <span class="text-navy-700 font-medium">{% block breadcrumb %}{% endblock %}</span>
     </div>
     <div class="flex-1"></div>
+    <div class="relative">
+      <input type="text" class="inp text-sm py-1.5 pl-8 pr-3 w-52" placeholder="Search..." style="font-size:13px">
+      <svg class="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-surf-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+    </div>
+    <button class="relative p-1.5 rounded-lg hover:bg-surf-50 transition-colors">
+      <svg class="w-5 h-5 text-surf-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+    </button>
     <div class="flex items-center gap-2 text-xs text-surf-400">
       <span>{{ current_user.display_name }}</span>
       <span class="badge badge-pending text-[10px]">{{ current_user.roles | join(', ') }}</span>
@@ -179,16 +299,23 @@ html[data-font-size="xlarge"] #mobile-app{font-size:20px}
   <div class="mob-content">
     {% block mobile_content %}{% endblock %}
   </div>
+  {# Bottom Tab Bar #}
   <div class="mob-tab-bar">
-    <a href="/tasks/entry" class="tab-item {% if active_tab == 'tasks' %}active{% endif %}">
+    <a href="/tasks/entry" class="tab-item {% if active_tab == 'tasks' %}active{% endif %}" data-tab="tasks">
       <span class="tab-icon">&#128203;</span>
       <span>Tasks</span>
+      {% if mob_badge_tasks is defined and mob_badge_tasks > 0 %}
+      <span class="tab-badge">{{ mob_badge_tasks }}</span>
+      {% endif %}
     </a>
-    <a href="/ot" class="tab-item {% if active_tab == 'ot' %}active{% endif %}">
+    <a href="/ot" class="tab-item {% if active_tab == 'ot' %}active{% endif %}" data-tab="ot">
       <span class="tab-icon">&#128336;</span>
       <span>OT</span>
+      {% if mob_badge_ot is defined and mob_badge_ot > 0 %}
+      <span class="tab-badge">{{ mob_badge_ot }}</span>
+      {% endif %}
     </a>
-    <a href="/more" class="tab-item {% if active_tab == 'more' %}active{% endif %}">
+    <a href="/more" class="tab-item {% if active_tab == 'more' %}active{% endif %}" data-tab="more">
       <span class="tab-icon">&#8943;</span>
       <span>More</span>
     </a>
@@ -208,6 +335,18 @@ function showToast(title, msg, color) {
   el.innerHTML = `<div class="text-sm font-semibold" style="color:${tc}">${title}</div><div class="text-xs text-surf-400 mt-0.5">${msg}</div>`;
   c.appendChild(el);
   setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }, 3000);
+}
+
+/* Font size persistence */
+(function(){
+  var fs = localStorage.getItem('mob_font_size');
+  if(fs && ['default','large','xlarge'].indexOf(fs) !== -1){
+    document.documentElement.setAttribute('data-font-size', fs);
+  }
+})();
+function setMobFontSize(size) {
+  document.documentElement.setAttribute('data-font-size', size);
+  localStorage.setItem('mob_font_size', size);
 }
 </script>
 {% block scripts %}{% endblock %}

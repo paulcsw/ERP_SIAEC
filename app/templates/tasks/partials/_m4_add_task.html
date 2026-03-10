@@ -1,0 +1,89 @@
+{# M4: Add Task Modal — full-screen on mobile, overlay on desktop #}
+<div id="mob-m4-modal" style="display:none" class="mob-fullscreen-modal">
+  <div class="p-4 bg-white border-b border-surf-200 flex items-center justify-between shrink-0">
+    <h2 class="text-lg font-bold text-navy-900">Add Task</h2>
+    <button onclick="this.closest('#mob-m4-modal').style.display='none'" class="p-2 rounded-lg hover:bg-surf-50">
+      <svg class="w-5 h-5 text-surf-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="modal-body space-y-4">
+    <input type="hidden" id="m4-aircraft-id" value="{{ selected_ac_id or '' }}"/>
+    <input type="hidden" id="m4-meeting-date" value="{{ meeting_date or '' }}"/>
+    <input type="hidden" id="m4-shop-id" value="{{ shop_id or '' }}"/>
+    <input type="hidden" id="m4-wp-id" value="{{ work_package_id or '' }}"/>
+    <div>
+      <div class="mob-label">Description</div>
+      <textarea id="m4-task-text" class="inp w-full text-base h-24 resize-none" placeholder="Task description..." required></textarea>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <div class="mob-label">Status</div>
+        <select id="m4-status" class="inp w-full h-12 text-base">
+          <option value="NOT_STARTED">Not Started</option>
+          <option value="IN_PROGRESS">In Progress</option>
+          <option value="WAITING">Waiting</option>
+        </select>
+      </div>
+      <div>
+        <div class="mob-label">Deadline</div>
+        <input type="date" id="m4-deadline" class="inp w-full h-12 text-base"/>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <div class="mob-label">Planned MH</div>
+        <input type="number" id="m4-planned-mh" class="inp w-full h-12 text-base" step="0.5" min="0" placeholder="0.0"/>
+      </div>
+      <div>
+        <div class="mob-label">Assign Worker</div>
+        <select id="m4-worker" class="inp w-full h-12 text-base">
+          <option value="">Unassigned</option>
+          {% for w in workers %}
+          <option value="{{ w.id }}">{{ w.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div>
+      <div class="mob-label">Remarks</div>
+      <textarea id="m4-remarks" class="inp w-full text-base h-16 resize-none" placeholder="Optional remarks..."></textarea>
+    </div>
+  </div>
+  <div class="modal-footer flex gap-3">
+    <button type="button" class="btn-outline flex-1 h-12 text-base" onclick="this.closest('#mob-m4-modal').style.display='none'">Cancel</button>
+    <button type="button" class="btn-primary flex-1 h-12 text-base font-semibold" onclick="mobCreateTask()">Add Task</button>
+  </div>
+</div>
+<script>
+function mobCreateTask() {
+  var payload = {
+    task_text: document.getElementById('m4-task-text').value,
+    status: document.getElementById('m4-status').value,
+    aircraft_id: parseInt(document.getElementById('m4-aircraft-id').value) || undefined,
+    shop_id: parseInt(document.getElementById('m4-shop-id').value) || undefined,
+    meeting_date: document.getElementById('m4-meeting-date').value || undefined,
+    work_package_id: parseInt(document.getElementById('m4-wp-id').value) || undefined,
+    planned_mh: parseFloat(document.getElementById('m4-planned-mh').value) || undefined,
+    deadline_date: document.getElementById('m4-deadline').value || undefined,
+    remarks: document.getElementById('m4-remarks').value || undefined,
+  };
+  // Clean undefined
+  Object.keys(payload).forEach(function(k){ if(payload[k] === undefined) delete payload[k]; });
+  var csrf = (document.cookie.match(/csrftoken=([^;]+)/)||[])[1] || '';
+  fetch('/api/tasks', {
+    method: 'POST', headers: {'Content-Type':'application/json','X-CSRFToken':csrf},
+    body: JSON.stringify(payload)
+  }).then(function(r){
+    if(!r.ok) return r.json().then(function(e){throw e});
+    return r.json();
+  }).then(function(){
+    showToast('Created', 'Task added successfully', 'green');
+    document.getElementById('mob-m4-modal').style.display = 'none';
+    // Reload M2
+    var ac = document.getElementById('mob-ac-reg') ? document.getElementById('mob-ac-reg').value : '';
+    if(ac) htmx.ajax('GET', '/tasks/entry/mobile/m2?ac=' + ac, '#mob-entry-stage');
+  }).catch(function(err){
+    showToast('Error', (err && err.detail) || 'Failed to create task', 'red');
+  });
+}
+</script>

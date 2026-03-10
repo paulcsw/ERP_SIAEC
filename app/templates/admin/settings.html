@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - CIS ERP{% endblock %}
+{% block breadcrumb %}Admin &rsaquo; Settings{% endblock %}
+
+{% block content %}
+<div class="p-4 lg:p-5 max-w-3xl mx-auto">
+
+  <div class="mb-5">
+    <h1 class="text-xl font-semibold text-navy-900">System Settings</h1>
+    <p class="text-sm text-surf-400 mt-0.5">Configure application-wide preferences</p>
+  </div>
+
+  <form id="settingsForm" class="space-y-4">
+
+    {# ── Snapshot Week Configuration ── #}
+    <div class="card p-5">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-9 h-9 rounded-lg bg-navy-50 flex items-center justify-center">
+          <svg class="w-5 h-5 text-navy-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        </div>
+        <div>
+          <h3 class="text-sm font-semibold text-navy-900">Snapshot Week Configuration</h3>
+          <p class="text-xs text-surf-400">Set the current meeting date for weekly task snapshots</p>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="text-xs font-medium text-surf-400 block mb-1">Current Meeting Date</label>
+          <input type="date" name="meeting_current_date" class="inp w-full text-sm"
+                 value="{{ configs.get('meeting_current_date', '') }}">
+        </div>
+        <div>
+          <label class="text-xs font-medium text-surf-400 block mb-1">Auto-Advance Weekly</label>
+          <div class="flex items-center gap-3 mt-2">
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" name="auto_advance_week" class="sr-only peer"
+                     {% if configs.get('auto_advance_week', 'false') == 'true' %}checked{% endif %} value="true">
+              <div class="w-9 h-5 bg-surf-200 peer-focus:ring-2 peer-focus:ring-navy-600/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-navy-600"></div>
+            </label>
+            <span class="text-sm text-navy-700">Automatically advance to next week</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# ── Data Entry Badge Threshold ── #}
+    <div class="card p-5">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-9 h-9 rounded-lg bg-gold-50 flex items-center justify-center">
+          <svg class="w-5 h-5 text-gold-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </div>
+        <div>
+          <h3 class="text-sm font-semibold text-navy-900">Data Entry Badge Threshold</h3>
+          <p class="text-xs text-surf-400">Controls when "NEEDS UPDATE" badges appear on task entries</p>
+        </div>
+      </div>
+      <div class="max-w-xs">
+        <label class="text-xs font-medium text-surf-400 block mb-1">Hours until "Needs Update" badge</label>
+        <div class="flex items-center gap-2">
+          <input type="number" name="needs_update_threshold_hours" class="inp w-full text-sm"
+                 min="1" max="720" step="1"
+                 value="{{ configs.get('needs_update_threshold_hours', '72') }}">
+          <span class="text-sm text-surf-400 whitespace-nowrap">hours</span>
+        </div>
+        <p class="text-xs text-surf-400 mt-1">Default: 72 hours (3 days). Tasks where supervisor_updated_at is older than this threshold will show the badge.</p>
+      </div>
+    </div>
+
+    {# ── Notification Settings ── #}
+    <div class="card p-5">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-9 h-9 rounded-lg bg-st-blueBg flex items-center justify-center">
+          <svg class="w-5 h-5 text-st-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+        </div>
+        <div>
+          <h3 class="text-sm font-semibold text-navy-900">Notification Settings</h3>
+          <p class="text-xs text-surf-400">Configure how and where notifications are sent</p>
+        </div>
+      </div>
+      <div class="space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <span class="text-sm font-medium text-navy-700">Microsoft Teams</span>
+            <p class="text-xs text-surf-400">Send task update notifications via Teams webhook</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" name="notify_teams" class="sr-only peer"
+                   {% if configs.get('notify_teams', 'false') == 'true' %}checked{% endif %} value="true">
+            <div class="w-9 h-5 bg-surf-200 peer-focus:ring-2 peer-focus:ring-navy-600/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-navy-600"></div>
+          </label>
+        </div>
+        <div class="flex items-center justify-between">
+          <div>
+            <span class="text-sm font-medium text-navy-700">Outlook Email</span>
+            <p class="text-xs text-surf-400">Send task summaries via email to supervisors</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" name="notify_outlook" class="sr-only peer"
+                   {% if configs.get('notify_outlook', 'false') == 'true' %}checked{% endif %} value="true">
+            <div class="w-9 h-5 bg-surf-200 peer-focus:ring-2 peer-focus:ring-navy-600/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-navy-600"></div>
+          </label>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-surf-400 block mb-1">Notification Recipients</label>
+          <input type="text" name="notify_recipients" class="inp w-full text-sm"
+                 placeholder="email1@siaec.com, email2@siaec.com"
+                 value="{{ configs.get('notify_recipients', '') }}">
+          <p class="text-xs text-surf-400 mt-1">Comma-separated email addresses</p>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-surf-400 block mb-1">Notification Template</label>
+          <textarea name="notify_template" class="inp w-full text-sm" rows="4"
+                    placeholder="Weekly task summary for {shop}...">{{ configs.get('notify_template', '') }}</textarea>
+          <p class="text-xs text-surf-400 mt-1">Use {shop}, {date}, {total_tasks}, {completed} as placeholders</p>
+        </div>
+      </div>
+    </div>
+
+    {# ── Save Button ── #}
+    <div class="flex justify-end">
+      <button type="button" class="btn-primary" onclick="saveSettings()">
+        <svg class="w-4 h-4 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+        Save Settings
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function saveSettings() {
+  const form = document.getElementById('settingsForm');
+  const fd = new FormData(form);
+  const data = {};
+
+  // Collect all form fields
+  for (const [key, val] of fd.entries()) {
+    data[key] = val;
+  }
+
+  // Handle unchecked checkboxes (they won't appear in FormData)
+  ['auto_advance_week', 'notify_teams', 'notify_outlook'].forEach(name => {
+    if (!(name in data)) data[name] = 'false';
+  });
+
+  fetch('/api/config', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || ''
+    },
+    body: JSON.stringify(data)
+  }).then(r => {
+    if (r.ok) {
+      showToast('Saved', 'Settings updated successfully', 'green');
+    } else {
+      r.json().then(d => showToast('Error', d.detail || 'Failed to save', 'red'));
+    }
+  }).catch(() => {
+    showToast('Error', 'Network error', 'red');
+  });
+}
+</script>
+{% endblock %}

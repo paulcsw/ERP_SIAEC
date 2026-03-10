@@ -176,3 +176,33 @@ class InitWeekResponse(BaseModel):
     shop_id: int
     created_count: int
     skipped_count: int
+
+
+# ── §9 Import / Distribution ───────────────────────────────────────
+
+class ImportConfirmItem(BaseModel):
+    ac_reg: str
+    rfo_no: str | None = None
+    description: str
+    planned_mh: Decimal | None = None
+    assigned_supervisor_id: int | None = None
+
+
+class ImportConfirmRequest(BaseModel):
+    shop_id: int
+    meeting_date: date
+    items: list[ImportConfirmItem]
+
+
+class AssignRequest(BaseModel):
+    assigned_supervisor_id: int
+    shop_id: int
+
+
+class BulkAssignRequest(BaseModel):
+    task_ids: list[int]
+    assigned_supervisor_id: int
+
+
+class AssignWorkerRequest(BaseModel):
+    assigned_worker_id: int
