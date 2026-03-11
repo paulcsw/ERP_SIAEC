@@ -6,127 +6,150 @@
 <div class="p-4 lg:p-5 flex flex-col h-full w-full overflow-y-auto">
 
   {# ── Header + RFO Selector ─────────────────────────────────── #}
-  <div class="flex items-center justify-between mb-4">
-    <h1 class="text-lg font-semibold text-navy-900">RFO Detail</h1>
-    <div class="relative" id="rfo-combo">
-      <button onclick="document.getElementById('rfo-dropdown').classList.toggle('hidden')"
-              class="inp h-9 text-sm flex items-center gap-2 min-w-[260px] cursor-pointer">
-        <svg class="w-4 h-4 text-surf-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-        <span id="rfo-combo-value">{% if selected %}{{ selected.rfo_no }} — {{ selected.title | truncate(30) }}{% else %}Select RFO…{% endif %}</span>
-      </button>
-      <div id="rfo-dropdown" class="hidden absolute right-0 top-10 w-80 bg-white border border-surf-200 rounded-lg shadow-lg z-20 max-h-72 overflow-y-auto">
-        <div class="p-2 border-b border-surf-100">
-          <input type="text" class="inp w-full h-8 text-sm" placeholder="Search RFO…" id="rfo-search"
-                 oninput="filterRfo(this.value)"/>
+  <div class="flex items-center justify-between mb-4 shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="relative" id="rfo-combo">
+        <div class="inp h-9 text-sm font-mono font-bold flex items-center gap-2 cursor-pointer min-w-0 sm:min-w-[380px]"
+             onclick="toggleRfoDropdown()">
+          <svg class="w-3.5 h-3.5 text-surf-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <span id="rfo-combo-value">{% if selected %}{{ selected.rfo_no }} — {{ summary_strip.ac_reg }} — {{ selected.title | truncate(30) }}{% else %}Select RFO…{% endif %}</span>
+          <svg class="w-3.5 h-3.5 text-surf-400 ml-auto shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </div>
-        <div id="rfo-list">
-        {% for opt in rfo_options %}
-          <a href="/rfo?id={{ opt.id }}" class="rfo-item block px-3 py-2 hover:bg-surf-50 cursor-pointer text-sm {% if selected and selected.id == opt.id %}bg-navy-50 border-l-2 border-navy-600{% endif %}"
-             data-search="{{ opt.rfo_no }} {{ opt.title }} {{ opt.ac_reg or '' }}">
-            <div class="font-medium text-navy-900">{{ opt.rfo_no }}</div>
-            <div class="text-[11px] text-surf-400">{{ opt.ac_reg or '–' }} · {{ opt.title | truncate(40) }}</div>
-          </a>
-        {% endfor %}
+        <div id="rfo-dropdown" class="hidden absolute left-0 top-full mt-1 w-full bg-white border border-surf-200 rounded-lg shadow-xl z-30 overflow-hidden" onclick="event.stopPropagation()">
+          <div class="p-2 border-b border-surf-100 relative">
+            <svg class="w-3.5 h-3.5 absolute left-4 top-1/2 -translate-y-1/2 text-surf-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <input type="text" class="inp w-full h-8 text-xs pl-8" placeholder="Search RFO, AC reg, description..." id="rfo-search"
+                   oninput="filterRfo(this.value)" onclick="event.stopPropagation()"/>
+          </div>
+          <div id="rfo-list" class="max-h-48 overflow-y-auto">
+          {% for opt in rfo_options %}
+            <a href="/rfo?id={{ opt.id }}"
+               class="rfo-item block px-3 py-2.5 cursor-pointer hover:bg-surf-50 border-l-[3px] border-transparent"
+               {% if selected and selected.id == opt.id %}style="border-left:3px solid #1e3a5f;background:#eef2f7"{% endif %}
+               data-search="{{ opt.rfo_no }} {{ opt.title }} {{ opt.ac_reg or '' }}">
+              <div class="text-xs font-mono font-bold text-navy-900">{{ opt.rfo_no }} · {{ opt.ac_reg or '–' }}</div>
+              <div class="text-[10px] text-surf-400">{{ opt.title | truncate(40) }} · {{ opt.task_count }} tasks · {{ opt.planned_mh }} MH</div>
+            </a>
+          {% endfor %}
+          </div>
         </div>
       </div>
+      {% if selected %}
+      <span class="badge {% if selected.status == 'ACTIVE' %}bg-st-yellowBg text-st-yellow{% elif selected.status == 'COMPLETED' %}badge-completed{% else %}badge-pending{% endif %}">{{ selected.status }}</span>
+      {% endif %}
     </div>
+    {% if selected %}
+    <div class="flex gap-2">
+      <button class="btn-outline btn-sm text-xs" onclick="window.print()">Export</button>
+    </div>
+    {% endif %}
   </div>
 
 {% if selected %}
   {# ── Summary Strip ─────────────────────────────────────────── #}
-  <div class="card p-3 mb-4 flex items-center gap-4 flex-wrap text-sm">
-    <div><span class="text-surf-400">Aircraft</span> <span class="font-medium text-navy-900 ml-1">{{ summary_strip.ac_reg }}</span></div>
+  <div class="card px-4 py-3 mb-4 shrink-0 flex flex-wrap items-center gap-3 sm:gap-6 text-xs">
+    <div><span class="text-surf-400">Aircraft</span><div class="font-mono font-bold text-navy-900">{{ summary_strip.ac_reg }}</div></div>
     <div class="w-px h-8 bg-surf-200"></div>
-    <div><span class="text-surf-400">Airline</span> <span class="font-medium text-navy-900 ml-1">{{ summary_strip.airline }}</span></div>
+    <div><span class="text-surf-400">Type</span><div class="font-medium text-navy-900">{{ summary_strip.ac_type }}</div></div>
     <div class="w-px h-8 bg-surf-200"></div>
-    <div><span class="text-surf-400">Start</span> <span class="font-medium text-navy-900 ml-1">{{ summary_strip.start_date }}</span></div>
+    <div><span class="text-surf-400">Start</span><div class="font-medium text-navy-900">{{ summary_strip.start_date }}</div></div>
     <div class="w-px h-8 bg-surf-200"></div>
-    <div><span class="text-surf-400">Target Out</span> <span class="font-medium {% if summary_strip.days_remaining is not none and summary_strip.days_remaining < 14 %}text-st-red{% else %}text-navy-900{% endif %} ml-1">{{ summary_strip.end_date }}</span></div>
+    <div><span class="text-surf-400">Target Out</span><div class="font-medium {% if summary_strip.days_remaining is not none and summary_strip.days_remaining < 14 %}text-st-red{% else %}text-navy-900{% endif %}">{{ summary_strip.end_date }}</div></div>
     <div class="w-px h-8 bg-surf-200"></div>
-    <div><span class="text-surf-400">Days Remaining</span> <span class="font-medium {% if summary_strip.days_remaining is not none and summary_strip.days_remaining < 14 %}text-st-red{% else %}text-navy-900{% endif %} ml-1">{{ summary_strip.days_remaining if summary_strip.days_remaining is not none else '–' }}</span></div>
+    <div><span class="text-surf-400">Days Remaining</span><div class="font-bold {% if summary_strip.days_remaining is not none and summary_strip.days_remaining < 14 %}text-st-red{% else %}text-navy-900{% endif %}">{% if summary_strip.days_remaining is not none %}{{ summary_strip.days_remaining }} days{% else %}–{% endif %}</div></div>
     <div class="w-px h-8 bg-surf-200"></div>
-    <div>
-      <span class="text-surf-400">Priority</span>
-      <span class="font-medium text-navy-900 ml-1">P{{ summary_strip.priority }}{% if summary_strip.priority <= 1 %} — Critical{% elif summary_strip.priority <= 2 %} — High{% endif %}</span>
-    </div>
-    <div class="ml-auto">
-      <span class="badge {% if selected.status == 'ACTIVE' %}badge-approved{% elif selected.status == 'COMPLETED' %}badge-completed{% else %}badge-pending{% endif %}">{{ selected.status }}</span>
-    </div>
+    <div><span class="text-surf-400">Priority</span><div class="font-bold text-navy-900">P{{ summary_strip.priority }}{% if summary_strip.priority <= 1 %} — Critical{% elif summary_strip.priority <= 2 %} — High{% endif %}</div></div>
   </div>
 
   {# ── 6 KPI Cards ───────────────────────────────────────────── #}
-  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4 shrink-0">
     <div class="card p-3">
-      <div class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Tasks</div>
-      <div class="text-2xl font-bold text-navy-900">{{ kpi.total_tasks }}</div>
+      <span class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Tasks</span>
+      <div class="text-xl font-bold text-navy-900 mt-1">{{ kpi.total_tasks }}</div>
+      <div class="text-[10px] text-st-green font-medium mt-0.5">{{ kpi.assigned_count }} assigned</div>
     </div>
     <div class="card p-3">
-      <div class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Planned MH</div>
-      <div class="text-2xl font-bold text-navy-900">{{ kpi.planned_mh }}</div>
+      <span class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Planned MH</span>
+      <div class="text-xl font-bold text-navy-900 mt-1">{{ kpi.planned_mh }}</div>
+      <div class="text-[10px] text-surf-400 mt-0.5">estimated total</div>
     </div>
     <div class="card p-3">
-      <div class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Actual MH</div>
-      <div class="text-2xl font-bold text-st-green">{{ kpi.actual_mh }}</div>
-      <div class="text-[10px] text-surf-400">{{ kpi.plan_pct }}% of plan</div>
+      <span class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Actual MH</span>
+      <div class="text-xl font-bold text-navy-900 mt-1">{{ kpi.actual_mh }}</div>
+      <div class="text-[10px] text-st-green font-medium mt-0.5">{{ kpi.plan_pct }}% of plan</div>
     </div>
     <div class="card p-3">
-      <div class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">MH Variance</div>
-      <div class="text-2xl font-bold {% if kpi.mh_variance <= 0 %}text-st-green{% else %}text-st-red{% endif %}">{{ kpi.mh_variance }}</div>
+      <span class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">MH Variance</span>
+      <div class="text-xl font-bold {% if kpi.mh_variance <= 0 %}text-st-green{% else %}text-st-red{% endif %} mt-1">{{ kpi.mh_variance }}</div>
+      <div class="text-[10px] {% if kpi.mh_variance <= 0 %}text-st-green{% else %}text-st-red{% endif %} font-medium mt-0.5">{% if kpi.mh_variance <= 0 %}under budget{% else %}over budget{% endif %}</div>
     </div>
     <div class="card p-3">
-      <div class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">OT Hours</div>
-      <div class="text-2xl font-bold text-gold-500">{{ kpi.ot_hours }}h</div>
-      <div class="text-[10px] text-surf-400">{{ kpi.ot_ratio }}% of actual</div>
+      <span class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">OT Hours</span>
+      <div class="text-xl font-bold text-gold-600 mt-1">{{ kpi.ot_hours }}h</div>
+      <div class="text-[10px] text-surf-400 mt-0.5">{{ kpi.ot_ratio }}% of actual</div>
     </div>
     <div class="card p-3">
-      <div class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Blockers</div>
-      <div class="text-2xl font-bold text-st-red">{{ kpi.blocker_count }}</div>
+      <span class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Blockers</span>
+      <div class="text-xl font-bold text-st-red mt-1">{{ kpi.blocker_count }}</div>
+      {% if kpi.blocker_count > 0 %}
+      <div class="text-[10px] text-st-red font-medium mt-0.5">{{ kpi.blocker_count }} waiting</div>
+      {% endif %}
     </div>
   </div>
 
   {# ── 3-column: Task Status / Burndown / Efficiency ──────────── #}
-  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+  <div class="grid lg:grid-cols-3 gap-4 mb-4">
 
-    {# Task Completion bar #}
+    {# Task Completion #}
     <div class="card p-4">
       <div class="text-sm font-semibold text-navy-900 mb-3">Task Completion</div>
-      <div class="flex h-8 rounded-lg overflow-hidden mb-3">
-        {% if task_status_bar %}
-        <div class="bg-st-green flex items-center justify-center text-white text-xs font-medium" style="width:{{ task_status_bar.COMPLETED }}%">{% if task_status_bar.COMPLETED > 10 %}{{ task_status_bar.counts.COMPLETED }}{% endif %}</div>
-        <div class="bg-gold-500 flex items-center justify-center text-white text-xs font-medium" style="width:{{ task_status_bar.IN_PROGRESS }}%">{% if task_status_bar.IN_PROGRESS > 10 %}{{ task_status_bar.counts.IN_PROGRESS }}{% endif %}</div>
-        <div class="bg-st-red flex items-center justify-center text-white text-xs font-medium" style="width:{{ task_status_bar.WAITING }}%">{% if task_status_bar.WAITING > 10 %}{{ task_status_bar.counts.WAITING }}{% endif %}</div>
-        <div class="bg-surf-300 flex items-center justify-center text-white text-xs font-medium" style="width:{{ task_status_bar.NOT_STARTED }}%">{% if task_status_bar.NOT_STARTED > 10 %}{{ task_status_bar.counts.NOT_STARTED }}{% endif %}</div>
-        {% endif %}
+      <div class="flex items-center gap-3 mb-3">
+        <div class="flex-1 flex h-8 rounded-lg overflow-hidden">
+          {% if task_status_bar %}
+          <div class="flex items-center justify-center text-white text-[10px] font-medium" style="width:{{ task_status_bar.COMPLETED }}%;background:#2d7a4f">{% if task_status_bar.COMPLETED > 8 %}{{ task_status_bar.counts.COMPLETED }}{% endif %}</div>
+          <div class="flex items-center justify-center text-white text-[10px] font-medium" style="width:{{ task_status_bar.IN_PROGRESS }}%;background:#a07d12">{% if task_status_bar.IN_PROGRESS > 8 %}{{ task_status_bar.counts.IN_PROGRESS }}{% endif %}</div>
+          <div class="flex items-center justify-center text-white text-[10px] font-medium" style="width:{{ task_status_bar.WAITING }}%;background:#b93a3a">{% if task_status_bar.WAITING > 8 %}{{ task_status_bar.counts.WAITING }}{% endif %}</div>
+          <div class="flex items-center justify-center text-white text-[10px] font-medium" style="width:{{ task_status_bar.NOT_STARTED }}%;background:#7c8694">{% if task_status_bar.NOT_STARTED > 8 %}{{ task_status_bar.counts.NOT_STARTED }}{% endif %}</div>
+          {% endif %}
+        </div>
       </div>
-      <div class="flex flex-wrap gap-3 text-[10px] text-surf-400">
-        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-st-green inline-block"></span> Done {{ task_status_bar.counts.COMPLETED if task_status_bar else 0 }}</span>
-        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-gold-500 inline-block"></span> Active {{ task_status_bar.counts.IN_PROGRESS if task_status_bar else 0 }}</span>
-        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-st-red inline-block"></span> Blocked {{ task_status_bar.counts.WAITING if task_status_bar else 0 }}</span>
-        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-surf-300 inline-block"></span> Queued {{ task_status_bar.counts.NOT_STARTED if task_status_bar else 0 }}</span>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-center">
+        <div><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:#2d7a4f"></span> Done<div class="font-bold">{{ task_status_bar.counts.COMPLETED if task_status_bar else 0 }}</div></div>
+        <div><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:#a07d12"></span> Active<div class="font-bold">{{ task_status_bar.counts.IN_PROGRESS if task_status_bar else 0 }}</div></div>
+        <div><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:#b93a3a"></span> Blocked<div class="font-bold">{{ task_status_bar.counts.WAITING if task_status_bar else 0 }}</div></div>
+        <div><span class="w-2.5 h-2.5 rounded-full inline-block" style="background:#7c8694"></span> Queued<div class="font-bold">{{ task_status_bar.counts.NOT_STARTED if task_status_bar else 0 }}</div></div>
       </div>
+      <div class="mt-3 pt-3 border-t border-surf-100 text-xs text-surf-400">Completion rate: <strong class="text-navy-700">{{ kpi.completion_rate }}%</strong></div>
     </div>
 
     {# MH Burndown #}
     <div class="card p-4">
-      <div class="text-sm font-semibold text-navy-900 mb-3">MH Burndown</div>
+      <div class="text-sm font-semibold text-navy-900 mb-6">MH Burndown</div>
       {% if burndown_data and burndown_data.weeks %}
-      <div class="flex items-end gap-2 h-36">
+      <div class="flex items-end gap-1.5 h-28">
         {% for w in burndown_data.weeks %}
-        <div class="flex-1 flex flex-col items-center gap-1">
-          <div class="w-full relative">
-            <div class="w-full bg-surf-100 rounded-t" style="height:{{ w.remaining_h }}px"></div>
-            <div class="w-full {% if loop.last %}bg-gold-500{% else %}bg-navy-500{% endif %} rounded-t" style="height:{{ w.actual_h }}px"></div>
+        <div class="flex-1 flex flex-col items-center gap-0.5">
+          <div class="w-full rounded-t relative" style="height:90px">
+            {% if w.is_forecast %}
+            <div class="absolute inset-x-0 bottom-0 rounded-t" style="height:{{ w.remaining_px }}px;background:#dee4ed;border:2px dashed #c8d1de"></div>
+            {% else %}
+            <div class="absolute inset-x-0 bottom-0 rounded-t" style="height:{{ w.remaining_px }}px;background:#dee4ed"></div>
+            <div class="absolute inset-x-0 bottom-0 rounded-t" style="height:{{ w.actual_px }}px;background:{% if w.is_current %}#c8850a{% else %}#2e5a8a{% endif %}"></div>
+            {% endif %}
           </div>
-          <span class="text-[9px] text-surf-400">{{ w.label }}</span>
-          <span class="text-[10px] font-mono text-navy-700">{{ w.actual }}h</span>
+          <span class="text-[9px] {% if w.is_current %}font-medium text-navy-700{% else %}text-surf-400{% endif %}">{{ w.label }}</span>
+          <span class="text-[10px] font-mono {% if w.is_current %}font-bold text-navy-900{% elif w.is_forecast %}text-surf-400{% else %}text-navy-700{% endif %} leading-none">{% if w.is_forecast %}~{% endif %}{{ w.actual }}h</span>
+          <span class="text-[9px] text-surf-300 leading-none">/ {{ w.remaining }}</span>
         </div>
         {% endfor %}
       </div>
-      <div class="flex gap-3 mt-2 text-[10px] text-surf-400">
-        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded bg-navy-500 inline-block"></span> Actual</span>
-        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded bg-gold-500 inline-block"></span> Current</span>
-        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded bg-surf-100 inline-block"></span> Remaining</span>
+      <div class="flex items-center gap-4 mt-3 text-[10px]">
+        <span class="flex items-center gap-1.5"><span class="w-3 h-2.5 rounded" style="background:#2e5a8a"></span> Actual MH</span>
+        <span class="flex items-center gap-1.5"><span class="w-3 h-2.5 rounded" style="background:#c8850a"></span> Current Week</span>
+        <span class="flex items-center gap-1.5"><span class="w-3 h-2.5 rounded" style="background:#dee4ed"></span> Remaining MH</span>
+        <span class="flex items-center gap-1.5"><span class="w-3 h-2.5 rounded" style="background:#dee4ed;border:2px dashed #c8d1de"></span> Forecast</span>
       </div>
+      <div class="mt-2 pt-2 border-t border-surf-100 text-xs text-surf-400">Remaining: <strong class="text-navy-700">{{ burndown_data.remaining_mh }} MH</strong> · Pace: <span class="{% if burndown_data.pace == 'on track' %}text-st-green{% elif burndown_data.pace == 'behind' %}text-st-yellow{% else %}text-st-red{% endif %} font-medium">{{ burndown_data.pace }}</span></div>
       {% else %}
       <div class="text-sm text-surf-400 py-8 text-center">No snapshot data</div>
       {% endif %}
@@ -137,43 +160,46 @@
       <div class="text-sm font-semibold text-navy-900 mb-3">Efficiency Metrics</div>
       <div class="space-y-3">
         <div>
-          <div class="flex justify-between text-xs mb-1"><span class="text-surf-400">Productive Ratio</span><span class="font-medium text-st-green">{{ kpi.productive_ratio }}%</span></div>
+          <div class="flex justify-between text-xs mb-1"><span class="text-surf-400">Productive Ratio</span><span class="font-mono font-bold text-st-green">{{ kpi.productive_ratio }}%</span></div>
           <div class="prog-bar h-2"><div class="prog-fill bg-st-green rounded-full" style="width:{{ kpi.productive_ratio }}%"></div></div>
+          <div class="text-[10px] text-surf-400 mt-0.5">Actual MH (excl. waiting) / Total MH logged</div>
         </div>
         <div>
-          <div class="flex justify-between text-xs mb-1"><span class="text-surf-400">OT Ratio</span><span class="font-medium text-gold-500">{{ kpi.ot_ratio }}%</span></div>
+          <div class="flex justify-between text-xs mb-1"><span class="text-surf-400">OT Ratio</span><span class="font-mono font-bold text-gold-600">{{ kpi.ot_ratio }}%</span></div>
           <div class="prog-bar h-2"><div class="prog-fill bg-gold-500 rounded-full" style="width:{{ kpi.ot_ratio }}%"></div></div>
+          <div class="text-[10px] text-surf-400 mt-0.5">OT hours / Total actual hours</div>
         </div>
         <div>
-          <div class="flex justify-between text-xs mb-1"><span class="text-surf-400">First-Time Completion</span><span class="font-medium text-navy-700">{{ kpi.ftc }}%</span></div>
-          <div class="prog-bar h-2"><div class="prog-fill bg-navy-500 rounded-full" style="width:{{ kpi.ftc }}%"></div></div>
+          <div class="flex justify-between text-xs mb-1"><span class="text-surf-400">First-Time Completion</span><span class="font-mono font-bold text-navy-700">{{ kpi.ftc }}%</span></div>
+          <div class="prog-bar h-2"><div class="prog-fill bg-navy-600 rounded-full" style="width:{{ kpi.ftc }}%"></div></div>
+          <div class="text-[10px] text-surf-400 mt-0.5">Tasks completed without rework or re-open</div>
         </div>
         <div>
-          <div class="flex justify-between text-xs"><span class="text-surf-400">Avg Cycle Time</span><span class="font-medium text-navy-700">{{ kpi.avg_cycle }} weeks</span></div>
+          <div class="flex justify-between text-xs mb-1"><span class="text-surf-400">Avg Cycle Time</span><span class="font-mono font-bold text-navy-700">{{ kpi.avg_cycle }} weeks</span></div>
+          <div class="text-[10px] text-surf-400">From task start → task completed</div>
         </div>
       </div>
     </div>
   </div>
 
   {# ── 2-column: Blockers / Worker Allocation ─────────────────── #}
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  <div class="grid lg:grid-cols-2 gap-4 mb-4">
 
     {# Active Blockers #}
     <div class="card p-4">
-      <div class="flex items-center gap-2 mb-3">
-        <svg class="w-4 h-4 text-st-red" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
-        <span class="text-sm font-semibold text-navy-900">Active Blockers</span>
-        <span class="badge badge-rejected text-[10px] ml-auto">{{ blockers_data.count }} open</span>
+      <div class="flex items-center justify-between mb-3">
+        <div class="text-sm font-semibold text-st-red flex items-center gap-1.5">⚠ Active Blockers</div>
+        <span class="text-[10px] px-2 py-0.5 rounded-full bg-st-redBg text-st-red font-medium">{{ blockers_data.count }} open</span>
       </div>
       <div class="space-y-2">
       {% for b in blockers_data["items"] %}
-        <div class="p-3 rounded-lg {% if b.days_blocked >= 7 %}bg-st-redBg/30 border border-st-red/15{% else %}bg-st-yellowBg/50 border border-gold-200/40{% endif %}">
-          <div class="flex items-start justify-between">
-            <div class="text-sm font-medium text-navy-900">{{ b.task_text | truncate(50) }}</div>
-            <span class="badge badge-rejected text-[10px] shrink-0 ml-2">{{ b.days_blocked }}d</span>
+        <div class="{% if b.days_blocked >= 7 %}bg-st-redBg/30 border border-st-red/15{% else %}bg-st-yellowBg/50 border border-st-yellow/20{% endif %} rounded-lg px-3 py-2.5">
+          <div class="flex items-center justify-between">
+            <div class="text-xs font-medium text-navy-900">{{ b.task_text | truncate(50) }}</div>
+            <span class="text-[10px] {% if b.days_blocked >= 7 %}text-st-red{% else %}text-gold-600{% endif %} font-medium">{{ b.days_blocked }} days</span>
           </div>
           {% if b.critical_issue %}
-          <div class="text-xs text-surf-400 mt-1">{{ b.critical_issue | truncate(80) }}</div>
+          <div class="text-[10px] text-surf-400 mt-0.5">{{ b.critical_issue | truncate(80) }}</div>
           {% endif %}
         </div>
       {% endfor %}
@@ -181,33 +207,36 @@
         <div class="text-sm text-surf-400 py-4 text-center">No active blockers</div>
       {% endif %}
       </div>
+      {% if blockers_data.count > 0 %}
+      <div class="mt-3 pt-3 border-t border-surf-100 text-xs text-surf-400">Avg blocker age: <strong class="text-st-red">{{ blockers_data.avg_age }} days</strong> · Longest: {{ blockers_data.max_age }} days</div>
+      {% endif %}
     </div>
 
     {# Worker Allocation #}
     <div class="card p-4">
       <div class="text-sm font-semibold text-navy-900 mb-3">Worker Allocation</div>
       <div class="space-y-2.5">
-      {% for w in workers_data %}
-        <div class="flex items-center gap-3">
-          <div class="w-32 shrink-0">
-            <div class="text-sm font-medium {% if w.is_unassigned %}text-st-red{% else %}text-navy-900{% endif %} truncate">{{ w.name }}</div>
-            {% if w.employee_no %}<div class="text-[10px] text-surf-400">{{ w.employee_no }}</div>{% endif %}
+      {% for w in workers_data["items"] %}
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="font-medium {% if w.is_unassigned %}text-st-red italic{% endif %}">{{ w.name }}{% if w.employee_no %} <span class="text-surf-400">{{ w.employee_no }}</span>{% endif %}</span>
+            <span class="font-mono {% if w.is_unassigned %}text-st-red{% endif %}">{{ w.mh }} MH <span class="text-surf-400">· {{ w.count }} tasks</span></span>
           </div>
-          <div class="flex-1">
-            <div class="prog-bar h-2">
-              <div class="prog-fill {% if w.is_unassigned %}bg-st-red{% else %}bg-navy-500{% endif %} rounded-full" style="width:{{ w.pct }}%"></div>
-            </div>
-          </div>
-          <div class="w-20 text-right text-xs text-navy-700">
-            <span class="font-mono font-medium">{{ w.mh }}h</span>
-            <span class="text-surf-400 ml-1">{{ w.count }} tasks</span>
-          </div>
+          <div class="prog-bar h-2"><div class="prog-fill {{ w.bar_color }} {{ w.bar_opacity }} rounded-full" style="width:{{ w.pct }}%"></div></div>
         </div>
       {% endfor %}
-      {% if not workers_data %}
+      {% if not workers_data["items"] %}
         <div class="text-sm text-surf-400 py-4 text-center">No assignments</div>
       {% endif %}
       </div>
+      {% if workers_data["items"] %}
+      <div class="mt-3 pt-3 border-t border-surf-100 flex justify-between text-xs">
+        <span class="text-surf-400">Total: <strong class="text-navy-700">{{ workers_data["items"] | length }} workers</strong></span>
+        {% if workers_data.unassigned_tasks > 0 %}
+        <span class="text-st-red font-medium">{{ workers_data.unassigned_tasks }} tasks unassigned</span>
+        {% endif %}
+      </div>
+      {% endif %}
     </div>
   </div>
 
@@ -223,6 +252,9 @@
 </div>
 
 <script>
+function toggleRfoDropdown() {
+  document.getElementById('rfo-dropdown').classList.toggle('hidden');
+}
 function filterRfo(q) {
   const items = document.querySelectorAll('.rfo-item');
   const lq = q.toLowerCase();
@@ -230,7 +262,6 @@ function filterRfo(q) {
     el.style.display = (el.dataset.search || '').toLowerCase().includes(lq) ? '' : 'none';
   });
 }
-// Close dropdown on outside click
 document.addEventListener('click', e => {
   const combo = document.getElementById('rfo-combo');
   const dd = document.getElementById('rfo-dropdown');

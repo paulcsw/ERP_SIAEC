@@ -153,8 +153,11 @@ async def task_manager_page(
     shop_id: int | None = Query(None),
     airline: str | None = Query(None),
     supervisor_id: int | None = Query(None),
+    status: str | None = Query(None),
+    rfo: str | None = Query(None),
+    search: str | None = Query(None),
     page: int = Query(1, ge=1),
-    per_page: int = Query(20, ge=1, le=100),
+    per_page: int = Query(10, ge=1, le=100),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -186,30 +189,83 @@ async def task_manager_page(
             q = q.where(Aircraft.airline != "SQ")
     if supervisor_id:
         q = q.where(TaskItem.assigned_supervisor_id == supervisor_id)
+    if status:
+        q = q.where(TaskSnapshot.status == status)
+    if rfo:
+        q = q.where(WorkPackage.rfo_no == rfo)
+    if search:
+        q = q.where(TaskItem.task_text.ilike(f"%{search}%"))
 
-    # Count
-    count_q = (
-        select(func.count())
+    # Shared filter conditions (applied to count + stats + main query)
+    def _apply_filters(base_q):
+        if meeting_date:
+            base_q = base_q.where(TaskSnapshot.meeting_date == meeting_date)
+        if shop_id:
+            base_q = base_q.where(TaskItem.shop_id == shop_id)
+        if airline:
+            if airline == "SQ":
+                base_q = base_q.where(Aircraft.airline == "SQ")
+            elif airline == "3RD":
+                base_q = base_q.where(Aircraft.airline != "SQ")
+        if supervisor_id:
+            base_q = base_q.where(TaskItem.assigned_supervisor_id == supervisor_id)
+        if status:
+            base_q = base_q.where(TaskSnapshot.status == status)
+        if rfo:
+            base_q = base_q.where(WorkPackage.rfo_no == rfo)
+        if search:
+            base_q = base_q.where(TaskItem.task_text.ilike(f"%{search}%"))
+        return base_q
+
+    # Base joins for count/stats queries
+    def _base_count():
+        return (
+            select(func.count())
+            .select_from(TaskSnapshot)
+            .join(TaskItem, TaskSnapshot.task_id == TaskItem.id)
+            .outerjoin(Aircraft, TaskItem.aircraft_id == Aircraft.id)
+            .outerjoin(WorkPackage, TaskItem.work_package_id == WorkPackage.id)
+            .where(TaskSnapshot.is_deleted == False, TaskItem.is_active == True)
+        )
+
+    total = (await db.execute(_apply_filters(_base_count()))).scalar() or 0
+    total_pages = max(1, (total + per_page - 1) // per_page)
+
+    # ── Summary stats (global for filtered set, not just current page) ──
+    stats_q = (
+        select(
+            TaskSnapshot.status,
+            func.count(),
+            func.coalesce(func.sum(TaskSnapshot.mh_incurred_hours), 0),
+        )
         .select_from(TaskSnapshot)
         .join(TaskItem, TaskSnapshot.task_id == TaskItem.id)
         .outerjoin(Aircraft, TaskItem.aircraft_id == Aircraft.id)
+        .outerjoin(WorkPackage, TaskItem.work_package_id == WorkPackage.id)
         .where(TaskSnapshot.is_deleted == False, TaskItem.is_active == True)
+        .group_by(TaskSnapshot.status)
     )
-    if meeting_date:
-        count_q = count_q.where(TaskSnapshot.meeting_date == meeting_date)
-    if shop_id:
-        count_q = count_q.where(TaskItem.shop_id == shop_id)
-    if airline:
-        if airline == "SQ":
-            count_q = count_q.where(Aircraft.airline == "SQ")
-        elif airline == "3RD":
-            count_q = count_q.where(Aircraft.airline != "SQ")
-    if supervisor_id:
-        count_q = count_q.where(TaskItem.assigned_supervisor_id == supervisor_id)
+    stats_rows = (await db.execute(_apply_filters(stats_q))).all()
+    status_counts = {"NOT_STARTED": 0, "IN_PROGRESS": 0, "WAITING": 0, "COMPLETED": 0}
+    summary_mh = 0.0
+    for s, cnt, mh in stats_rows:
+        status_counts[s] = cnt
+        summary_mh += float(mh)
 
-    total = (await db.execute(count_q)).scalar() or 0
-    total_pages = max(1, (total + per_page - 1) // per_page)
+    overdue_count = (await db.execute(
+        _apply_filters(_base_count()).where(
+            TaskSnapshot.status != "COMPLETED",
+            TaskSnapshot.deadline_date < date.today(),
+        )
+    )).scalar() or 0
 
+    unassigned_count = (await db.execute(
+        _apply_filters(_base_count()).where(
+            TaskItem.assigned_supervisor_id.is_(None),
+        )
+    )).scalar() or 0
+
+    # ── Paginated results ───────────────────────────────────────────
     offset = (page - 1) * per_page
     rows = (
         await db.execute(
@@ -218,8 +274,15 @@ async def task_manager_page(
         )
     ).all()
 
+    # Batch-fetch supervisor names
+    supervisor_ids = {task.assigned_supervisor_id for _, task, _, _, _, _ in rows if task.assigned_supervisor_id}
+    sup_map: dict[int, str] = {}
+    if supervisor_ids:
+        sup_rows = (await db.execute(select(User).where(User.id.in_(supervisor_ids)))).scalars().all()
+        sup_map = {u.id: u.name for u in sup_rows}
+
     snapshots = []
-    rfo_groups: dict[str, list] = {}
+    rfo_groups: dict[str, dict] = {}
     for snap, task, ac, wp, worker, shop in rows:
         d = _snap_to_dict(
             snap, task,
@@ -228,9 +291,49 @@ async def task_manager_page(
             worker_name=worker.name if worker else None,
             shop_code=shop.code if shop else None,
         )
+        d["assigned_supervisor"] = sup_map.get(task.assigned_supervisor_id)
+        d["wp_title"] = wp.title if wp else None
         snapshots.append(d)
+
         rfo_key = wp.rfo_no if wp and wp.rfo_no else "No RFO"
-        rfo_groups.setdefault(rfo_key, []).append(d)
+        if rfo_key not in rfo_groups:
+            rfo_groups[rfo_key] = {
+                "rfo_no": rfo_key,
+                "ac_reg": ac.ac_reg if ac else "",
+                "title": wp.title if wp else "",
+                "tasks": [],
+            }
+        rfo_groups[rfo_key]["tasks"].append(d)
+
+    # Enrich RFO groups with computed metadata
+    rfo_list = []
+    for rfo_key, grp in rfo_groups.items():
+        tasks_in_grp = grp["tasks"]
+        grp_mh = sum(t["mh_incurred_hours"] for t in tasks_in_grp)
+        assigned = sum(1 for t in tasks_in_grp if t.get("assigned_supervisor"))
+        updated = sum(1 for t in tasks_in_grp if t.get("supervisor_updated_at"))
+        grp_status = {"NOT_STARTED": 0, "IN_PROGRESS": 0, "WAITING": 0, "COMPLETED": 0}
+        for t in tasks_in_grp:
+            grp_status[t["status"]] = grp_status.get(t["status"], 0) + 1
+        n = len(tasks_in_grp) or 1
+        rfo_list.append({
+            **grp,
+            "total_mh": round(grp_mh, 1),
+            "assigned_count": assigned,
+            "updated_count": updated,
+            "status_counts": grp_status,
+            "pct_not_started": round(grp_status["NOT_STARTED"] / n * 100),
+            "pct_in_progress": round(grp_status["IN_PROGRESS"] / n * 100),
+            "pct_waiting": round(grp_status["WAITING"] / n * 100),
+            "pct_completed": round(grp_status["COMPLETED"] / n * 100),
+        })
+
+    # All RFOs for filter dropdown
+    all_rfos = (await db.execute(
+        select(WorkPackage.rfo_no, WorkPackage.title)
+        .where(WorkPackage.status == "ACTIVE", WorkPackage.rfo_no.isnot(None))
+        .order_by(WorkPackage.rfo_no)
+    )).all()
 
     return templates.TemplateResponse("tasks/manager.html", _ctx(
         request, current_user,
@@ -238,12 +341,21 @@ async def task_manager_page(
         meeting_date=meeting_date or "",
         shop_id=shop_id,
         airline_filter=airline or "",
+        supervisor_id=supervisor_id,
+        status_filter=status or "",
+        rfo_filter=rfo or "",
+        search_filter=search or "",
         shops=shops,
         supervisors=supervisors,
         aircraft_list=aircraft_list,
         work_packages=work_packages,
+        all_rfos=all_rfos,
         snapshots=snapshots,
-        rfo_groups=rfo_groups,
+        rfo_list=rfo_list,
+        status_counts=status_counts,
+        summary_mh=round(summary_mh, 1),
+        overdue_count=overdue_count,
+        unassigned_count=unassigned_count,
         total=total,
         per_page=per_page,
         page_num=page,

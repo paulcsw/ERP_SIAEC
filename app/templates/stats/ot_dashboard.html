@@ -6,90 +6,115 @@
 <div class="p-4 lg:p-5 flex flex-col h-full w-full overflow-y-auto">
 
   {# ── Header + Filters ─────────────────────────────────────── #}
-  <div class="flex items-center justify-between mb-4">
-    <h1 class="text-lg font-semibold text-navy-900">OT Dashboard</h1>
-    <div class="flex items-center gap-2">
-      <input type="month" class="inp h-9 text-sm" value="{{ month_label }}"
-             onchange="location.href='/stats/ot?month='+this.value"/>
+  <div class="flex items-center justify-between mb-3 shrink-0">
+    <div>
+      <h1 class="text-lg font-semibold text-navy-900">OT Dashboard</h1>
+      <p class="text-xs text-surf-400">Overtime statistics &amp; monthly compliance</p>
+    </div>
+    <div class="flex gap-2">
+      <select class="inp h-8 text-xs" onchange="applyOtFilter();" id="ot-month">
+        {% for m in months %}
+        <option value="{{ m.value }}" {% if m.value == month_label %}selected{% endif %}>{{ m.label }}</option>
+        {% endfor %}
+      </select>
+      <select class="inp h-8 text-xs" onchange="applyOtFilter();" id="ot-team">
+        <option value="">All Teams</option>
+        {% for t in teams %}
+        <option value="{{ t }}" {% if t == team_filter %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
     </div>
   </div>
 
   {# ── Summary KPI Cards (4 cols) ────────────────────────────── #}
-  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 shrink-0">
     <div class="card p-3">
-      <div class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Total OT Hours</div>
-      <div class="text-2xl font-bold text-navy-900">{{ summary.total_hours }}h</div>
+      <span class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Total OT Hours</span>
+      <div class="text-2xl font-bold text-navy-900 mt-1">{{ summary.total_hours }}h</div>
     </div>
     <div class="card p-3">
-      <div class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Approved</div>
-      <div class="text-2xl font-bold text-st-green">{{ summary.approved_hours }}h</div>
+      <span class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Approved</span>
+      <div class="text-2xl font-bold text-st-green mt-1">{{ summary.approved_hours }}h</div>
     </div>
     <div class="card p-3">
-      <div class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Pending / Endorsed</div>
-      <div class="text-2xl font-bold text-st-purple">{{ summary.pending_endorsed_hours }}h</div>
+      <span class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Pending/Endorsed</span>
+      <div class="text-2xl font-bold text-st-purple mt-1">{{ summary.pending_endorsed_hours }}h</div>
     </div>
     <div class="card p-3">
-      <div class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Avg Turnaround</div>
-      <div class="text-2xl font-bold text-navy-900">{{ summary.avg_turnaround }}h</div>
+      <span class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Avg Turnaround</span>
+      <div class="text-2xl font-bold text-navy-900 mt-1">{{ summary.avg_turnaround }}h</div>
     </div>
   </div>
 
   {# ── Individual Monthly OT vs 72h Limit (full-width) ───────── #}
-  <div class="card p-4 mb-4">
-    <div class="flex items-center justify-between mb-3">
-      <div class="text-sm font-semibold text-navy-900">Individual Monthly OT vs 72h Limit</div>
-      <div class="flex items-center gap-3 text-[10px] text-surf-400">
-        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-navy-600 inline-block"></span> Safe</span>
-        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-gold-500 inline-block"></span> Warning</span>
-        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-st-red inline-block"></span> At Limit</span>
-      </div>
-    </div>
-    <div class="space-y-2.5">
-    {% for u in usage_list %}
-      <div class="flex items-center gap-3">
-        <div class="w-32 shrink-0">
-          <div class="text-sm font-medium text-navy-900 truncate">{{ u.name }}</div>
-          <div class="text-[10px] text-surf-400">{{ u.employee_no }}</div>
+  <div class="grid lg:grid-cols-2 gap-4 mb-4">
+    <div class="card p-4 lg:col-span-2">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <div class="text-sm font-semibold text-navy-900">Individual Monthly OT vs 72h Limit</div>
+          <div class="text-[11px] text-surf-400 mt-0.5">{{ month_display }} · {% if team_filter %}{{ team_filter }}{% else %}All Teams{% endif %} · Employment Act Part IV compliance</div>
         </div>
-        <div class="flex-1">
-          <div class="prog-bar h-2.5">
-            <div class="prog-fill {{ u.bar_color }} rounded-full" style="width:{{ [u.pct, 100] | min }}%"></div>
+        <div class="flex items-center gap-3 text-[10px]">
+          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-st-green"></span> Safe (&lt;50%)</span>
+          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-gold-500"></span> Warning (&gt;70%)</span>
+          <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-st-red"></span> At Limit</span>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
+      {% for u in usage_list %}
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="font-medium">{{ u.name }} <span class="text-surf-400">{{ u.employee_no }}</span></span>
+            {% if u.pct >= 100 %}
+            <span class="font-mono text-st-red font-bold">{{ u.used_hours }}h / {{ u.limit_hours }}h ({{ u.pct }}%)</span>
+            {% else %}
+            <span class="font-mono">{{ u.used_hours }}h / {{ u.limit_hours }}h <span class="{{ u.pct_color }} font-bold">({{ u.pct }}%)</span></span>
+            {% endif %}
           </div>
+          <div class="prog-bar h-2.5"><div class="prog-fill {{ u.bar_color }} rounded-full" style="width:{{ [u.pct, 100] | min }}%"></div></div>
+          {% if u.pct >= 100 %}
+          <div class="text-[10px] text-st-red mt-0.5 font-medium">Limit reached — no further OT allowed this month</div>
+          {% else %}
+          <div class="text-[10px] text-surf-400 mt-0.5">Remaining: {{ u.remaining_hours }}h · ~{{ u.sessions_left }} OT sessions left</div>
+          {% endif %}
         </div>
-        <div class="w-12 text-right text-sm font-mono font-medium text-navy-700">{{ u.pct }}%</div>
-        <div class="w-24 text-right text-[10px] text-surf-400">{{ u.remaining_hours }}h left</div>
+      {% endfor %}
+      {% if not usage_list %}
+        <div class="sm:col-span-2 text-sm text-surf-400 py-4 text-center">No OT data for this period</div>
+      {% endif %}
       </div>
-    {% endfor %}
-    {% if not usage_list %}
-      <div class="text-sm text-surf-400 py-4 text-center">No OT data for this period</div>
-    {% endif %}
+      {% if usage_list %}
+      <div class="mt-4 pt-3 border-t border-surf-100 flex items-center justify-between text-xs">
+        <span class="text-surf-400">Team average: <strong class="text-navy-700">{{ usage_footer.team_avg }}h</strong> ({{ usage_footer.team_avg_pct }}%)</span>
+        <span class="text-st-red font-medium">{% if usage_footer.at_limit %}{{ usage_footer.at_limit }} worker{{ 's' if usage_footer.at_limit != 1 }} at limit{% endif %}{% if usage_footer.at_limit and usage_footer.above_warning %} · {% endif %}{% if usage_footer.above_warning %}{{ usage_footer.above_warning }} worker{{ 's' if usage_footer.above_warning != 1 }} above 70%{% endif %}</span>
+      </div>
+      {% endif %}
     </div>
   </div>
 
   {# ── 3-column: Pipeline / By Reason / Weekly Trend ─────────── #}
-  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+  <div class="grid lg:grid-cols-3 gap-4 mb-4">
 
     {# Approval Pipeline #}
     <div class="card p-4">
       <div class="text-sm font-semibold text-navy-900 mb-3">Approval Pipeline</div>
-      <div class="space-y-2.5">
+      <div class="space-y-3">
         {% set pipe_items = [
-          ("Submitted", pipeline.submitted, "bg-surf-300"),
-          ("Endorsed", pipeline.endorsed, "bg-st-purple"),
-          ("Approved", pipeline.approved, "bg-st-green"),
-          ("Rejected", pipeline.rejected, "bg-st-red"),
+          ("Submitted", pipeline.submitted, "bg-surf-300", "text-navy-700"),
+          ("Endorsed", pipeline.endorsed, "bg-st-purple", "text-white"),
+          ("Approved", pipeline.approved, "bg-st-green", "text-white"),
+          ("Rejected", pipeline.rejected, "bg-st-red", "text-white"),
         ] %}
-        {% set pipe_max = [pipeline.submitted, 1] | max %}
-        {% for label, count, color in pipe_items %}
-        <div class="flex items-center gap-2">
+        {% for label, count, color, text_color in pipe_items %}
+        <div class="flex items-center gap-3">
           <div class="w-20 text-xs text-surf-400">{{ label }}</div>
-          <div class="flex-1 prog-bar h-2">
-            <div class="prog-fill {{ color }} rounded-full" style="width:{{ (count / pipe_max * 100) | round }}%"></div>
+          <div class="flex-1 prog-bar h-5">
+            <div class="prog-fill {{ color }} flex items-center px-2 text-[10px] font-medium {{ text_color }}" style="width:{{ (count / pipe_max * 100) | round }}%">{% if count > 0 %}{{ count }}{% endif %}</div>
           </div>
-          <div class="w-8 text-right text-xs font-mono font-medium text-navy-700">{{ count }}</div>
         </div>
         {% endfor %}
       </div>
+      <div class="mt-3 pt-3 border-t border-surf-100 text-xs text-surf-400">Conversion: {{ pipeline.conversion }}% submitted → approved</div>
     </div>
 
     {# OT by Reason #}
@@ -97,28 +122,30 @@
       <div class="text-sm font-semibold text-navy-900 mb-3">OT by Reason Code</div>
       <div class="space-y-2.5">
         {% for r in reason_bars %}
-        <div class="flex items-center gap-2">
-          <div class="w-28 text-xs text-surf-400 truncate">{{ r.code | replace('_', ' ') | title }}</div>
-          <div class="flex-1 prog-bar h-2">
-            <div class="prog-fill {{ reason_colors.get(r.code, 'bg-surf-300') }} rounded-full" style="width:{{ r.pct }}%"></div>
+        <div class="flex items-center gap-3">
+          <div class="w-28 text-xs text-surf-400">{{ r.code | replace('_', ' ') | title }}</div>
+          <div class="flex-1 prog-bar h-5">
+            <div class="prog-fill {{ reason_colors.get(r.code, 'bg-surf-300') }} flex items-center px-2 text-[10px] font-medium {{ reason_text_colors.get(r.code, 'text-navy-700') }}" style="width:{{ r.pct }}%">{{ r.hours }}h</div>
           </div>
-          <div class="w-10 text-right text-xs font-mono font-medium text-navy-700">{{ r.hours }}h</div>
         </div>
         {% endfor %}
         {% if not reason_bars %}
         <div class="text-sm text-surf-400 py-4 text-center">No data</div>
         {% endif %}
       </div>
+      {% if leading_reason %}
+      <div class="mt-3 pt-3 border-t border-surf-100 text-xs text-surf-400">{{ leading_reason }} is the leading OT driver ({{ leading_reason_pct }}%)</div>
+      {% endif %}
     </div>
 
     {# Weekly OT Trend #}
     <div class="card p-4">
       <div class="text-sm font-semibold text-navy-900 mb-3">Weekly OT Trend</div>
-      <div class="flex items-end gap-3 h-40">
+      <div class="flex items-end gap-2 h-28">
         {% for w in weekly %}
         <div class="flex-1 flex flex-col items-center gap-1">
-          <div class="w-full {{ week_colors[loop.index0 % (week_colors | length)] }} rounded-t transition-all" style="height:{{ w.height }}px"></div>
-          <span class="text-[9px] text-surf-400">{{ w.label }}</span>
+          <div class="w-full rounded-t" style="height:{{ w.height }}px;background:{{ w.bg_hex }}"></div>
+          <span class="text-[9px] {% if w.is_current %}font-medium text-navy-700{% else %}text-surf-400{% endif %}">{{ w.label }}</span>
           <span class="text-[10px] font-mono text-navy-700">{{ w.hours }}h</span>
         </div>
         {% endfor %}
@@ -126,8 +153,26 @@
         <div class="text-sm text-surf-400 py-4 text-center w-full">No data</div>
         {% endif %}
       </div>
+      {% if weekly %}
+      <div class="mt-3 pt-3 border-t border-surf-100 flex justify-between text-xs">
+        <span class="text-surf-400">Month total: <strong class="text-navy-700">{{ weekly_footer.month_total }}h</strong></span>
+        {% if weekly_footer.trend_text %}
+        <span class="{{ weekly_footer.trend_color }} font-medium">{{ weekly_footer.trend_text }}</span>
+        {% endif %}
+      </div>
+      {% endif %}
     </div>
 
   </div>
 </div>
+
+<script>
+function applyOtFilter() {
+  const month = document.getElementById('ot-month').value;
+  const team = document.getElementById('ot-team').value;
+  let url = '/stats/ot?month=' + month;
+  if (team) url += '&team=' + encodeURIComponent(team);
+  location.href = url;
+}
+</script>
 {% endblock %}

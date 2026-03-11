@@ -14,6 +14,12 @@ from app.views import templates
 
 router = APIRouter(tags=["stats-views"])
 
+LIMIT_HOURS = round(MONTHLY_LIMIT_MINUTES / 60, 1)
+
+# Hex colors for weekly bars (light → dark navy), last week uses gold
+_WEEK_HEX = ["#d5dde8", "#aebdd2", "#5a7ba3", "#2e5a8a", "#1e3a5f"]
+_WEEK_GOLD = "#c8850a"
+
 
 def _ctx(request, user, **kw):
     page = kw.pop("active_page", "ot_stats")
@@ -32,10 +38,25 @@ def _ctx(request, user, **kw):
     }
 
 
+def _month_options() -> list[dict]:
+    """Generate last 6 months as dropdown options."""
+    y, m = date.today().year, date.today().month
+    opts = []
+    for _ in range(6):
+        d = date(y, m, 1)
+        opts.append({"value": d.strftime("%Y-%m"), "label": d.strftime("%B %Y")})
+        m -= 1
+        if m <= 0:
+            m = 12
+            y -= 1
+    return opts
+
+
 @router.get("/stats/ot")
 async def ot_stats_page(
     request: Request,
     month: str | None = Query(None),
+    team: str | None = Query(None),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -44,12 +65,24 @@ async def ot_stats_page(
 
     first, last = _parse_month(month)
     month_label = first.strftime("%Y-%m")
+    month_display = first.strftime("%B %Y")
+    months = _month_options()
 
-    # ── Summary KPIs ───────────────────────────────────────────────
+    # Teams for dropdown
+    team_rows = (await db.execute(
+        select(User.team).where(User.team.isnot(None), User.is_active == True).distinct()  # noqa: E712
+    )).scalars().all()
+    teams = sorted(t for t in team_rows if t)
+
+    # ── OT query (filtered by role & team) ────────────────────
     q = select(OtRequest).where(OtRequest.date >= first, OtRequest.date <= last)
     if "ADMIN" not in roles:
         uids = await _team_user_ids(db, current_user.get("team"))
         q = q.where(OtRequest.user_id.in_(uids))
+    elif team:
+        uids = await _team_user_ids(db, team)
+        if uids:
+            q = q.where(OtRequest.user_id.in_(uids))
 
     rows = (await db.execute(q)).scalars().all()
 
@@ -81,43 +114,73 @@ async def ot_stats_page(
         "avg_turnaround": avg_turnaround,
     }
 
-    # ── Individual Monthly Usage (top 6) ───────────────────────────
-    if "ADMIN" in roles:
-        user_rows = (await db.execute(select(User).where(User.is_active == True))).scalars().all()
-    else:
-        user_rows = (await db.execute(
-            select(User).where(User.team == current_user.get("team"), User.is_active == True)
-        )).scalars().all()
+    # ── Individual Monthly Usage (top 6) ───────────────────────
+    user_q = select(User).where(User.is_active == True)  # noqa: E712
+    if "ADMIN" not in roles:
+        user_q = user_q.where(User.team == current_user.get("team"))
+    elif team:
+        user_q = user_q.where(User.team == team)
+
+    user_rows_list = (await db.execute(user_q)).scalars().all()
 
     usage_list: list[dict] = []
-    for u in user_rows:
+    for u in user_rows_list:
         used = (await db.execute(
             select(func.coalesce(func.sum(OtRequest.requested_minutes), 0)).where(
                 OtRequest.user_id == u.id, OtRequest.date >= first, OtRequest.date <= last,
                 OtRequest.status.in_(COUNTABLE_STATUSES),
             )
         )).scalar() or 0
+        used_hours = round(used / 60, 1)
         pct = round(used / MONTHLY_LIMIT_MINUTES * 100, 1) if MONTHLY_LIMIT_MINUTES else 0
+        remaining = round(max(0, MONTHLY_LIMIT_MINUTES - used) / 60, 1)
+        sessions_left = int(remaining / 3.5) if remaining > 0 else 0
+
+        if pct >= 100:
+            bar_color = "bg-st-red"
+            pct_color = "text-st-red"
+        elif used_hours >= 60:
+            bar_color = "bg-gold-500"
+            pct_color = "text-gold-500"
+        else:
+            bar_color = "bg-st-blue"
+            pct_color = "text-st-blue"
+
         usage_list.append({
             "name": u.name, "employee_no": u.employee_no,
-            "used_hours": round(used / 60, 1),
-            "limit_hours": round(MONTHLY_LIMIT_MINUTES / 60, 1),
+            "used_hours": used_hours,
+            "limit_hours": LIMIT_HOURS,
             "pct": pct,
-            "remaining_hours": round(max(0, MONTHLY_LIMIT_MINUTES - used) / 60, 1),
-            "bar_color": "bg-st-red" if pct >= 100 else "bg-gold-500" if pct >= 70 else "bg-navy-600",
+            "remaining_hours": remaining,
+            "sessions_left": sessions_left,
+            "bar_color": bar_color,
+            "pct_color": pct_color,
         })
     usage_list.sort(key=lambda x: -x["pct"])
     usage_list = usage_list[:6]
 
-    # ── Approval Pipeline ──────────────────────────────────────────
+    # Usage footer
+    all_used = [u["used_hours"] for u in usage_list]
+    team_avg = round(sum(all_used) / len(all_used), 1) if all_used else 0
+    team_avg_pct = round(team_avg / LIMIT_HOURS * 100, 1) if LIMIT_HOURS else 0
+    at_limit_count = sum(1 for u in usage_list if u["pct"] >= 100)
+    above_warning_count = sum(1 for u in usage_list if u["pct"] >= 70)
+    usage_footer = {
+        "team_avg": team_avg, "team_avg_pct": team_avg_pct,
+        "at_limit": at_limit_count, "above_warning": above_warning_count,
+    }
+
+    # ── Approval Pipeline ──────────────────────────────────────
     pipeline = {
-        "submitted": sum(1 for r in rows),
+        "submitted": sum(1 for _ in rows),
         "endorsed": sum(1 for r in rows if r.status == "ENDORSED"),
         "approved": sum(1 for r in rows if r.status == "APPROVED"),
         "rejected": sum(1 for r in rows if r.status == "REJECTED"),
     }
+    pipe_max = max(pipeline["submitted"], 1)
+    pipeline["conversion"] = round(pipeline["approved"] / pipeline["submitted"] * 100) if pipeline["submitted"] else 0
 
-    # ── By Reason ──────────────────────────────────────────────────
+    # ── By Reason ──────────────────────────────────────────────
     by_reason: dict[str, int] = {}
     for r in rows:
         if r.status in COUNTABLE_STATUSES:
@@ -131,8 +194,14 @@ async def ot_stats_page(
         "BACKLOG": "bg-navy-600", "SCHEDULE_PRESSURE": "bg-navy-400",
         "AOG": "bg-st-red", "MANPOWER_SHORTAGE": "bg-gold-500", "OTHER": "bg-surf-300",
     }
+    reason_text_colors = {
+        "BACKLOG": "text-white", "SCHEDULE_PRESSURE": "text-white",
+        "AOG": "text-white", "MANPOWER_SHORTAGE": "text-navy-900", "OTHER": "text-navy-700",
+    }
+    leading_reason = reason_bars[0]["code"].replace("_", " ").title() if reason_bars else None
+    leading_reason_pct = round(reason_bars[0]["pct"]) if reason_bars else 0
 
-    # ── Weekly Trend ───────────────────────────────────────────────
+    # ── Weekly Trend ──────────────────────────────────────────
     weekly: list[dict] = []
     ws = first
     wk = 1
@@ -146,20 +215,58 @@ async def ot_stats_page(
         weekly.append({"label": f"W{wk}", "hours": h})
         ws = we + timedelta(days=1)
         wk += 1
-    for w in weekly:
-        w["height"] = max(4, int(w["hours"] / max_h * 120)) if max_h else 4
 
-    week_colors = ["bg-navy-200", "bg-navy-300", "bg-navy-500", "bg-gold-500", "bg-navy-400"]
+    bar_max_px = 112
+    total_weeks = len(weekly)
+    for i, w in enumerate(weekly):
+        w["height"] = max(4, int(w["hours"] / max_h * bar_max_px)) if max_h else 4
+        is_last = (i == total_weeks - 1)
+        if is_last:
+            w["bg_hex"] = _WEEK_GOLD
+        else:
+            shade_idx = min(int(i / max(total_weeks - 1, 1) * (len(_WEEK_HEX) - 1)), len(_WEEK_HEX) - 1)
+            w["bg_hex"] = _WEEK_HEX[shade_idx]
+        w["is_current"] = is_last
+
+    # Weekly footer
+    peak_w = max(weekly, key=lambda x: x["hours"]) if weekly else None
+    last_w = weekly[-1] if weekly else None
+    if peak_w and last_w and peak_w["hours"] > 0 and last_w is not peak_w:
+        change_pct = round((last_w["hours"] - peak_w["hours"]) / peak_w["hours"] * 100)
+        if change_pct < 0:
+            trend_text = f"\u2193 {abs(change_pct)}% from {peak_w['label']} peak"
+            trend_color = "text-st-green"
+        else:
+            trend_text = f"\u2191 {change_pct}% from {peak_w['label']}"
+            trend_color = "text-st-red"
+    else:
+        trend_text = ""
+        trend_color = ""
+
+    weekly_footer = {
+        "month_total": summary["total_hours"],
+        "trend_text": trend_text,
+        "trend_color": trend_color,
+    }
 
     return templates.TemplateResponse("stats/ot_dashboard.html", _ctx(
         request, current_user,
         month_label=month_label,
+        month_display=month_display,
+        months=months,
+        team_filter=team or "",
+        teams=teams,
         summary=summary,
         usage_list=usage_list,
+        usage_footer=usage_footer,
         pipeline=pipeline,
+        pipe_max=pipe_max,
         reason_bars=reason_bars,
         reason_colors=reason_colors,
+        reason_text_colors=reason_text_colors,
+        leading_reason=leading_reason,
+        leading_reason_pct=leading_reason_pct,
         weekly=weekly,
-        week_colors=week_colors,
+        weekly_footer=weekly_footer,
         is_sup_or_admin=is_sup_or_admin,
     ))

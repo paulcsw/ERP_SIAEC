@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — CIS ERP{% endblock %}
+{% block breadcrumb %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="p-4 lg:p-5 flex flex-col h-full w-full overflow-y-auto">
+  <div class="flex items-center justify-between mb-4 shrink-0">
+    <div>
+      <h1 class="text-lg font-semibold text-navy-900">Dashboard</h1>
+      <p class="text-xs text-surf-400 mt-0.5">CIS &middot; {{ current_user.team or 'All Shops' }} &middot; {{ month_label }}</p>
+    </div>
+  </div>
+
+  <!-- KPI row -->
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4 shrink-0">
+    <div class="card p-3">
+      <span class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Active Tasks</span>
+      <div class="flex items-end gap-2 mt-1">
+        <span class="text-2xl font-bold text-navy-900">{{ active_tasks }}</span>
+      </div>
+    </div>
+    <div class="card p-3">
+      <span class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">OT Pending</span>
+      <div class="flex items-end gap-2 mt-1">
+        <span class="text-2xl font-bold text-gold-500">{{ ot_pending }}</span>
+        <span class="text-[11px] text-gold-500 font-medium">awaiting 1st review</span>
+      </div>
+    </div>
+    <div class="card p-3">
+      <span class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">OT Endorsed</span>
+      <div class="flex items-end gap-2 mt-1">
+        <span class="text-2xl font-bold text-st-purple">{{ ot_endorsed }}</span>
+        <span class="text-[11px] text-st-purple font-medium">awaiting approval</span>
+      </div>
+    </div>
+    <div class="card p-3">
+      <span class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Critical Issues</span>
+      <div class="flex items-end gap-2 mt-1">
+        <span class="text-2xl font-bold text-st-red">{{ critical_issues }}</span>
+      </div>
+    </div>
+    <div class="card p-3">
+      <span class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Total MH</span>
+      <div class="flex items-end gap-2 mt-1">
+        <span class="text-2xl font-bold text-navy-900">{{ total_mh }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid lg:grid-cols-3 gap-4 flex-1 min-h-0">
+    <!-- Monthly OT Quota Widget -->
+    <div class="card flex flex-col">
+      <div class="px-4 py-3 border-b border-surf-100 flex items-center justify-between shrink-0">
+        <div>
+          <h3 class="font-semibold text-sm text-navy-900">Monthly OT Quota</h3>
+          <p class="text-[11px] text-surf-400">{{ month_label }} &middot; Employment Act 72h limit</p>
+        </div>
+      </div>
+      <div class="p-4 space-y-3 flex-1 overflow-y-auto">
+        <!-- Team member OT bars -->
+        <div class="space-y-2.5">
+          {% for u in usage_list %}
+          <div>
+            <div class="flex justify-between text-xs mb-1">
+              <span class="font-medium text-navy-900">{{ u.name }} <span class="text-surf-400">{{ u.employee_no }}</span></span>
+              <span class="font-mono text-navy-700{% if u.at_limit %} text-st-red font-bold{% endif %}">{{ u.used_hours }}h / {{ u.limit_hours }}h</span>
+            </div>
+            <div class="prog-bar"><div class="prog-fill {{ u.bar_color }}" style="width:{{ [u.pct, 100] | min }}%"></div></div>
+            {% if u.at_limit %}
+            <div class="text-[10px] text-st-red mt-0.5 font-medium">Monthly limit reached</div>
+            {% endif %}
+          </div>
+          {% endfor %}
+          {% if not usage_list %}
+          <p class="text-xs text-surf-400">No users found</p>
+          {% endif %}
+        </div>
+        {% if usage_list %}
+        <hr class="border-surf-100">
+        <div class="flex justify-between text-sm">
+          <span class="text-surf-400">Team average</span>
+          <span class="font-bold text-navy-700">{{ avg_hours }}h / {{ limit_hours }}h</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- RFO Progress Tracker -->
+    <div class="card flex flex-col min-h-0">
+      <div class="px-4 py-3 border-b border-surf-100 flex items-center justify-between shrink-0">
+        <div>
+          <h3 class="font-semibold text-sm text-navy-900">RFO Progress</h3>
+          <p class="text-[11px] text-surf-400">Active work packages &middot; task completion</p>
+        </div>
+        <a href="/tasks" class="btn-outline btn-sm text-xs">View all</a>
+      </div>
+      <div class="flex-1 overflow-y-auto p-3 space-y-2.5">
+        {% for rfo in rfo_list %}
+        <a href="/rfo/{{ rfo.rfo_no }}" class="block rounded-lg border border-surf-200 p-3 hover:border-surf-300 cursor-pointer transition-colors">
+          <div class="flex items-center justify-between mb-1.5">
+            <div class="flex items-center gap-2">
+              <span class="font-mono text-xs font-semibold text-navy-900">{{ rfo.rfo_no }}</span>
+              <span class="font-mono text-[10px] bg-surf-100 px-1.5 py-0.5 rounded text-surf-400">{{ rfo.ac_reg }}</span>
+            </div>
+            {% if rfo.overdue > 0 %}
+            <span class="text-[10px] text-st-red font-medium">{{ rfo.overdue }} overdue</span>
+            {% else %}
+            <span class="text-[10px] {{ rfo.status_class }} font-medium">{{ rfo.status_label }}</span>
+            {% endif %}
+          </div>
+          <div class="text-xs text-navy-700 mb-2">{{ rfo.description or '' }}</div>
+          <div class="flex h-2 rounded-full overflow-hidden bg-surf-100 mb-1.5">
+            {% if rfo.done_pct > 0 %}<div class="bg-st-green" style="width:{{ rfo.done_pct }}%"></div>{% endif %}
+            {% if rfo.active_pct > 0 %}<div class="bg-st-yellow" style="width:{{ rfo.active_pct }}%"></div>{% endif %}
+            {% if rfo.wait_pct > 0 %}<div class="bg-st-red" style="width:{{ rfo.wait_pct }}%"></div>{% endif %}
+          </div>
+          <div class="flex items-center justify-between text-[10px]">
+            <div class="flex gap-2.5">
+              <span class="text-st-green font-medium">{{ rfo.done }} done</span>
+              <span class="text-st-yellow font-medium">{{ rfo.active }} active</span>
+              {% if rfo.wait > 0 %}<span class="text-st-red font-medium">{{ rfo.wait }} wait</span>{% endif %}
+              {% if rfo.open > 0 %}<span class="text-surf-400">{{ rfo.open }} open</span>{% endif %}
+            </div>
+            <span class="font-mono text-navy-700 font-medium">{{ rfo.mh }} / {{ rfo.planned_mh }}h</span>
+          </div>
+        </a>
+        {% endfor %}
+
+        {% if not rfo_list %}
+        <p class="text-xs text-surf-400 p-2">No active work packages</p>
+        {% endif %}
+
+        {% if rfo_list %}
+        <!-- Summary row -->
+        <div class="pt-1.5 mt-0.5 border-t border-surf-100 flex items-center justify-between text-xs">
+          <span class="text-surf-400">{{ rfo_count }} active RFOs &middot; {{ grand_total_tasks }} total tasks</span>
+          <span class="font-semibold text-navy-700">{{ grand_total_mh }} / {{ grand_planned_mh }}h <span class="text-st-green font-medium">{{ rfo_overall_pct }}%</span></span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- OT Summary + Approval Pipeline -->
+    <div class="card flex flex-col min-h-0">
+      <div class="px-4 py-3 border-b border-surf-100 shrink-0">
+        <h3 class="font-semibold text-sm text-navy-900">OT Approval Pipeline</h3>
+        <p class="text-[11px] text-surf-400">2-Stage Workflow</p>
+      </div>
+      <div class="p-4 space-y-3 text-sm flex-1">
+        <!-- Pipeline visualization -->
+        <div class="flex items-center gap-2 text-xs">
+          <div class="flex-1 text-center p-2 rounded-lg bg-st-yellowBg">
+            <div class="text-lg font-bold text-st-yellow">{{ pipeline_pending }}</div>PENDING
+          </div>
+          <svg class="w-4 h-4 text-surf-300 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          <div class="flex-1 text-center p-2 rounded-lg bg-st-purpleBg">
+            <div class="text-lg font-bold text-st-purple">{{ pipeline_endorsed }}</div>ENDORSED
+          </div>
+          <svg class="w-4 h-4 text-surf-300 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          <div class="flex-1 text-center p-2 rounded-lg bg-st-greenBg">
+            <div class="text-lg font-bold text-st-green">{{ pipeline_approved }}</div>APPROVED
+          </div>
+        </div>
+        <hr class="border-surf-100">
+        <div class="flex justify-between"><span class="text-surf-400">This month total</span><span class="font-semibold">{{ month_total_hours }}h</span></div>
+        <div class="flex justify-between"><span class="text-surf-400">Rejected</span><span class="font-semibold text-st-red">{{ pipeline_rejected }}</span></div>
+        <div class="flex justify-between"><span class="text-surf-400">Avg turnaround</span><span class="font-semibold">{{ avg_turnaround }}h</span></div>
+        <a href="/stats/ot" class="btn-primary w-full btn-sm text-center text-xs mt-2 inline-block">View Full Report &rarr;</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -51,9 +51,26 @@ async def rfo_index(
         acs = (await db.execute(select(Aircraft).where(Aircraft.id.in_(ac_ids)))).scalars().all()
         ac_map = {a.id: a for a in acs}
 
+    # Batch task counts per WP for dropdown enrichment
+    wp_ids = [wp.id for wp in wps]
+    rfo_stats: dict[int, dict] = {wid: {"count": 0, "mh": 0.0} for wid in wp_ids}
+    if wp_ids:
+        rows = (await db.execute(
+            select(
+                TaskItem.work_package_id,
+                func.count().label("cnt"),
+                func.coalesce(func.sum(TaskItem.planned_mh), 0).label("mh"),
+            ).where(
+                TaskItem.work_package_id.in_(wp_ids), TaskItem.is_active == True  # noqa: E712
+            ).group_by(TaskItem.work_package_id)
+        )).all()
+        for r in rows:
+            rfo_stats[r[0]] = {"count": r[1], "mh": round(float(r[2]), 1)}
+
     rfo_options = []
     for wp in wps:
         ac = ac_map.get(wp.aircraft_id)
+        stats = rfo_stats.get(wp.id, {"count": 0, "mh": 0.0})
         rfo_options.append({
             "id": wp.id,
             "rfo_no": wp.rfo_no or f"WP-{wp.id}",
@@ -61,11 +78,12 @@ async def rfo_index(
             "ac_reg": ac.ac_reg if ac else None,
             "airline": ac.airline if ac else None,
             "status": wp.status,
+            "task_count": stats["count"],
+            "planned_mh": stats["mh"],
         })
 
     # Selected RFO
     selected = None
-    metrics = None
     summary_strip = None
     kpi = None
     blockers_data = None
@@ -84,16 +102,17 @@ async def rfo_index(
             }
             summary_strip = {
                 "ac_reg": ac.ac_reg if ac else "N/A",
+                "ac_type": wp.title or "N/A",
                 "airline": ac.airline if ac else "N/A",
-                "start_date": wp.start_date.isoformat() if wp.start_date else "–",
-                "end_date": wp.end_date.isoformat() if wp.end_date else "–",
+                "start_date": wp.start_date.isoformat() if wp.start_date else "\u2013",
+                "end_date": wp.end_date.isoformat() if wp.end_date else "\u2013",
                 "days_remaining": (wp.end_date - date.today()).days if wp.end_date else None,
                 "priority": wp.priority or 0,
             }
 
             # Tasks
             tasks = (await db.execute(
-                select(TaskItem).where(TaskItem.work_package_id == wp.id, TaskItem.is_active == True)
+                select(TaskItem).where(TaskItem.work_package_id == wp.id, TaskItem.is_active == True)  # noqa: E712
             )).scalars().all()
 
             planned_mh = sum(float(t.planned_mh or 0) for t in tasks)
@@ -112,7 +131,7 @@ async def rfo_index(
             for ti in tasks:
                 snap = (await db.execute(
                     select(TaskSnapshot)
-                    .where(TaskSnapshot.task_id == ti.id, TaskSnapshot.is_deleted == False)
+                    .where(TaskSnapshot.task_id == ti.id, TaskSnapshot.is_deleted == False)  # noqa: E712
                     .order_by(TaskSnapshot.meeting_date.desc()).limit(1)
                 )).scalar_one_or_none()
                 if not snap:
@@ -146,13 +165,13 @@ async def rfo_index(
                 first_ip = (await db.execute(
                     select(func.min(TaskSnapshot.meeting_date)).where(
                         TaskSnapshot.task_id == ti.id, TaskSnapshot.status == "IN_PROGRESS",
-                        TaskSnapshot.is_deleted == False,
+                        TaskSnapshot.is_deleted == False,  # noqa: E712
                     )
                 )).scalar()
                 last_comp = (await db.execute(
                     select(func.max(TaskSnapshot.meeting_date)).where(
                         TaskSnapshot.task_id == ti.id, TaskSnapshot.status == "COMPLETED",
-                        TaskSnapshot.is_deleted == False,
+                        TaskSnapshot.is_deleted == False,  # noqa: E712
                     )
                 )).scalar()
                 if first_ip and last_comp and last_comp >= first_ip:
@@ -173,6 +192,7 @@ async def rfo_index(
             ftc = round(completed / total_tasks * 100, 1) if total_tasks else 0
             avg_cycle = round(sum(cycle_times) / len(cycle_times), 1) if cycle_times else 0
             plan_pct = round(actual_mh / planned_mh * 100) if planned_mh else 0
+            completion_rate = round(completed / total_tasks * 100, 1) if total_tasks else 0
 
             kpi = {
                 "total_tasks": total_tasks, "planned_mh": round(planned_mh, 1),
@@ -182,6 +202,9 @@ async def rfo_index(
                 "blocker_count": blocker_count,
                 "productive_ratio": prod_ratio, "ftc": ftc, "avg_cycle": avg_cycle,
                 "unassigned": unassigned,
+                "assigned_count": total_tasks - unassigned,
+                "completion_rate": completion_rate,
+                "remaining_mh": round(max(0, planned_mh - actual_mh), 1),
             }
 
             # Task status bar percentages
@@ -192,7 +215,14 @@ async def rfo_index(
 
             # Blockers
             blocker_list.sort(key=lambda x: -x["days_blocked"])
-            blockers_data = {"count": blocker_count, "items": blocker_list[:5]}
+            avg_age = round(sum(b["days_blocked"] for b in blocker_list) / len(blocker_list), 1) if blocker_list else 0
+            max_age = max((b["days_blocked"] for b in blocker_list), default=0)
+            blockers_data = {
+                "count": blocker_count,
+                "items": blocker_list[:5],
+                "avg_age": avg_age,
+                "max_age": max_age,
+            }
 
             # Worker allocation
             user_ids = [wid for wid in worker_agg if wid is not None]
@@ -202,6 +232,7 @@ async def rfo_index(
                 users_map = {u.id: u for u in us}
 
             total_alloc_mh = sum(d["mh"] for d in worker_agg.values()) or 1
+            navy_shades = ["bg-navy-600", "bg-navy-400", "bg-navy-200", "bg-navy-100", "bg-navy-50"]
             workers_list = []
             for wid, d in worker_agg.items():
                 u = users_map.get(wid) if wid else None
@@ -212,8 +243,23 @@ async def rfo_index(
                     "pct": round(d["mh"] / total_alloc_mh * 100),
                     "is_unassigned": wid is None,
                 })
-            workers_list.sort(key=lambda x: -x["mh"])
-            workers_data = workers_list[:5]
+            workers_list.sort(key=lambda x: (x["is_unassigned"], -x["mh"]))
+            # Assign color shades
+            idx = 0
+            for w in workers_list:
+                if w["is_unassigned"]:
+                    w["bar_color"] = "bg-st-red"
+                    w["bar_opacity"] = "opacity-50"
+                else:
+                    w["bar_color"] = navy_shades[min(idx, len(navy_shades) - 1)]
+                    w["bar_opacity"] = ""
+                    idx += 1
+
+            unassigned_tasks = sum(w["count"] for w in workers_list if w["is_unassigned"])
+            workers_data = {
+                "items": workers_list[:6],
+                "unassigned_tasks": unassigned_tasks,
+            }
 
             # Burndown
             task_ids = [t.id for t in tasks]
@@ -221,23 +267,57 @@ async def rfo_index(
             if task_ids:
                 snaps = (await db.execute(
                     select(TaskSnapshot).where(
-                        TaskSnapshot.task_id.in_(task_ids), TaskSnapshot.is_deleted == False,
+                        TaskSnapshot.task_id.in_(task_ids), TaskSnapshot.is_deleted == False,  # noqa: E712
                     ).order_by(TaskSnapshot.meeting_date)
                 )).scalars().all()
                 by_week: dict[date, float] = {}
                 for s in snaps:
                     by_week[s.meeting_date] = by_week.get(s.meeting_date, 0) + float(s.mh_incurred_hours or 0)
                 max_mh = planned_mh or 1
-                for i, md in enumerate(sorted(by_week.keys())):
+                bar_max = 90
+                sorted_weeks = sorted(by_week.keys())
+                for i, md in enumerate(sorted_weeks):
                     cum = by_week[md]
                     rem = max(0, planned_mh - cum)
+                    is_last = (i == len(sorted_weeks) - 1)
+                    actual_px = max(4, min(bar_max, int(cum / max_mh * bar_max)))
+                    remaining_px = max(4, min(bar_max, int(rem / max_mh * bar_max)))
                     burndown_weeks.append({
-                        "label": f"W{i+1}", "date": md.isoformat(),
-                        "actual": round(cum, 1), "remaining": round(rem, 1),
-                        "actual_h": max(4, int(cum / max_mh * 120)),
-                        "remaining_h": max(4, int(rem / max_mh * 120)),
+                        "label": f"W{i + 1}",
+                        "date": md.isoformat(),
+                        "actual": round(cum, 1),
+                        "remaining": round(rem, 1),
+                        "actual_px": actual_px,
+                        "remaining_px": remaining_px,
+                        "is_current": is_last,
+                        "is_forecast": False,
                     })
-            burndown_data = {"planned_mh": round(planned_mh, 1), "weeks": burndown_weeks}
+                # Add forecast week if remaining > 0
+                if burndown_weeks and burndown_weeks[-1]["remaining"] > 0:
+                    rem = burndown_weeks[-1]["remaining"]
+                    remaining_px = max(4, min(bar_max, int(rem / max_mh * bar_max)))
+                    burndown_weeks.append({
+                        "label": f"W{len(burndown_weeks) + 1}",
+                        "date": None,
+                        "actual": round(planned_mh, 1),
+                        "remaining": round(rem, 1),
+                        "actual_px": 0,
+                        "remaining_px": remaining_px,
+                        "is_current": False,
+                        "is_forecast": True,
+                    })
+
+            pace = "on track"
+            if plan_pct > 100:
+                pace = "over budget"
+            elif total_tasks and completion_rate < 30 and plan_pct > 60:
+                pace = "behind"
+            burndown_data = {
+                "planned_mh": round(planned_mh, 1),
+                "remaining_mh": round(max(0, planned_mh - actual_mh), 1),
+                "pace": pace,
+                "weeks": burndown_weeks,
+            }
 
     return templates.TemplateResponse("rfo/detail.html", _ctx(
         request, current_user,

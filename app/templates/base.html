@@ -104,6 +104,17 @@ body{font-family:'Outfit',system-ui,sans-serif;background:#f5f7fa;color:#1a2332;
 ::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:#c8d1de;border-radius:3px}
+/* Sidebar collapse */
+.sidebar.collapsed{width:60px}
+.sidebar.collapsed .hide-col{display:none}
+.sidebar.collapsed .nav-item{justify-content:center;padding:10px}
+.sidebar.collapsed .nav-item svg{margin:0}
+.sidebar.collapsed .nav-section{padding:16px 0 4px;text-align:center;font-size:9px}
+.sidebar.collapsed .sidebar-top-fixed{justify-content:center;padding:10px !important}
+.main-wrap.expanded{margin-left:60px;width:calc(100vw - 60px)}
+/* Modal overlay */
+.modal-overlay{position:fixed;inset:0;background:rgba(15,31,51,.5);z-index:100;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-overlay.open{opacity:1;pointer-events:auto}
 /* Side panel */
 .side-panel{position:fixed;top:0;right:-480px;width:480px;height:100vh;background:#fff;border-left:1px solid #dee4ed;z-index:50;transition:right .3s ease;overflow-y:auto;box-shadow:-4px 0 20px rgba(0,0,0,.08)}
 .side-panel.open{right:0}
@@ -111,6 +122,7 @@ body{font-family:'Outfit',system-ui,sans-serif;background:#f5f7fa;color:#1a2332;
 /* ===== Mobile Responsive (<768px) ===== */
 @media(max-width:767px){
   .sidebar{display:none!important}
+  .main-wrap,.main-wrap.expanded{margin-left:0;width:100vw}
   .main-wrap{display:none!important}
   #mobile-app{display:flex!important;flex-direction:column;height:100vh;width:100vw;overflow:hidden}
   #mobile-app .mob-content{flex:1;overflow:hidden;padding-bottom:calc(56px + env(safe-area-inset-bottom))}
@@ -192,86 +204,90 @@ html[data-font-size="xlarge"] #mobile-app{font-size:20px}
 
 {# ===== DESKTOP SIDEBAR ===== #}
 <aside class="sidebar" id="sidebar">
-  <div style="background:#ffffff;padding:12px 14px 10px;display:flex;align-items:center;gap:10px">
-    <div style="flex:1;min-width:0">
-      <div style="font-weight:600;font-size:13px;letter-spacing:0.4px;color:#1e3a5f;line-height:1.3">CIS ERP Portal</div>
-      <div style="font-size:10px;color:#5c7a94;line-height:1.3;margin-top:1px">SIA Engineering Company</div>
+  <div class="sidebar-top-fixed" style="background:#ffffff;padding:12px 14px 10px;display:flex;align-items:center;gap:10px">
+    <div class="hide-col" style="flex:1;min-width:0">
+      <div style="font-weight:600;font-size:13px;letter-spacing:0.4px;color:#1e3a5f;line-height:1.3">CIS ERP</div>
+      <div style="font-size:10px;color:#5c7a94;line-height:1.3;margin-top:1px">Component Inspection Section</div>
     </div>
+    <button onclick="toggleCollapse()" class="p-1.5 rounded shrink-0 hide-col" style="color:#5c7a94;background:transparent;border:none;cursor:pointer" title="Collapse sidebar"
+      onmouseover="this.style.background='rgba(30,58,95,0.08)'" onmouseout="this.style.background='transparent'">
+      <svg id="collapse-icon" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/></svg>
+    </button>
   </div>
   <div style="height:1px;background:#dee4ed"></div>
   <nav class="flex-1 overflow-y-auto py-1">
 
     {# -- Main -- #}
-    <div class="nav-section">Main</div>
+    <div class="nav-section hide-col">Main</div>
     <a href="/dashboard" class="nav-item {% if page == 'dashboard' %}active{% endif %}">
       <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 16a1 1 0 011-1h4a1 1 0 011 1v3a1 1 0 01-1 1H5a1 1 0 01-1-1v-3zM14 13a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1h-4a1 1 0 01-1-1v-5z"/></svg>
-      <span>Dashboard</span>
+      <span class="hide-col">Dashboard</span>
     </a>
 
     {# -- Tasks -- #}
-    <div class="nav-section">Tasks</div>
+    <div class="nav-section hide-col">Tasks</div>
     <a href="/tasks" class="nav-item {% if page == 'tasks' %}active{% endif %}">
       <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
-      <span>Task Manager</span>
+      <span class="hide-col">Task Manager</span>
     </a>
     <a href="/tasks/entry" class="nav-item {% if page == 'tasks_entry' %}active{% endif %}">
       <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-      <span>Data Entry</span>
+      <span class="hide-col">Data Entry</span>
     </a>
 
     {# -- Overtime -- #}
-    <div class="nav-section">Overtime</div>
+    <div class="nav-section hide-col">Overtime</div>
     <a href="/ot/new" class="nav-item {% if page == 'ot_new' %}active{% endif %}">
       <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-      <span>OT Request</span>
+      <span class="hide-col">OT Request</span>
     </a>
     <a href="/ot" class="nav-item {% if page == 'ot_list' %}active{% endif %}">
       <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
-      <span>OT List</span>
+      <span class="hide-col">OT List</span>
     </a>
     {% if 'ADMIN' in current_user.roles %}
     <a href="/admin/ot-approve" class="nav-item {% if page == 'ot_approve' %}active{% endif %}">
       <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-      <span>OT Approve</span>
+      <span class="hide-col">OT Approve</span>
     </a>
     {% endif %}
     <a href="/stats/ot" class="nav-item {% if page == 'ot_stats' %}active{% endif %}">
       <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-      <span>OT Dashboard</span>
+      <span class="hide-col">OT Dashboard</span>
     </a>
 
     {# -- Admin -- #}
-    <div class="nav-section">Admin</div>
+    <div class="nav-section hide-col">Admin</div>
     {% if 'ADMIN' in current_user.roles %}
     <a href="/admin/users" class="nav-item {% if page == 'users' %}active{% endif %}">
       <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-      <span>Personnel</span>
+      <span class="hide-col">Personnel</span>
     </a>
     <a href="/admin/reference" class="nav-item {% if page == 'reference' %}active{% endif %}">
       <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7C5 4 4 5 4 7zm0 5h16"/></svg>
-      <span>Reference Data</span>
+      <span class="hide-col">Reference Data</span>
     </a>
     <a href="/admin/shops" class="nav-item {% if page == 'shops' %}active{% endif %}">
       <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 3h18v4H3V3zm0 4v14h18V7M8 11h8"/></svg>
-      <span>Shops</span>
+      <span class="hide-col">Shops</span>
     </a>
     <a href="/admin/shop-access" class="nav-item {% if page == 'shop_access' %}active{% endif %}">
       <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
-      <span>Shop Access</span>
+      <span class="hide-col">Shop Access</span>
     </a>
     {% endif %}
     <a href="/rfo" class="nav-item {% if page == 'rfo' %}active{% endif %}">
       <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-      <span>RFO Detail</span>
+      <span class="hide-col">RFO Detail</span>
     </a>
     {% if 'ADMIN' in current_user.roles %}
     <a href="/admin/settings" class="nav-item {% if page == 'settings' %}active{% endif %}">
       <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-      <span>Settings</span>
+      <span class="hide-col">Settings</span>
     </a>
     {% endif %}
   </nav>
-  <div class="p-3 border-t border-white/10">
+  <div class="p-3 border-t border-white/10 hide-col">
     <div class="flex items-center gap-3">
       <div class="w-8 h-8 rounded-full bg-navy-600 flex items-center justify-center text-xs font-semibold text-white">{{ current_user.display_name[:2] | upper }}</div>
       <div class="flex-1 min-w-0">
@@ -335,18 +351,37 @@ html[data-font-size="xlarge"] #mobile-app{font-size:20px}
 </div>
 
 {# ===== TOAST ===== #}
-<div id="toast-container" class="fixed top-4 right-4 z-[200] space-y-2"></div>
+<div id="toast-container" class="fixed top-14 right-4 z-[200] space-y-2"></div>
 <script>
+/* Sidebar collapse */
+function toggleCollapse(){
+  const sb=document.getElementById('sidebar');
+  const mw=document.getElementById('main-wrap');
+  const ic=document.getElementById('collapse-icon');
+  sb.classList.toggle('collapsed');
+  mw.classList.toggle('expanded');
+  if(ic) ic.style.transform=sb.classList.contains('collapsed')?'rotate(180deg)':'';
+}
+/* Modal system */
+function showModal(id){document.getElementById(id).classList.add('open')}
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+/* Close modals on overlay click */
+document.addEventListener('DOMContentLoaded',function(){
+  document.querySelectorAll('.modal-overlay').forEach(function(m){
+    m.addEventListener('click',function(e){if(e.target===m)m.classList.remove('open')});
+  });
+});
+
+/* Toast */
 function showToast(title, msg, color) {
   const c = document.getElementById('toast-container');
-  const bg = color === 'green' ? '#ecf7f0' : color === 'red' ? '#fdf0f0' : '#fdf5e0';
-  const tc = color === 'green' ? '#2d7a4f' : color === 'red' ? '#b93a3a' : '#a07d12';
+  const bgCls = color === 'green' ? 'bg-st-greenBg border-st-green/30' : color === 'red' ? 'bg-st-redBg border-st-red/30' : 'bg-st-blueBg border-st-blue/30';
+  const tcCls = color === 'green' ? 'text-st-green' : color === 'red' ? 'text-st-red' : 'text-st-blue';
   const el = document.createElement('div');
-  el.className = 'toast-anim card p-3 shadow-lg';
-  el.style.minWidth = '260px';
-  el.innerHTML = `<div class="text-sm font-semibold" style="color:${tc}">${title}</div><div class="text-xs text-surf-400 mt-0.5">${msg}</div>`;
+  el.className = 'toast-anim card px-4 py-3 border ' + bgCls + ' shadow-lg w-72';
+  el.innerHTML = '<div class="flex items-start gap-2"><div class="flex-1"><div class="text-xs font-semibold ' + tcCls + '">' + title + '</div><div class="text-[11px] text-surf-400 mt-0.5">' + msg + '</div></div><button onclick="this.closest(\'.toast-anim\').remove()" class="text-surf-400 hover:text-navy-700 text-xs mt-0.5">\u2715</button></div>';
   c.appendChild(el);
-  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }, 3000);
+  setTimeout(function(){ el.remove(); }, 4000);
 }
 
 /* Font size persistence */

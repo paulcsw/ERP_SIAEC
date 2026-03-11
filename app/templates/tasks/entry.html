@@ -21,6 +21,11 @@
 .status-btn.active-waiting{background:#fdf5e0;color:#a07d12;border-color:#d4a017}
 .status-btn.active-completed{background:#ecf7f0;color:#2d7a4f;border-color:#2d7a4f}
 .quick-update-card{background:#fff;border:1px solid #dee4ed;border-left:4px solid #c8850a;border-radius:10px}
+/* Modal-entry-task: mobile full-screen */
+@media(max-width:767px){
+  #modal-entry-task .modal-entry-task-card{width:100%!important;height:100vh!important;max-height:100vh!important;border-radius:0!important;display:flex;flex-direction:column}
+  #modal-entry-task .modal-entry-task-card>div:nth-child(2){flex:1;overflow-y:auto;max-height:none!important}
+}
 </style>
 {% endblock %}
 
@@ -106,7 +111,7 @@
         <h3 class="text-lg font-semibold text-navy-900">{{ selected_ac }}</h3>
         <p class="text-xs text-surf-400">{{ selected_rfo or 'All RFOs' }} &middot; {{ tasks | length if tasks else 0 }} tasks</p>
       </div>
-      <button class="btn-primary btn-sm" onclick="document.getElementById('addTaskModal').classList.remove('hidden')">
+      <button class="btn-primary btn-sm" onclick="showModal('modal-entry-task')">
         <svg class="w-4 h-4 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
         Add Task
       </button>
@@ -239,7 +244,7 @@
       <div class="text-center py-16 text-surf-400">
         <svg class="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
         <p class="text-sm">No tasks found for {{ selected_ac }}.</p>
-        <button class="btn-primary btn-sm mt-3" onclick="document.getElementById('addTaskModal').classList.remove('hidden')">Add First Task</button>
+        <button class="btn-primary btn-sm mt-3" onclick="showModal('modal-entry-task')">Add First Task</button>
       </div>
       {% else %}
       <div class="text-center py-16 text-surf-400">
@@ -251,64 +256,71 @@
   </div>
 </div>
 
-{# ── Add Task Modal ── #}
-<div id="addTaskModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/30" onclick="if(event.target===this)this.classList.add('hidden')">
-  <div class="card p-6 w-full max-w-lg mx-4 shadow-xl" onclick="event.stopPropagation()">
-    <div class="flex items-center justify-between mb-4">
-      <h3 class="text-lg font-semibold text-navy-900">Add Task</h3>
-      <button onclick="this.closest('#addTaskModal').classList.add('hidden')" class="p-1 rounded hover:bg-surf-50">
-        <svg class="w-5 h-5 text-surf-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-      </button>
-    </div>
-    <form hx-post="/api/tasks" hx-target="body"
-          hx-on::after-request="if(event.detail.successful){this.closest('#addTaskModal').classList.add('hidden');showToast('Created','Task added','green')}">
-      {% if selected_ac_id %}
-      <input type="hidden" name="aircraft_id" value="{{ selected_ac_id }}">
-      {% endif %}
-      <div class="space-y-3">
-        <div>
-          <label class="text-xs font-medium text-surf-400 block mb-1">Description</label>
-          <textarea name="task_text" class="inp w-full text-sm" rows="3" required placeholder="Task description..."></textarea>
+{# ── Add Task Modal (modal-overlay pattern) ── #}
+<div class="modal-overlay" id="modal-entry-task">
+  <div class="card w-full sm:w-[420px] modal-entry-task-card" onclick="event.stopPropagation()">
+    <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between shrink-0">
+      <div>
+        <div class="flex items-center gap-2">
+          <button class="sm:hidden flex items-center gap-1 text-navy-600" onclick="closeModal('modal-entry-task')">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+          </button>
+          <h3 class="font-semibold text-navy-900">Add Task</h3>
         </div>
-        <div class="grid grid-cols-2 gap-3">
+        {% if selected_ac %}
+        <div class="text-[11px] text-surf-400 mt-0.5">{{ selected_ac }} · {{ shop_context or 'All Shops' }}</div>
+        {% endif %}
+      </div>
+      <button onclick="closeModal('modal-entry-task')" class="text-surf-400 hover:text-navy-700 text-lg hidden sm:block">&times;</button>
+    </div>
+    <div class="p-5 space-y-3 overflow-y-auto" style="max-height:calc(100vh - 160px)">
+      <form id="entryTaskForm" hx-post="/api/tasks" hx-target="body"
+            hx-on::after-request="if(event.detail.successful){closeModal('modal-entry-task');showToast('Created','Task added','green')}">
+        {% if selected_ac_id %}
+        <input type="hidden" name="aircraft_id" value="{{ selected_ac_id }}">
+        {% endif %}
+        <div class="space-y-3">
           <div>
-            <label class="text-xs font-medium text-surf-400 block mb-1">Status</label>
-            <select name="status" class="inp w-full text-sm">
+            <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Task Description *</label>
+            <textarea name="task_text" class="inp w-full h-16 text-sm resize-none" required placeholder="Describe the task..."></textarea>
+          </div>
+          <div>
+            <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Status</label>
+            <select name="status" class="inp w-full h-9 text-sm">
               <option value="NOT_STARTED">Not Started</option>
               <option value="IN_PROGRESS">In Progress</option>
               <option value="WAITING">Waiting</option>
             </select>
           </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Estimated MH</label>
+              <input type="number" name="planned_mh" class="inp w-full h-9 text-sm font-mono" step="0.5" min="0" placeholder="0.0">
+            </div>
+            <div>
+              <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Assign Worker</label>
+              <select name="assigned_worker_id" class="inp w-full h-9 text-sm">
+                <option value="">-- Unassigned --</option>
+                {% for w in workers %}
+                <option value="{{ w.id }}">{{ w.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
           <div>
-            <label class="text-xs font-medium text-surf-400 block mb-1">Deadline</label>
-            <input type="date" name="deadline_date" class="inp w-full text-sm">
+            <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Deadline</label>
+            <input type="date" name="deadline_date" class="inp w-full h-9 text-sm">
+          </div>
+          <div>
+            <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Remarks</label>
+            <textarea name="remarks" class="inp w-full h-12 text-sm resize-none" placeholder="Optional notes..."></textarea>
           </div>
         </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-xs font-medium text-surf-400 block mb-1">Estimated MH</label>
-            <input type="number" name="planned_mh" class="inp w-full text-sm" step="0.5" min="0" placeholder="0.0">
-          </div>
-          <div>
-            <label class="text-xs font-medium text-surf-400 block mb-1">Assign Worker</label>
-            <select name="assigned_worker_id" class="inp w-full text-sm">
-              <option value="">Unassigned</option>
-              {% for w in workers %}
-              <option value="{{ w.id }}">{{ w.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-        </div>
-        <div>
-          <label class="text-xs font-medium text-surf-400 block mb-1">Remarks</label>
-          <textarea name="remarks" class="inp w-full text-sm" rows="2" placeholder="Optional remarks..."></textarea>
-        </div>
-      </div>
-      <div class="flex justify-end gap-2 pt-4">
-        <button type="button" class="btn-outline" onclick="this.closest('#addTaskModal').classList.add('hidden')">Cancel</button>
-        <button type="submit" class="btn-primary">Add Task</button>
-      </div>
-    </form>
+      </form>
+    </div>
+    <div class="px-5 py-4 border-t border-surf-100 shrink-0">
+      <button class="btn-gold w-full h-10" onclick="document.getElementById('entryTaskForm').requestSubmit()">Create Task</button>
+    </div>
   </div>
 </div>
 

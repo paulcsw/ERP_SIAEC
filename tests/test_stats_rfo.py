@@ -604,3 +604,76 @@ async def test_mobile_m4_route(async_client, db):
     resp = await async_client.get("/tasks/entry/mobile/m4")
     assert resp.status_code == 200
     assert "Add Task" in resp.text
+
+
+# ── Dashboard SSR tests ──────────────────────────────────────────────────
+
+async def test_dashboard_root_redirect(async_client, db):
+    """GET / redirects to /dashboard."""
+    resp = await async_client.get("/", follow_redirects=False)
+    assert resp.status_code == 302
+    assert "/dashboard" in resp.headers["location"]
+
+
+async def test_dashboard_page(async_client, db):
+    """GET /dashboard returns 200 with KPI widgets."""
+    resp = await async_client.get("/dashboard")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "Dashboard" in body
+    assert "Active Tasks" in body
+    assert "OT Pending" in body
+    assert "OT Endorsed" in body
+    assert "Critical Issues" in body
+    assert "Total MH" in body
+    assert "Monthly OT Quota" in body
+    assert "RFO Progress" in body
+    assert "OT Approval Pipeline" in body
+
+
+async def test_dashboard_unauthenticated(async_anon_client, db):
+    """Unauthenticated user gets 401 on /dashboard."""
+    resp = await async_anon_client.get("/dashboard")
+    assert resp.status_code == 401
+
+
+# ── Task Manager enhanced SSR tests ──────────────────────────────────
+
+async def test_task_manager_page(async_client, db):
+    """GET /tasks returns 200 with all 3 view containers and filters."""
+    resp = await async_client.get("/tasks")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "Task Manager" in body
+    # 3 view tabs
+    assert "task-view-table" in body
+    assert "task-view-kanban" in body
+    assert "task-view-rfo" in body
+    # Progress bar
+    assert "tasks" in body
+    # Filters
+    assert "All Shops" in body
+    assert "All Status" in body
+    # Modals
+    assert "modal-new-task" in body
+    assert "modal-import-rfo" in body
+    assert "modal-bulk-assign" in body
+    # Detail panel
+    assert "split-detail" in body
+
+
+async def test_task_manager_with_data(rfo_env, async_client, db):
+    """GET /tasks with seeded data shows tasks and summary stats."""
+    resp = await async_client.get("/tasks")
+    assert resp.status_code == 200
+    body = resp.text
+    # Should show tasks from rfo_env
+    assert "NOT_STARTED" in body or "Not Started" in body
+    # Summary bar should have MH
+    assert "MH" in body
+
+
+async def test_task_manager_status_filter(async_client, db):
+    """GET /tasks?status=COMPLETED returns 200."""
+    resp = await async_client.get("/tasks?status=COMPLETED")
+    assert resp.status_code == 200

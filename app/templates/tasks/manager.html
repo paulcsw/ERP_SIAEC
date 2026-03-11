@@ -1,457 +1,562 @@
 {% extends "base.html" %}
 
-{% block title %}Task Manager - CIS ERP{% endblock %}
+{% block title %}Task Manager — CIS ERP{% endblock %}
 {% block breadcrumb %}Tasks &rsaquo; Task Manager{% endblock %}
 
 {% block head %}
 <style>
-.task-tbl{table-layout:fixed;width:100%}
-.task-tbl .col-acrfo{width:130px}
-.task-tbl .col-task{width:auto}
-.task-tbl .col-assigned{width:100px}
-.task-tbl .col-status{width:100px}
-.task-tbl .col-mh{width:90px}
-.task-tbl .col-deadline{width:90px}
-.task-tbl .col-actions{width:50px}
-/* Kanban columns */
-.kanban-col{flex:1;min-width:0;background:#f5f7fa;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px}
-.kanban-card{background:#fff;border:1px solid #dee4ed;border-radius:8px;padding:12px;cursor:pointer;transition:box-shadow .15s}
-.kanban-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.08)}
+/* Kanban */
+.kanban-col{flex:1;min-width:220px;background:#f5f7fa;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;min-height:0;overflow-y:auto}
+.kanban-col.drag-over{background:#e8ecf2;outline:2px dashed #2e5a8a;outline-offset:-2px}
+.kanban-card{background:#fff;border:1px solid #dee4ed;border-radius:8px;padding:10px 12px;cursor:pointer;transition:box-shadow .15s,transform .1s}
+.kanban-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.08);transform:translateY(-1px)}
+.kanban-card .drag-handle{cursor:grab;opacity:.3;transition:opacity .15s}
+.kanban-card:hover .drag-handle{opacity:.7}
+.kanban-drop-zone{min-height:40px;border:2px dashed transparent;border-radius:8px;transition:all .15s}
+.kanban-col.drag-over .kanban-drop-zone{border-color:#2e5a8a;background:rgba(46,90,138,.05)}
+/* Split detail overlay */
+.split-detail{background:#fff;position:fixed;right:0;top:0;bottom:0;z-index:50;box-shadow:-4px 0 20px rgba(0,0,0,.08);transform:translateX(100%);transition:transform .25s ease}
+.split-detail.open{transform:translateX(0)}
+.split-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.12);z-index:49;opacity:0;transition:opacity .25s ease;pointer-events:none}
+.split-backdrop.open{opacity:1;pointer-events:auto}
 /* RFO accordion */
-.rfo-group-header{cursor:pointer;user-select:none}
-.rfo-group-header:hover{background:#eef1f6}
-.rfo-group-body{display:none}
-.rfo-group-body.open{display:table-row-group}
+.rfo-group{border:1px solid #dee4ed;border-radius:10px;background:#fff;flex-shrink:0}
+.rfo-header{padding:14px 18px;background:#fff;cursor:pointer;display:flex;align-items:flex-start;gap:10px;transition:background .15s;border-bottom:1px solid transparent;border-radius:10px}
+.rfo-header:hover{background:#f8fafb}
+.rfo-group.open .rfo-header{border-bottom:1px solid #eef1f6;border-radius:10px 10px 0 0}
+/* View pill tabs */
+.view-pill{display:inline-flex;background:#eef1f6;border-radius:8px;padding:3px;gap:2px}
+.tab-btn{padding:6px 14px;font-size:12px;font-weight:500;border-radius:6px;cursor:pointer;transition:all .15s;border:1px solid transparent;background:transparent;color:#5a7ba3}
+.tab-btn:hover{background:#eef1f6;color:#1e3a5f}
+.tab-btn.active{background:#fff;color:#1e3a5f;border-color:#dee4ed;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+/* Timeline dot */
+.timeline-dot{width:10px;height:10px;border-radius:50%;border:2px solid #fff;position:absolute;left:-5px;top:4px}
+/* Row selection */
+.row-sel{background:#eef2f7!important}
+/* Deadline warning pulse */
+.dl-warn{animation:pulse-warn 2s infinite}
+@keyframes pulse-warn{0%,100%{opacity:1}50%{opacity:.6}}
+/* Filter bar responsiveness */
+.filter-bar .inp,.filter-bar select{min-width:0}
+/* Modal overlay */
+.modal-overlay{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-overlay.open{opacity:1;pointer-events:auto}
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="p-4 lg:p-5 flex flex-col gap-4 h-full">
-
+<div class="flex flex-col h-full w-full overflow-hidden">
   {# ── Header ── #}
-  <div class="flex items-start justify-between gap-4">
-    <div>
-      <h1 class="text-xl font-semibold text-navy-900">Task Manager</h1>
-      <p class="text-sm text-surf-400 mt-0.5">Create, distribute, and audit tasks across shops</p>
+  <div class="p-4 pb-0 shrink-0">
+    <div class="flex items-center justify-between mb-3">
+      <div>
+        <h1 class="text-lg font-semibold text-navy-900">Task Manager</h1>
+        <p class="text-xs text-surf-400">Create, distribute, and audit tasks across shops</p>
+      </div>
+      <div class="flex gap-2">
+        <button class="btn-outline btn-sm text-xs flex items-center gap-1" onclick="showModal('modal-import-rfo')">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+          Import RFO
+        </button>
+        <button class="btn-gold btn-sm text-xs" onclick="showModal('modal-new-task')">+ Create &amp; Assign</button>
+      </div>
     </div>
-    <div class="flex items-center gap-2">
-      <button class="btn-outline btn-sm" onclick="document.getElementById('importRfoModal').classList.remove('hidden')">
-        <svg class="w-4 h-4 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-        Import RFO
-      </button>
-      <button class="btn-primary btn-sm" onclick="document.getElementById('createModal').classList.remove('hidden')">
-        <svg class="w-4 h-4 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-        Create &amp; Assign
-      </button>
+
+    {# ── Filters bar ── #}
+    <div class="flex items-center gap-2 flex-wrap mb-3 filter-bar">
+      <select id="f-shop" class="inp h-8 text-xs" onchange="applyFilters()">
+        <option value="">All Shops</option>
+        {% for s in shops %}
+        <option value="{{ s.id }}" {% if shop_id == s.id %}selected{% endif %}>{{ s.code }}</option>
+        {% endfor %}
+      </select>
+      <select id="f-supervisor" class="inp h-8 text-xs" onchange="applyFilters()">
+        <option value="">All Supervisors</option>
+        {% for sv in supervisors %}
+        <option value="{{ sv.id }}" {% if supervisor_id == sv.id %}selected{% endif %}>{{ sv.name }}</option>
+        {% endfor %}
+      </select>
+      <input type="date" id="f-date" value="{{ meeting_date }}" class="inp h-8 text-xs" onchange="applyFilters()">
+      <select id="f-airline" class="inp h-8 text-xs" onchange="applyFilters()">
+        <option value="">All Airlines</option>
+        <option value="SQ" {% if airline_filter == 'SQ' %}selected{% endif %}>SQ</option>
+        <option value="3RD" {% if airline_filter == '3RD' %}selected{% endif %}>3rd Parties</option>
+      </select>
+      <select id="f-rfo" class="inp h-8 text-xs" onchange="applyFilters()">
+        <option value="">All RFO</option>
+        {% for r in all_rfos %}
+        <option value="{{ r.rfo_no }}" {% if rfo_filter == r.rfo_no %}selected{% endif %}>{{ r.rfo_no }} — {{ r.title }}</option>
+        {% endfor %}
+      </select>
+      <select id="f-status" class="inp h-8 text-xs" onchange="applyFilters()">
+        <option value="">All Status</option>
+        <option value="NOT_STARTED" {% if status_filter == 'NOT_STARTED' %}selected{% endif %}>Not Started</option>
+        <option value="IN_PROGRESS" {% if status_filter == 'IN_PROGRESS' %}selected{% endif %}>In Progress</option>
+        <option value="WAITING" {% if status_filter == 'WAITING' %}selected{% endif %}>Waiting</option>
+        <option value="COMPLETED" {% if status_filter == 'COMPLETED' %}selected{% endif %}>Completed</option>
+      </select>
+      <div class="relative flex-1 min-w-0 sm:min-w-[180px]">
+        <svg class="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-surf-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        <input id="f-search" class="inp h-8 text-xs w-full pl-8" placeholder="Search tasks, AC reg..." value="{{ search_filter }}"
+               onkeydown="if(event.key==='Enter')applyFilters()">
+      </div>
+      <div class="view-pill">
+        <button class="tab-btn active" onclick="switchTaskView('table',this)">&#9776; Table</button>
+        <button class="tab-btn" onclick="switchTaskView('kanban',this)">&#8862; Kanban</button>
+        <button class="tab-btn" onclick="switchTaskView('rfo',this)">&#9636; RFO</button>
+      </div>
+    </div>
+
+    {# ── Progress summary bar ── #}
+    {% set total_all = status_counts.NOT_STARTED + status_counts.IN_PROGRESS + status_counts.WAITING + status_counts.COMPLETED %}
+    {% if total_all > 0 %}
+    {% set pns = (status_counts.NOT_STARTED / total_all * 100) | round(0) | int %}
+    {% set pip = (status_counts.IN_PROGRESS / total_all * 100) | round(0) | int %}
+    {% set pw = (status_counts.WAITING / total_all * 100) | round(0) | int %}
+    {% set pc = (status_counts.COMPLETED / total_all * 100) | round(0) | int %}
+    {% else %}
+    {% set pns = 0 %}{% set pip = 0 %}{% set pw = 0 %}{% set pc = 0 %}
+    {% endif %}
+    <div class="card px-4 py-2 mb-3 flex items-center gap-4">
+      <span class="text-xs text-surf-400 font-medium shrink-0">{{ total_all }} tasks</span>
+      <div class="flex-1 flex h-3 rounded-full overflow-hidden bg-surf-100">
+        {% if pns > 0 %}<div class="bg-st-grey h-full" style="width:{{ pns }}%" title="Not Started: {{ status_counts.NOT_STARTED }}"></div>{% endif %}
+        {% if pip > 0 %}<div class="bg-st-yellow h-full" style="width:{{ pip }}%" title="In Progress: {{ status_counts.IN_PROGRESS }}"></div>{% endif %}
+        {% if pw > 0 %}<div class="bg-st-red h-full" style="width:{{ pw }}%" title="Waiting: {{ status_counts.WAITING }}"></div>{% endif %}
+        {% if pc > 0 %}<div class="bg-st-green h-full" style="width:{{ pc }}%" title="Completed: {{ status_counts.COMPLETED }}"></div>{% endif %}
+      </div>
+      <div class="flex gap-3 text-[10px] font-medium shrink-0">
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-st-grey"></span>{{ status_counts.NOT_STARTED }}</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-st-yellow"></span>{{ status_counts.IN_PROGRESS }}</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-st-red"></span>{{ status_counts.WAITING }}</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-st-green"></span>{{ status_counts.COMPLETED }}</span>
+      </div>
+      <span class="text-xs font-mono font-medium text-navy-700 shrink-0">{{ summary_mh }} MH</span>
+      {% if overdue_count > 0 %}
+      <span class="text-xs text-st-red font-medium shrink-0 dl-warn">{{ overdue_count }} overdue</span>
+      {% endif %}
     </div>
   </div>
 
-  {# ── Filters ── #}
-  <div class="card p-3">
-    <div class="flex flex-wrap items-center gap-3">
-      <div class="flex items-center gap-2">
-        <label class="text-xs font-medium text-surf-400 uppercase tracking-wide">Meeting Date</label>
-        <input type="date" id="filterMeetingDate" class="inp text-sm py-1.5" value="{{ meeting_date or '' }}"
-               hx-get="/tasks" hx-target="#task-table-body" hx-select="#task-table-body"
-               hx-include="[id^=filter]" hx-push-url="true">
-      </div>
-      <div class="flex items-center gap-2">
-        <label class="text-xs font-medium text-surf-400 uppercase tracking-wide">Shop</label>
-        <select id="filterShop" class="inp text-sm py-1.5">
-          <option value="">All Shops</option>
-          {% for s in shops %}
-          <option value="{{ s.id }}" {% if shop_id == s.id %}selected{% endif %}>{{ s.code }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="flex items-center gap-2">
-        <label class="text-xs font-medium text-surf-400 uppercase tracking-wide">Airline</label>
-        <select id="filterAirline" class="inp text-sm py-1.5">
-          <option value="">All</option>
-          <option value="SQ" {% if airline_filter == 'SQ' %}selected{% endif %}>SQ</option>
-          <option value="3RD" {% if airline_filter == '3RD' %}selected{% endif %}>3rd Party</option>
-        </select>
-      </div>
-      <div class="flex items-center gap-2">
-        <label class="text-xs font-medium text-surf-400 uppercase tracking-wide">Supervisor</label>
-        <select id="filterSupervisor" class="inp text-sm py-1.5">
-          <option value="">All Supervisors</option>
-          {% for sv in supervisors %}
-          <option value="{{ sv.id }}">{{ sv.name }}</option>
-          {% endfor %}
-        </select>
+  {# ═══════════ Content area ═══════════ #}
+  <div class="flex flex-1 min-h-0" id="task-content">
+
+    {# ── TABLE VIEW (default) ── #}
+    <div id="task-view-table" class="flex flex-col flex-1 min-h-0 relative overflow-hidden">
+      {# Bulk action toolbar #}
+      <div id="bulk-bar" class="hidden absolute bottom-16 left-1/2 -translate-x-1/2 z-20 bg-navy-800 text-white rounded-xl px-4 py-2.5 flex items-center gap-3 shadow-xl">
+        <span class="text-xs font-medium"><span id="bulk-count">0</span> selected</span>
+        <button class="btn-sm bg-gold-500 hover:bg-gold-600 text-navy-900 rounded-lg text-xs font-medium" onclick="showModal('modal-bulk-assign')">Assign To&hellip;</button>
+        <button class="btn-sm bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs text-st-red" onclick="closeBulk()">&#10005; Cancel</button>
       </div>
 
-      <div class="flex-1"></div>
-
-      {# View toggle pills #}
-      <div class="flex items-center gap-1 bg-surf-100 rounded-lg p-1" id="viewToggle">
-        <button class="view-pill active" data-view="table" onclick="switchView('table')">
-          <svg class="w-4 h-4 inline -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
-          Table
-        </button>
-        <button class="view-pill" data-view="kanban" onclick="switchView('kanban')">
-          <svg class="w-4 h-4 inline -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>
-          Kanban
-        </button>
-        <button class="view-pill" data-view="rfo" onclick="switchView('rfo')">
-          <svg class="w-4 h-4 inline -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-          RFO
-        </button>
-      </div>
-    </div>
-  </div>
-
-  {# ── Table View ── #}
-  <div id="view-table" class="card flex-1 flex flex-col min-h-0">
-    <div class="flex-1 overflow-auto">
-      <table class="tbl task-tbl">
-        <thead>
-          <tr>
-            <th class="col-acrfo">
-              <input type="checkbox" class="chk" id="selectAll" onclick="toggleSelectAll(this)">
-              AC / RFO
-            </th>
-            <th class="col-task">Task</th>
-            <th class="col-assigned">Assigned</th>
-            <th class="col-status">Status</th>
-            <th class="col-mh">MH</th>
-            <th class="col-deadline">Deadline</th>
-            <th class="col-actions"></th>
-          </tr>
-        </thead>
-        <tbody id="task-table-body">
-          {% if snapshots %}
-          {% for snap in snapshots %}
-          <tr class="cursor-pointer" hx-get="/tasks/{{ snap.task_id }}/panel" hx-target="#detailPanel" hx-swap="innerHTML" onclick="openDetailPanel()">
-            <td class="col-acrfo">
-              <div class="flex items-center gap-2">
-                <input type="checkbox" class="chk task-chk" value="{{ snap.task_id }}" onclick="event.stopPropagation()">
-                <div>
-                  <div class="font-medium text-sm">{{ snap.ac_reg or '-' }}</div>
-                  <div class="text-xs text-surf-400">{{ snap.rfo_no or '-' }}</div>
+      <div class="flex-1 overflow-y-auto px-4 pb-4">
+        <table class="tbl" id="task-table">
+          <thead><tr>
+            <th style="width:32px"><input type="checkbox" class="chk" onchange="toggleAllTasks(this)"></th>
+            <th style="width:110px">AC / RFO</th>
+            <th>Task Description</th>
+            <th style="width:95px">Assigned</th>
+            <th style="width:90px">Status</th>
+            <th style="width:75px" class="text-right">MH</th>
+            <th style="width:105px">Deadline</th>
+          </tr></thead>
+          <tbody>
+            {% if snapshots %}
+            {% for snap in snapshots %}
+            <tr class="cursor-pointer" onclick="selectTaskRow(this, {{ loop.index0 }})"
+                data-task-id="{{ snap.task_id }}" data-snap-id="{{ snap.snapshot_id }}"
+                data-ac="{{ snap.ac_reg or '' }}" data-rfo="{{ snap.rfo_no or '' }}"
+                data-title="{{ snap.task_text }}" data-status="{{ snap.status }}"
+                data-mh="{{ snap.mh_incurred_hours }}" data-shop="{{ snap.shop_code or '' }}"
+                data-deadline="{{ snap.deadline_date or '' }}"
+                data-remarks="{{ snap.remarks or '' }}"
+                data-issue="{{ snap.critical_issue or '' }}"
+                data-supervisor="{{ snap.assigned_supervisor or '' }}"
+                data-worker="{{ snap.assigned_worker or '' }}"
+                data-version="{{ snap.version }}">
+              <td><input type="checkbox" class="chk task-chk" value="{{ snap.task_id }}" onchange="updateBulk()" onclick="event.stopPropagation()"></td>
+              <td>
+                <div class="font-mono text-xs font-bold text-navy-900">{{ snap.ac_reg or '-' }}</div>
+                <div class="font-mono text-[10px] text-surf-400">{{ snap.rfo_no or '-' }}</div>
+              </td>
+              <td>
+                <div class="text-sm">{{ snap.task_text }}</div>
+                <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                  {% if snap.remarks %}
+                  <span class="text-[10px] text-surf-400 truncate max-w-[200px]" title="{{ snap.remarks }}">{{ snap.remarks[:50] }}{% if snap.remarks | length > 50 %}&hellip;{% endif %}</span>
+                  {% endif %}
+                  {% if snap.critical_issue %}
+                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-st-redBg text-st-red font-medium">{{ snap.critical_issue[:40] }}</span>
+                  {% endif %}
+                  {% if not snap.remarks and not snap.critical_issue %}
+                  <span class="text-[10px] text-surf-300 italic">No remarks</span>
+                  {% endif %}
                 </div>
-              </div>
-            </td>
-            <td class="col-task">
-              <div class="text-sm truncate" title="{{ snap.task_text }}">{{ snap.task_text }}</div>
-              {% if snap.has_issue %}
-              <span class="inline-flex items-center gap-1 text-[11px] text-st-red font-medium mt-0.5">
-                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
-                Issue
-              </span>
-              {% endif %}
-            </td>
-            <td class="col-assigned">
-              <span class="text-sm">{{ snap.assigned_worker or '-' }}</span>
-            </td>
-            <td class="col-status">
-              {% if snap.status == 'NOT_STARTED' %}
-              <span class="badge badge-not-started">Not Started</span>
-              {% elif snap.status == 'IN_PROGRESS' %}
-              <span class="badge badge-in-progress">In Progress</span>
-              {% elif snap.status == 'WAITING' %}
-              <span class="badge badge-waiting">Waiting</span>
-              {% elif snap.status == 'COMPLETED' %}
-              <span class="badge badge-completed">Completed</span>
-              {% endif %}
-            </td>
-            <td class="col-mh">
-              <span class="text-sm font-mono">{{ snap.mh_incurred_hours }}</span>
-            </td>
-            <td class="col-deadline">
-              <span class="text-sm {% if snap.is_overdue %}text-st-red font-medium{% endif %}">{{ snap.deadline_date or '-' }}</span>
-            </td>
-            <td class="col-actions">
-              <button class="p-1 rounded hover:bg-surf-50" onclick="event.stopPropagation()">
-                <svg class="w-4 h-4 text-surf-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01"/></svg>
-              </button>
-            </td>
-          </tr>
-          {% endfor %}
-          {% else %}
-          <tr>
-            <td colspan="7" class="text-center py-12 text-surf-400">
-              <svg class="w-10 h-10 mx-auto mb-2 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-              <p class="text-sm">No tasks found for the selected filters.</p>
-              <p class="text-xs mt-1">Try changing the meeting date or shop filter.</p>
-            </td>
-          </tr>
-          {% endif %}
-        </tbody>
-      </table>
-    </div>
-
-    {# ── Bottom bar ── #}
-    <div class="border-t border-surf-200 px-4 py-2 flex items-center justify-between text-sm shrink-0">
-      <div class="flex items-center gap-3">
-        <span class="text-surf-400 text-xs">
-          {% if total > 0 %}
-          {{ ((page - 1) * per_page) + 1 }}-{{ [page * per_page, total] | min }} of {{ total }} tasks
-          {% else %}
-          0 tasks
-          {% endif %}
-        </span>
-        <button class="btn-outline btn-sm" id="bulkAssignBtn" style="display:none" onclick="document.getElementById('bulkAssignModal').classList.remove('hidden')">
-          Bulk Assign
-        </button>
-      </div>
-      <div class="flex items-center gap-2">
-        <button class="btn-outline btn-sm">
-          <svg class="w-3.5 h-3.5 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-          Export CSV
-        </button>
-        <button class="btn-outline btn-sm">
-          <svg class="w-3.5 h-3.5 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-          Audit Log
-        </button>
-        {% if total_pages > 1 %}
-        <div class="flex items-center gap-1 ml-2">
-          {% if page_num > 1 %}
-          <a href="?page={{ page_num - 1 }}" class="pg-btn">&laquo;</a>
-          {% endif %}
-          {% for p in range(1, total_pages + 1) %}
-          <a href="?page={{ p }}" class="pg-btn {% if p == page_num %}active{% endif %}">{{ p }}</a>
-          {% endfor %}
-          {% if page_num < total_pages %}
-          <a href="?page={{ page_num + 1 }}" class="pg-btn">&raquo;</a>
-          {% endif %}
-        </div>
-        {% endif %}
+              </td>
+              <td class="text-xs">
+                {% if snap.assigned_supervisor %}
+                <div class="flex items-center gap-1">
+                  <div class="w-5 h-5 rounded-full bg-navy-600 flex items-center justify-center text-[9px] font-bold text-white shrink-0">{{ snap.assigned_supervisor[:2] | upper }}</div>
+                  {{ snap.assigned_supervisor }}
+                </div>
+                {% else %}
+                <span class="text-st-red italic">Unassigned</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if snap.status == 'NOT_STARTED' %}
+                <span class="badge badge-not-started">Not Started</span>
+                {% elif snap.status == 'IN_PROGRESS' %}
+                <span class="badge badge-in-progress">In Progress</span>
+                {% elif snap.status == 'WAITING' %}
+                <span class="badge badge-waiting">Waiting</span>
+                {% elif snap.status == 'COMPLETED' %}
+                <span class="badge badge-completed">Completed</span>
+                {% endif %}
+              </td>
+              <td class="text-right">
+                <div class="font-mono text-sm">{{ snap.mh_incurred_hours }}</div>
+              </td>
+              <td>
+                {% if snap.deadline_date %}
+                <div class="text-xs {% if snap.is_overdue %}text-st-red font-medium{% endif %}">{{ snap.deadline_date }}{% if snap.is_overdue %} &#9888;{% endif %}</div>
+                {% else %}
+                <div class="text-xs text-surf-400">&mdash;</div>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+            {% else %}
+            <tr>
+              <td colspan="7" class="text-center py-12 text-surf-400">
+                <svg class="w-10 h-10 mx-auto mb-2 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                <p class="text-sm">No tasks found for the selected filters.</p>
+                <p class="text-xs mt-1">Try changing the filters or search criteria.</p>
+              </td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
       </div>
     </div>
-  </div>
 
-  {# ── Kanban View (hidden by default) ── #}
-  <div id="view-kanban" class="flex-1 min-h-0 overflow-auto" style="display:none">
-    <div class="flex gap-4 h-full">
-      {% set statuses = [('NOT_STARTED', 'Not Started', 'badge-not-started'), ('IN_PROGRESS', 'In Progress', 'badge-in-progress'), ('WAITING', 'Waiting', 'badge-waiting'), ('COMPLETED', 'Completed', 'badge-completed')] %}
-      {% for status_key, status_label, badge_cls in statuses %}
-      <div class="kanban-col">
-        <div class="flex items-center justify-between mb-2">
-          <span class="badge {{ badge_cls }}">{{ status_label }}</span>
-          <span class="text-xs text-surf-400">
-            {{ snapshots | selectattr('status', 'equalto', status_key) | list | length if snapshots else 0 }}
-          </span>
+    {# ── KANBAN VIEW ── #}
+    <div id="task-view-kanban" class="hidden flex gap-3 px-4 pb-4 overflow-x-auto overflow-y-hidden min-h-0">
+      {% set status_cfg = [
+        ('NOT_STARTED', 'NOT STARTED', 'text-st-grey', '', 'bg-surf-200'),
+        ('IN_PROGRESS', 'IN PROGRESS', 'text-st-yellow', 'background:#fefcf5', 'bg-st-yellowBg'),
+        ('WAITING', 'WAITING', 'text-st-red', 'background:#fef5f5', 'bg-st-redBg'),
+        ('COMPLETED', 'COMPLETED', 'text-st-green', 'background:#f5faf7', 'bg-st-greenBg'),
+      ] %}
+      {% for status_key, status_label, text_cls, bg_style, count_bg in status_cfg %}
+      {% set col_snaps = snapshots | selectattr('status', 'equalto', status_key) | list %}
+      <div class="kanban-col" {% if bg_style %}style="{{ bg_style }}"{% endif %} data-status="{{ status_key | lower | replace('_', '-') }}">
+        <div class="text-xs font-semibold {{ text_cls }} mb-1 flex justify-between">
+          <span>{{ status_label }}</span>
+          <span class="kanban-count {{ count_bg }} px-1.5 rounded">{{ col_snaps | length }}</span>
         </div>
-        <div class="flex-1 overflow-y-auto space-y-2">
-          {% if snapshots %}
-          {% for snap in snapshots if snap.status == status_key %}
-          <div class="kanban-card" hx-get="/tasks/{{ snap.task_id }}/panel" hx-target="#detailPanel" hx-swap="innerHTML" onclick="openDetailPanel()">
-            <div class="text-xs text-surf-400 mb-1">{{ snap.ac_reg or '-' }} &middot; {{ snap.rfo_no or '-' }}</div>
-            <div class="text-sm font-medium truncate">{{ snap.task_text }}</div>
-            <div class="flex items-center justify-between mt-2">
-              <span class="text-xs text-surf-400">{{ snap.assigned_worker or 'Unassigned' }}</span>
-              <span class="text-xs font-mono text-navy-600">{{ snap.mh_incurred_hours }}h</span>
-            </div>
+        {% for snap in col_snaps %}
+        <div class="kanban-card{% if status_key != 'NOT_STARTED' %} border-l-2{% endif %}{% if status_key == 'IN_PROGRESS' %} border-st-yellow{% elif status_key == 'WAITING' %} border-st-red{% elif status_key == 'COMPLETED' %} border-st-green{% endif %}{% if status_key == 'COMPLETED' %} opacity-70{% endif %}"
+             onclick="openKanbanDetail(this)"
+             data-task-id="{{ snap.task_id }}" data-ac="{{ snap.ac_reg or '' }}" data-rfo="{{ snap.rfo_no or '' }}"
+             data-title="{{ snap.task_text }}" data-mh="{{ snap.mh_incurred_hours }}"
+             data-deadline="{{ snap.deadline_date or '' }}"
+             data-worker="{{ snap.assigned_worker or '' }}" data-supervisor="{{ snap.assigned_supervisor or '' }}"
+             data-remarks="{{ snap.remarks or '' }}" data-issue="{{ snap.critical_issue or '' }}"
+             data-status="{{ snap.status }}" data-shop="{{ snap.shop_code or '' }}"
+             data-version="{{ snap.version }}">
+          <div class="flex items-center justify-between mb-1">
+            <div class="font-mono text-[10px] text-surf-400">{{ snap.ac_reg or '-' }} &middot; {{ snap.rfo_no or '-' }}</div>
+            <svg class="drag-handle w-3.5 h-3.5 text-surf-300" fill="currentColor" viewBox="0 0 24 24"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
+          </div>
+          <div class="text-sm font-medium">{{ snap.task_text }}</div>
+          <div class="flex justify-between items-center mt-2 text-[10px]">
+            <span class="font-mono">{{ snap.mh_incurred_hours }} MH</span>
             {% if snap.has_issue %}
-            <div class="flex items-center gap-1 text-[11px] text-st-red font-medium mt-1">
-              <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
-              Issue flagged
-            </div>
+            <span class="text-st-red font-medium">&#9888; Issue</span>
+            {% elif snap.is_overdue %}
+            <span class="text-st-red font-medium dl-warn">{{ snap.deadline_date }} &#9888; overdue</span>
+            {% elif status_key == 'COMPLETED' %}
+            <span class="text-st-green">&#10003; Done</span>
+            {% elif snap.deadline_date %}
+            <span>{{ snap.deadline_date }}</span>
             {% endif %}
           </div>
-          {% endfor %}
-          {% endif %}
         </div>
+        {% endfor %}
+        <div class="kanban-drop-zone"></div>
       </div>
       {% endfor %}
     </div>
-  </div>
 
-  {# ── RFO View (hidden by default) ── #}
-  <div id="view-rfo" class="card flex-1 flex flex-col min-h-0 overflow-auto" style="display:none">
-    <table class="tbl">
-      {% if rfo_groups %}
-      {% for rfo_no, tasks in rfo_groups.items() %}
-      <tbody>
-        <tr class="rfo-group-header" onclick="this.nextElementSibling.classList.toggle('open')">
-          <td colspan="6" class="py-3 px-4">
-            <div class="flex items-center gap-3">
-              <svg class="w-4 h-4 text-surf-400 transition-transform rfo-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-              <span class="font-semibold text-navy-700">{{ rfo_no or 'No RFO' }}</span>
-              <span class="badge badge-not-started text-[10px]">{{ tasks | length }} tasks</span>
+    {# ── RFO ACCORDION VIEW ── #}
+    <div id="task-view-rfo" class="hidden flex-col overflow-y-auto px-4 py-3 gap-2 min-h-0">
+      {% if rfo_list %}
+      {% for grp in rfo_list %}
+      <div class="rfo-group{% if loop.first %} open{% endif %}">
+        <div class="rfo-header" onclick="toggleRfo(this)">
+          <svg class="w-4 h-4 text-surf-400 rfo-arrow{% if loop.first %} rotate-90{% endif %} transition-transform shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-mono text-sm font-semibold text-navy-900">RFO {{ grp.rfo_no }}</span>
+              <span class="font-mono text-xs bg-surf-100 px-2 py-0.5 rounded">{{ grp.ac_reg }}</span>
+              <span class="text-xs text-surf-400">{{ grp.title }}</span>
             </div>
-          </td>
-        </tr>
-      </tbody>
-      <tbody class="rfo-group-body">
-        {% for snap in tasks %}
-        <tr class="cursor-pointer" hx-get="/tasks/{{ snap.task_id }}/panel" hx-target="#detailPanel" hx-swap="innerHTML" onclick="openDetailPanel()">
-          <td class="pl-12">{{ snap.ac_reg or '-' }}</td>
-          <td>
-            <div class="text-sm truncate">{{ snap.task_text }}</div>
-          </td>
-          <td>{{ snap.assigned_worker or '-' }}</td>
-          <td>
-            {% if snap.status == 'NOT_STARTED' %}
-            <span class="badge badge-not-started">Not Started</span>
-            {% elif snap.status == 'IN_PROGRESS' %}
-            <span class="badge badge-in-progress">In Progress</span>
-            {% elif snap.status == 'WAITING' %}
-            <span class="badge badge-waiting">Waiting</span>
-            {% elif snap.status == 'COMPLETED' %}
-            <span class="badge badge-completed">Completed</span>
-            {% endif %}
-          </td>
-          <td class="font-mono text-sm">{{ snap.mh_incurred_hours }}</td>
-          <td>{{ snap.deadline_date or '-' }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
+            <div class="flex items-center gap-3 mt-1.5">
+              <div class="flex h-2 w-28 rounded-full overflow-hidden bg-surf-200">
+                {% if grp.pct_not_started > 0 %}<div class="bg-st-grey h-full" style="width:{{ grp.pct_not_started }}%"></div>{% endif %}
+                {% if grp.pct_in_progress > 0 %}<div class="bg-st-yellow h-full" style="width:{{ grp.pct_in_progress }}%"></div>{% endif %}
+                {% if grp.pct_waiting > 0 %}<div class="bg-st-red h-full" style="width:{{ grp.pct_waiting }}%"></div>{% endif %}
+                {% if grp.pct_completed > 0 %}<div class="bg-st-green h-full" style="width:{{ grp.pct_completed }}%"></div>{% endif %}
+              </div>
+              <span class="text-xs font-mono text-navy-700">{{ grp.tasks | length }} tasks &middot; {{ grp.total_mh }} MH</span>
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-st-greenBg text-st-green font-medium">{{ grp.assigned_count }}/{{ grp.tasks | length }} assigned</span>
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-st-yellowBg text-st-yellow font-medium">{{ grp.updated_count }}/{{ grp.tasks | length }} updated</span>
+            </div>
+          </div>
+        </div>
+        <div class="{% if not loop.first %}hidden{% endif %}">
+          <table class="tbl"><tbody>
+            {% for snap in grp.tasks %}
+            <tr class="cursor-pointer hover:bg-surf-50" onclick="selectTaskRow(this, -1)"
+                data-task-id="{{ snap.task_id }}" data-snap-id="{{ snap.snapshot_id }}"
+                data-ac="{{ snap.ac_reg or '' }}" data-rfo="{{ snap.rfo_no or '' }}"
+                data-title="{{ snap.task_text }}" data-status="{{ snap.status }}"
+                data-mh="{{ snap.mh_incurred_hours }}" data-shop="{{ snap.shop_code or '' }}"
+                data-deadline="{{ snap.deadline_date or '' }}"
+                data-remarks="{{ snap.remarks or '' }}"
+                data-issue="{{ snap.critical_issue or '' }}"
+                data-supervisor="{{ snap.assigned_supervisor or '' }}"
+                data-worker="{{ snap.assigned_worker or '' }}"
+                data-version="{{ snap.version }}">
+              <td class="text-sm" style="width:40%">{{ snap.task_text }}</td>
+              <td style="width:15%">
+                {% if snap.status == 'NOT_STARTED' %}<span class="badge badge-not-started">Not Started</span>
+                {% elif snap.status == 'IN_PROGRESS' %}<span class="badge badge-in-progress">In Progress</span>
+                {% elif snap.status == 'WAITING' %}<span class="badge badge-waiting">Waiting</span>
+                {% elif snap.status == 'COMPLETED' %}<span class="badge badge-completed">Completed</span>
+                {% endif %}
+              </td>
+              <td class="text-right font-mono text-sm" style="width:10%">{{ snap.mh_incurred_hours }}</td>
+              <td class="text-xs" style="width:10%">
+                {% if snap.deadline_date %}
+                <span class="{% if snap.is_overdue %}text-st-red font-medium{% endif %}">{{ snap.deadline_date }}{% if snap.is_overdue %} &#9888;{% endif %}</span>
+                {% else %}&mdash;{% endif %}
+              </td>
+              <td class="text-xs text-surf-400" style="width:15%">
+                {% if snap.assigned_supervisor %}{{ snap.assigned_supervisor }}{% else %}<span class="text-st-red italic">Unassigned</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody></table>
+        </div>
+      </div>
       {% endfor %}
       {% else %}
-      <tbody>
-        <tr>
-          <td colspan="6" class="text-center py-12 text-surf-400 text-sm">No RFO groups found.</td>
-        </tr>
-      </tbody>
+      <div class="text-center py-12 text-surf-400 text-sm">No RFO groups found.</div>
       {% endif %}
-    </table>
+    </div>
+  </div>
+
+  {# ── Bottom bar ── #}
+  <div class="border-t border-surf-200 bg-white px-4 py-2 flex flex-col sm:flex-row items-center justify-between shrink-0 gap-2">
+    <div class="flex items-center gap-3 text-xs">
+      <span class="text-surf-400">
+        {% if total > 0 %}
+        {{ ((page_num - 1) * per_page) + 1 }}&ndash;{{ [page_num * per_page, total] | min }} of <strong class="text-navy-700">{{ total }}</strong> tasks
+        {% else %}
+        0 tasks
+        {% endif %}
+      </span>
+      {% if unassigned_count > 0 %}
+      <span class="text-surf-200">|</span>
+      <span class="text-surf-400">{{ unassigned_count }} unassigned</span>
+      {% endif %}
+    </div>
+    <div class="flex items-center gap-1">
+      {% if total_pages > 1 %}
+      {% if page_num > 1 %}
+      <button class="px-2 py-1 rounded text-xs hover:bg-surf-100 text-navy-700" onclick="goPage({{ page_num - 1 }})">&#8249; Prev</button>
+      {% else %}
+      <button class="px-2 py-1 rounded text-xs text-surf-300 cursor-not-allowed" disabled>&#8249; Prev</button>
+      {% endif %}
+      {% for p in range(1, total_pages + 1) %}
+      <button class="px-2 py-1 rounded text-xs {% if p == page_num %}bg-navy-700 text-white font-medium{% else %}hover:bg-surf-100 text-navy-700{% endif %}" onclick="goPage({{ p }})">{{ p }}</button>
+      {% endfor %}
+      {% if page_num < total_pages %}
+      <button class="px-2 py-1 rounded text-xs hover:bg-surf-100 text-navy-700" onclick="goPage({{ page_num + 1 }})">Next &#8250;</button>
+      {% else %}
+      <button class="px-2 py-1 rounded text-xs text-surf-300 cursor-not-allowed" disabled>Next &#8250;</button>
+      {% endif %}
+      <span class="text-surf-200 ml-2">|</span>
+      {% endif %}
+      <button class="btn-outline btn-sm text-xs ml-1" onclick="showToast('Export','Generating Excel report...','green')">Export</button>
+      <button class="btn-outline btn-sm text-xs" onclick="showToast('Audit','Opening full audit trail...','green')">Audit</button>
+    </div>
   </div>
 </div>
 
-{# ── Detail Side Panel ── #}
-<div class="side-panel" id="detailPanelWrap">
-  <div class="flex items-center justify-between p-4 border-b border-surf-200 sticky top-0 bg-white z-10">
-    <h3 class="text-base font-semibold text-navy-900">Task Detail</h3>
-    <button onclick="closeDetailPanel()" class="p-1.5 rounded-lg hover:bg-surf-50">
-      <svg class="w-5 h-5 text-surf-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-    </button>
-  </div>
-  <div id="detailPanel" class="p-4">
-    <div class="text-center py-12 text-surf-400 text-sm">Select a task to view details.</div>
+{# ═══════════ Detail Overlay Panel ═══════════ #}
+<div id="split-backdrop" class="split-backdrop" onclick="closeDetailPanel()"></div>
+<div id="split-detail" class="split-detail w-full sm:w-[380px] overflow-y-auto">
+  <div class="p-4">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="font-semibold text-sm text-navy-900" id="detail-title">Task Detail</h3>
+      <button onclick="closeDetailPanel()" class="text-surf-400 hover:text-navy-700">&#10005;</button>
+    </div>
+    <div id="detail-body" class="space-y-3">
+      <div class="text-center py-8 text-surf-400 text-sm">Select a task to view details.</div>
+    </div>
   </div>
 </div>
 
-{# ── Create & Assign Modal ── #}
-<div id="createModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/30" onclick="if(event.target===this)this.classList.add('hidden')">
-  <div class="card p-6 w-full max-w-lg mx-4 shadow-xl" onclick="event.stopPropagation()">
-    <div class="flex items-center justify-between mb-4">
-      <h3 class="text-lg font-semibold text-navy-900">Create &amp; Assign Task</h3>
-      <button onclick="this.closest('#createModal').classList.add('hidden')" class="p-1 rounded hover:bg-surf-50">
+{# ═══════════ Kanban Detail Slide Panel ═══════════ #}
+<div id="kanban-detail-panel" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/30" onclick="closeKanbanDetail()"></div>
+  <div class="absolute right-0 top-0 bottom-0 w-full sm:w-[420px] bg-white shadow-2xl flex flex-col transform transition-transform" id="kanban-detail-inner" style="transform:translateX(100%)">
+    <div class="px-5 py-4 border-b border-surf-200 flex items-center justify-between shrink-0">
+      <div>
+        <div class="text-xs text-surf-400 font-mono" id="kd-task-id"></div>
+        <h3 class="text-base font-semibold text-navy-900 mt-0.5" id="kd-title"></h3>
+      </div>
+      <button onclick="closeKanbanDetail()" class="p-2 rounded-lg hover:bg-surf-50">
         <svg class="w-5 h-5 text-surf-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
       </button>
     </div>
-    <form hx-post="/api/tasks" hx-target="#task-table-body" hx-swap="innerHTML" class="space-y-4"
-          hx-on::after-request="if(event.detail.successful){this.closest('#createModal').classList.add('hidden');showToast('Created','Task created successfully','green')}">
+    <div class="flex-1 overflow-y-auto p-5 space-y-4">
+      <div>
+        <div class="text-[10px] uppercase tracking-wider text-surf-400 font-medium mb-1.5">Status</div>
+        <div id="kd-status-badge" class="badge inline-block"></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="bg-surf-50 rounded-lg p-3"><div class="text-[10px] uppercase tracking-wider text-surf-400 font-medium mb-1">Aircraft</div><div class="font-mono text-sm font-semibold text-navy-900" id="kd-ac"></div></div>
+        <div class="bg-surf-50 rounded-lg p-3"><div class="text-[10px] uppercase tracking-wider text-surf-400 font-medium mb-1">RFO</div><div class="font-mono text-sm font-semibold text-navy-900" id="kd-rfo"></div></div>
+        <div class="bg-surf-50 rounded-lg p-3"><div class="text-[10px] uppercase tracking-wider text-surf-400 font-medium mb-1">Manhours</div><div class="font-mono text-sm font-semibold text-navy-900"><span id="kd-mh"></span> MH</div></div>
+        <div class="bg-surf-50 rounded-lg p-3"><div class="text-[10px] uppercase tracking-wider text-surf-400 font-medium mb-1">Due Date</div><div class="text-sm font-semibold text-navy-900" id="kd-due"></div></div>
+      </div>
+      <div>
+        <div class="text-[10px] uppercase tracking-wider text-surf-400 font-medium mb-1.5">Assigned To</div>
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-full bg-navy-600 flex items-center justify-center text-xs font-semibold text-white" id="kd-avatar"></div>
+          <span class="text-sm font-medium text-navy-900" id="kd-assignee"></span>
+        </div>
+      </div>
+      <div id="kd-remarks-section">
+        <div class="text-[10px] uppercase tracking-wider text-surf-400 font-medium mb-1.5">Remarks</div>
+        <div class="bg-surf-50 rounded-lg p-3 text-xs text-navy-700 leading-relaxed" id="kd-remarks"></div>
+      </div>
+      <div id="kd-issue-section" class="hidden">
+        <div class="text-[10px] uppercase tracking-wider text-st-red font-medium mb-1.5">&#9888; Active Issue</div>
+        <div class="bg-st-redBg/40 border border-st-red/20 rounded-lg p-3">
+          <div class="text-xs font-medium text-st-red" id="kd-issue"></div>
+        </div>
+      </div>
+    </div>
+    <div class="px-5 py-3 border-t border-surf-200 flex gap-2 shrink-0">
+      <a id="kd-entry-link" href="#" class="btn-primary btn-sm text-xs flex-1 text-center">Open in Data Entry</a>
+      <button class="btn-outline btn-sm text-xs" onclick="closeKanbanDetail()">Close</button>
+    </div>
+  </div>
+</div>
+
+{# ═══════════ Create & Assign Modal ═══════════ #}
+<div class="modal-overlay" id="modal-new-task">
+  <div class="card w-full sm:w-[450px]" onclick="event.stopPropagation()">
+    <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between">
+      <h3 class="font-semibold text-navy-900">Create &amp; Assign Task</h3>
+      <button onclick="closeModal('modal-new-task')" class="text-surf-400 hover:text-navy-700 text-lg">&#10005;</button>
+    </div>
+    <form id="createTaskForm" class="p-5 space-y-3" onsubmit="return createTask(event)">
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="text-xs font-medium text-surf-400 block mb-1">AC Reg</label>
-          <select name="aircraft_id" class="inp w-full text-sm" required>
-            <option value="">Select Aircraft</option>
-            {% for ac in aircraft_list %}
-            <option value="{{ ac.id }}">{{ ac.ac_reg }}</option>
-            {% endfor %}
-          </select>
+          <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">AC Reg *</label>
+          <input name="ac_reg" class="inp w-full h-9 text-sm font-mono" placeholder="e.g. 9V-SMA" required>
         </div>
         <div>
-          <label class="text-xs font-medium text-surf-400 block mb-1">RFO No</label>
-          <select name="work_package_id" class="inp w-full text-sm">
-            <option value="">Select RFO</option>
-            {% for wp in work_packages %}
-            <option value="{{ wp.id }}">{{ wp.rfo_no or wp.title }}</option>
-            {% endfor %}
-          </select>
+          <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">RFO No.</label>
+          <input name="rfo_no" class="inp w-full h-9 text-sm font-mono" placeholder="e.g. 1200000101">
+        </div>
+      </div>
+      <div>
+        <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Task Description *</label>
+        <textarea name="task_text" class="inp w-full h-16 text-sm resize-none" placeholder="Describe the maintenance task..." required></textarea>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Deadline</label>
+          <input type="date" name="deadline_date" class="inp w-full h-9 text-sm">
+        </div>
+        <div>
+          <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Initial MH</label>
+          <input type="number" name="planned_mh" class="inp w-full h-9 text-sm font-mono" value="0.0" step="0.5" min="0">
         </div>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="text-xs font-medium text-surf-400 block mb-1">Shop</label>
-          <select name="shop_id" class="inp w-full text-sm" required>
-            <option value="">Select Shop</option>
+          <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Assign to Shop *</label>
+          <select name="shop_id" class="inp w-full h-9 text-sm" required>
+            <option value="">-- Select --</option>
             {% for s in shops %}
-            <option value="{{ s.id }}">{{ s.code }} - {{ s.name }}</option>
+            <option value="{{ s.id }}">{{ s.code }}</option>
             {% endfor %}
           </select>
         </div>
         <div>
-          <label class="text-xs font-medium text-surf-400 block mb-1">Supervisor</label>
-          <select name="assigned_supervisor_id" class="inp w-full text-sm">
-            <option value="">Select Supervisor</option>
+          <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Assign to Supervisor</label>
+          <select name="assigned_supervisor_id" class="inp w-full h-9 text-sm">
+            <option value="">-- Select --</option>
             {% for sv in supervisors %}
             <option value="{{ sv.id }}">{{ sv.name }}</option>
             {% endfor %}
           </select>
         </div>
       </div>
-      <div>
-        <label class="text-xs font-medium text-surf-400 block mb-1">Description</label>
-        <textarea name="task_text" class="inp w-full text-sm" rows="3" required placeholder="Task description..."></textarea>
-      </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="text-xs font-medium text-surf-400 block mb-1">Deadline</label>
-          <input type="date" name="deadline_date" class="inp w-full text-sm">
-        </div>
-        <div>
-          <label class="text-xs font-medium text-surf-400 block mb-1">Initial MH</label>
-          <input type="number" name="planned_mh" class="inp w-full text-sm" step="0.5" min="0" placeholder="0.0">
-        </div>
-      </div>
-      <div class="flex justify-end gap-2 pt-2">
-        <button type="button" class="btn-outline" onclick="this.closest('#createModal').classList.add('hidden')">Cancel</button>
-        <button type="submit" class="btn-primary">Create Task</button>
-      </div>
+      <button type="submit" class="btn-gold w-full">Create &amp; Assign</button>
     </form>
   </div>
 </div>
 
-{# ── Import RFO Modal ── #}
-<div id="importRfoModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/30" onclick="if(event.target===this)this.classList.add('hidden')">
-  <div class="card p-6 w-full max-w-2xl mx-4 shadow-xl" onclick="event.stopPropagation()">
-    <div class="flex items-center justify-between mb-4">
-      <h3 class="text-lg font-semibold text-navy-900">Import RFO</h3>
-      <button onclick="this.closest('#importRfoModal').classList.add('hidden')" class="p-1 rounded hover:bg-surf-50">
-        <svg class="w-5 h-5 text-surf-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-      </button>
+{# ═══════════ Import RFO Modal ═══════════ #}
+<div class="modal-overlay" id="modal-import-rfo">
+  <div class="card w-full sm:w-[500px] max-h-[80vh] overflow-y-auto" onclick="event.stopPropagation()">
+    <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between">
+      <h3 class="font-semibold text-navy-900">CSV Import &mdash; RFO Tasks</h3>
+      <button onclick="closeModal('modal-import-rfo')" class="text-surf-400 hover:text-navy-700 text-lg">&#10005;</button>
     </div>
-    <div class="border-2 border-dashed border-surf-200 rounded-lg p-8 text-center mb-4">
-      <svg class="w-10 h-10 mx-auto mb-2 text-surf-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-      <p class="text-sm text-surf-400">Drag &amp; drop CSV/Excel file or</p>
-      <label class="btn-outline btn-sm mt-2 inline-block cursor-pointer">
-        Browse Files
-        <input type="file" class="hidden" accept=".csv,.xlsx,.xls" id="rfoFileInput">
-      </label>
-    </div>
-    <div id="rfoPreview" class="hidden">
-      <div class="text-sm font-medium text-navy-700 mb-2">Preview</div>
-      <div class="overflow-auto max-h-48 border border-surf-200 rounded-lg">
-        <table class="tbl text-xs" id="rfoPreviewTable">
-          <thead><tr><th>AC Reg</th><th>RFO</th><th>Task</th><th>Shop</th></tr></thead>
-          <tbody></tbody>
-        </table>
+    <div class="p-5 space-y-4">
+      <div class="border-2 border-dashed border-surf-200 rounded-lg p-8 text-center">
+        <svg class="w-10 h-10 mx-auto mb-2 text-surf-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+        <div class="text-sm text-surf-400">Drop CSV file here or <label class="text-st-blue font-medium cursor-pointer">browse<input type="file" class="hidden" accept=".csv" id="rfoFileInput" onchange="previewImport(this)"></label></div>
+        <div class="text-[10px] text-surf-300 mt-1">Max 5MB &middot; UTF-8</div>
       </div>
-    </div>
-    <div class="flex justify-end gap-2 pt-4">
-      <button type="button" class="btn-outline" onclick="this.closest('#importRfoModal').classList.add('hidden')">Cancel</button>
-      <button type="button" class="btn-primary" id="rfoImportBtn" disabled>Import Tasks</button>
+      <div id="importPreview" class="hidden card p-3 bg-st-greenBg border-st-green/30">
+        <div class="text-xs font-medium text-st-green" id="importPreviewText"></div>
+      </div>
+      <button class="btn-gold w-full" id="importBtn" disabled onclick="runImport()">Import</button>
     </div>
   </div>
 </div>
 
-{# ── Bulk Assign Modal ── #}
-<div id="bulkAssignModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/30" onclick="if(event.target===this)this.classList.add('hidden')">
-  <div class="card p-6 w-full max-w-sm mx-4 shadow-xl" onclick="event.stopPropagation()">
-    <div class="flex items-center justify-between mb-4">
-      <h3 class="text-lg font-semibold text-navy-900">Bulk Assign Supervisor</h3>
-      <button onclick="this.closest('#bulkAssignModal').classList.add('hidden')" class="p-1 rounded hover:bg-surf-50">
-        <svg class="w-5 h-5 text-surf-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-      </button>
+{# ═══════════ Bulk Assign Modal ═══════════ #}
+<div class="modal-overlay" id="modal-bulk-assign">
+  <div class="card w-full sm:w-[380px]" onclick="event.stopPropagation()">
+    <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between">
+      <h3 class="font-semibold text-navy-900">Bulk Assign Supervisor</h3>
+      <button onclick="closeModal('modal-bulk-assign')" class="text-surf-400 hover:text-navy-700 text-lg">&#10005;</button>
     </div>
-    <div class="mb-4">
-      <label class="text-xs font-medium text-surf-400 block mb-1">Assign to Supervisor</label>
-      <select id="bulkSupervisorSelect" class="inp w-full text-sm">
-        <option value="">Select Supervisor</option>
-        {% for sv in supervisors %}
-        <option value="{{ sv.id }}">{{ sv.name }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <p class="text-xs text-surf-400 mb-4" id="bulkAssignCount">0 tasks selected</p>
-    <div class="flex justify-end gap-2">
-      <button type="button" class="btn-outline" onclick="this.closest('#bulkAssignModal').classList.add('hidden')">Cancel</button>
-      <button type="button" class="btn-primary" onclick="bulkAssign()">Assign</button>
+    <div class="p-5 space-y-3">
+      <div>
+        <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Assign to Supervisor</label>
+        <select id="bulkSupervisorSelect" class="inp w-full h-9 text-sm">
+          <option value="">-- Select --</option>
+          {% for sv in supervisors %}
+          <option value="{{ sv.id }}">{{ sv.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <p class="text-xs text-surf-400" id="bulkAssignCount">0 tasks selected</p>
+      <button class="btn-gold w-full" onclick="bulkAssign()">Assign</button>
     </div>
   </div>
 </div>
@@ -460,59 +565,283 @@
 
 {% block scripts %}
 <script>
-// View switching
-function switchView(view) {
-  document.getElementById('view-table').style.display = view === 'table' ? 'flex' : 'none';
-  document.getElementById('view-kanban').style.display = view === 'kanban' ? 'block' : 'none';
-  document.getElementById('view-rfo').style.display = view === 'rfo' ? 'flex' : 'none';
-  document.querySelectorAll('#viewToggle .view-pill').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.view === view);
+const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+
+/* ── View switching ── */
+function switchTaskView(view, btn) {
+  ['table','kanban','rfo'].forEach(v => {
+    const el = document.getElementById('task-view-' + v);
+    if (el) { el.classList.toggle('hidden', v !== view); el.classList.toggle('flex', v === view); }
   });
+  btn.parentElement.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
 }
 
-// Detail panel
-function openDetailPanel() {
-  document.getElementById('detailPanelWrap').classList.add('open');
+/* ── Filters ── */
+function applyFilters() {
+  const p = new URLSearchParams();
+  const shop = document.getElementById('f-shop').value;
+  const sup = document.getElementById('f-supervisor').value;
+  const dt = document.getElementById('f-date').value;
+  const airline = document.getElementById('f-airline').value;
+  const rfo = document.getElementById('f-rfo').value;
+  const status = document.getElementById('f-status').value;
+  const search = document.getElementById('f-search').value.trim();
+  if (shop) p.set('shop_id', shop);
+  if (sup) p.set('supervisor_id', sup);
+  if (dt) p.set('meeting_date', dt);
+  if (airline) p.set('airline', airline);
+  if (rfo) p.set('rfo', rfo);
+  if (status) p.set('status', status);
+  if (search) p.set('search', search);
+  window.location.href = '/tasks?' + p.toString();
 }
+
+function goPage(n) {
+  const p = new URLSearchParams(window.location.search);
+  p.set('page', n);
+  window.location.href = '/tasks?' + p.toString();
+}
+
+/* ── Table row selection → Detail panel ── */
+function selectTaskRow(tr, idx) {
+  const detail = document.getElementById('split-detail');
+  const backdrop = document.getElementById('split-backdrop');
+  const wasSelected = tr.classList.contains('row-sel');
+
+  document.querySelectorAll('.tbl tbody tr').forEach(r => r.classList.remove('row-sel'));
+
+  if (wasSelected) {
+    detail.classList.remove('open');
+    backdrop.classList.remove('open');
+  } else {
+    tr.classList.add('row-sel');
+    detail.classList.add('open');
+    backdrop.classList.add('open');
+    populateDetail(tr.dataset);
+  }
+}
+
+function populateDetail(d) {
+  document.getElementById('detail-title').textContent = d.title || 'Task Detail';
+  const statusMap = {
+    'NOT_STARTED': {label:'Not Started', cls:'badge-not-started'},
+    'IN_PROGRESS': {label:'In Progress', cls:'badge-in-progress'},
+    'WAITING': {label:'Waiting', cls:'badge-waiting'},
+    'COMPLETED': {label:'Completed', cls:'badge-completed'},
+  };
+  const s = statusMap[d.status] || statusMap['NOT_STARTED'];
+  let html = `
+    <div class="grid grid-cols-2 gap-2 text-xs">
+      <div><span class="text-surf-400">AC Reg</span><div class="font-medium font-mono">${d.ac || '-'}</div></div>
+      <div><span class="text-surf-400">RFO No.</span><div class="font-medium font-mono">${d.rfo || '-'}</div></div>
+      <div><span class="text-surf-400">Shop</span><div class="font-medium">${d.shop || '-'}</div></div>
+      <div><span class="text-surf-400">Status</span><div><span class="badge ${s.cls}">${s.label}</span></div></div>
+    </div>
+    <hr class="border-surf-100">
+    <div class="text-xs font-semibold text-navy-700 mb-2">Distribution</div>
+    <div class="bg-surf-50 rounded-lg p-3 space-y-2">
+      <div class="flex items-center justify-between text-xs">
+        <span class="text-surf-400">Supervisor</span>
+        <span class="font-medium">${d.supervisor || 'Unassigned'}</span>
+      </div>
+      <div class="flex items-center justify-between text-xs">
+        <span class="text-surf-400">Worker</span>
+        <span class="font-medium">${d.worker || 'Unassigned'}</span>
+      </div>
+    </div>
+    <hr class="border-surf-100">`;
+  if (d.remarks) {
+    html += `<div class="text-xs font-semibold text-navy-700 mb-2">Remarks</div>
+      <div class="bg-surf-50 rounded-lg p-3 text-xs text-navy-700 leading-relaxed">${d.remarks}</div>`;
+  }
+  if (d.issue) {
+    html += `<div class="text-xs font-semibold text-st-red mb-2 mt-3 flex items-center gap-1.5">&#9888; Active Issue</div>
+      <div class="bg-st-redBg/40 border border-st-red/20 rounded-lg p-3 text-xs text-navy-700 leading-relaxed">
+        <div class="font-medium text-st-red">${d.issue}</div>
+      </div>`;
+  }
+  html += `<hr class="border-surf-100">
+    <div class="text-xs font-semibold text-navy-700 mb-2">Manhours</div>
+    <div class="flex justify-between text-xs"><span class="text-surf-400">Cumulative</span><span class="font-bold text-navy-700">${d.mh} MH</span></div>`;
+  if (d.deadline) {
+    html += `<div class="flex justify-between text-xs mt-1"><span class="text-surf-400">Deadline</span><span class="font-medium">${d.deadline}</span></div>`;
+  }
+  document.getElementById('detail-body').innerHTML = html;
+}
+
 function closeDetailPanel() {
-  document.getElementById('detailPanelWrap').classList.remove('open');
+  document.getElementById('split-detail').classList.remove('open');
+  document.getElementById('split-backdrop').classList.remove('open');
+  document.querySelectorAll('.tbl tbody tr').forEach(r => r.classList.remove('row-sel'));
 }
 
-// Select all checkboxes
-function toggleSelectAll(el) {
-  document.querySelectorAll('.task-chk').forEach(chk => { chk.checked = el.checked; });
-  updateBulkUI();
+/* ── Bulk selection ── */
+function toggleAllTasks(el) {
+  document.querySelectorAll('#task-table tbody .chk').forEach(c => c.checked = el.checked);
+  updateBulk();
 }
-
-// Update bulk assign button visibility
-document.addEventListener('change', function(e) {
-  if (e.target.classList.contains('task-chk')) updateBulkUI();
-});
-function updateBulkUI() {
-  const checked = document.querySelectorAll('.task-chk:checked');
-  const btn = document.getElementById('bulkAssignBtn');
-  btn.style.display = checked.length > 0 ? 'inline-flex' : 'none';
-  document.getElementById('bulkAssignCount').textContent = checked.length + ' tasks selected';
+function updateBulk() {
+  const n = document.querySelectorAll('#task-table tbody .chk:checked').length;
+  document.getElementById('bulk-bar').classList.toggle('hidden', n === 0);
+  document.getElementById('bulk-count').textContent = n;
+  document.getElementById('bulkAssignCount').textContent = n + ' tasks selected';
 }
-
-// Bulk assign
+function closeBulk() {
+  document.querySelectorAll('#task-table .chk').forEach(c => c.checked = false);
+  document.getElementById('bulk-bar').classList.add('hidden');
+}
 function bulkAssign() {
   const svId = document.getElementById('bulkSupervisorSelect').value;
   if (!svId) { showToast('Error', 'Please select a supervisor', 'red'); return; }
-  const taskIds = Array.from(document.querySelectorAll('.task-chk:checked')).map(c => c.value);
+  const taskIds = Array.from(document.querySelectorAll('.task-chk:checked')).map(c => Number(c.value));
   fetch('/api/tasks/bulk-assign', {
     method: 'PATCH',
-    headers: {'Content-Type': 'application/json', 'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || ''},
-    body: JSON.stringify({task_ids: taskIds.map(Number), assigned_supervisor_id: Number(svId)})
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+    body: JSON.stringify({task_ids: taskIds, assigned_supervisor_id: Number(svId)})
   }).then(r => {
-    if (r.ok) { showToast('Assigned', taskIds.length + ' tasks assigned', 'green'); document.getElementById('bulkAssignModal').classList.add('hidden'); location.reload(); }
-    else { r.json().then(d => showToast('Error', d.detail || 'Assignment failed', 'red')); }
+    if (r.ok) { showToast('Assigned', taskIds.length + ' tasks assigned', 'green'); closeModal('modal-bulk-assign'); location.reload(); }
+    else r.json().then(d => showToast('Error', d.detail || 'Failed', 'red'));
   });
 }
 
-// Close panel on Escape
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') closeDetailPanel();
+/* ── Kanban detail ── */
+function openKanbanDetail(card) {
+  const panel = document.getElementById('kanban-detail-panel');
+  const inner = document.getElementById('kanban-detail-inner');
+  const d = card.dataset;
+  document.getElementById('kd-task-id').textContent = 'Task #' + (d.taskId || '');
+  document.getElementById('kd-title').textContent = d.title || '';
+  document.getElementById('kd-ac').textContent = d.ac || '-';
+  document.getElementById('kd-rfo').textContent = d.rfo || '-';
+  document.getElementById('kd-mh').textContent = d.mh || '0.0';
+  document.getElementById('kd-due').textContent = d.deadline || '-';
+  const worker = d.worker || d.supervisor || '';
+  document.getElementById('kd-assignee').textContent = worker || 'Unassigned';
+  const initials = worker ? worker.split(' ').map(w => w[0]).join('').toUpperCase() : '??';
+  document.getElementById('kd-avatar').textContent = initials;
+
+  const remarksSec = document.getElementById('kd-remarks-section');
+  if (d.remarks) { remarksSec.classList.remove('hidden'); document.getElementById('kd-remarks').textContent = d.remarks; }
+  else { remarksSec.classList.add('hidden'); }
+
+  const issueSec = document.getElementById('kd-issue-section');
+  if (d.issue) { issueSec.classList.remove('hidden'); document.getElementById('kd-issue').textContent = d.issue; }
+  else { issueSec.classList.add('hidden'); }
+
+  const statusMap = {
+    'NOT_STARTED': {label:'Not Started', bg:'#eef1f6', color:'#7c8694'},
+    'IN_PROGRESS': {label:'In Progress', bg:'#fdf5e0', color:'#a07d12'},
+    'WAITING': {label:'Waiting', bg:'#fdf0f0', color:'#b93a3a'},
+    'COMPLETED': {label:'Completed', bg:'#ecf7f0', color:'#2d7a4f'},
+  };
+  const st = statusMap[d.status] || statusMap['NOT_STARTED'];
+  const badge = document.getElementById('kd-status-badge');
+  badge.textContent = st.label; badge.style.background = st.bg; badge.style.color = st.color;
+
+  document.getElementById('kd-entry-link').href = '/tasks/' + (d.taskId || '');
+
+  panel.classList.remove('hidden');
+  requestAnimationFrame(() => { inner.style.transform = 'translateX(0)'; });
+}
+function closeKanbanDetail() {
+  const inner = document.getElementById('kanban-detail-inner');
+  inner.style.transform = 'translateX(100%)';
+  setTimeout(() => document.getElementById('kanban-detail-panel').classList.add('hidden'), 250);
+}
+
+/* ── RFO accordion ── */
+function toggleRfo(header) {
+  const group = header.closest('.rfo-group');
+  const body = header.nextElementSibling;
+  const arrow = header.querySelector('.rfo-arrow');
+  body.classList.toggle('hidden');
+  arrow.classList.toggle('rotate-90');
+  group.classList.toggle('open');
+}
+
+/* ── Modals ── */
+function showModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) closeModal(m.id); });
+});
+
+/* ── Create Task ── */
+function createTask(e) {
+  e.preventDefault();
+  const form = document.getElementById('createTaskForm');
+  const fd = new FormData(form);
+  const body = {
+    task_text: fd.get('task_text'),
+    shop_id: Number(fd.get('shop_id')),
+    planned_mh: parseFloat(fd.get('planned_mh')) || 0,
+  };
+  /* Resolve aircraft by ac_reg */
+  const acReg = fd.get('ac_reg');
+  /* Find aircraft_id from the known list */
+  const acOpts = [{% for ac in aircraft_list %}{id:{{ ac.id }},reg:"{{ ac.ac_reg }}"},{% endfor %}];
+  const acMatch = acOpts.find(a => a.reg.toLowerCase() === acReg.toLowerCase());
+  if (!acMatch) { showToast('Error', 'Aircraft "' + acReg + '" not found in system', 'red'); return false; }
+  body.aircraft_id = acMatch.id;
+  if (fd.get('deadline_date')) body.deadline_date = fd.get('deadline_date');
+  /* Resolve work_package by rfo_no */
+  const rfoNo = fd.get('rfo_no');
+  if (rfoNo) {
+    const wpOpts = [{% for wp in work_packages %}{id:{{ wp.id }},rfo:"{{ wp.rfo_no or '' }}"},{% endfor %}];
+    const wpMatch = wpOpts.find(w => w.rfo === rfoNo);
+    if (wpMatch) body.work_package_id = wpMatch.id;
+  }
+  const supId = fd.get('assigned_supervisor_id');
+
+  fetch('/api/tasks', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+    body: JSON.stringify(body)
+  }).then(r => r.json().then(d => {
+    if (r.ok) {
+      if (supId) {
+        fetch('/api/tasks/' + d.task_id + '/assign', {
+          method: 'PATCH',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+          body: JSON.stringify({assigned_supervisor_id: Number(supId)})
+        }).then(() => { closeModal('modal-new-task'); showToast('Created & Assigned', 'Task distributed', 'green'); location.reload(); });
+      } else {
+        closeModal('modal-new-task'); showToast('Created', 'Task created successfully', 'green'); location.reload();
+      }
+    } else {
+      showToast('Error', d.detail || 'Creation failed', 'red');
+    }
+  }));
+  return false;
+}
+
+/* ── Import ── */
+function previewImport(input) {
+  if (input.files.length) {
+    document.getElementById('importPreview').classList.remove('hidden');
+    document.getElementById('importPreviewText').textContent = 'File: ' + input.files[0].name + ' (' + Math.round(input.files[0].size/1024) + ' KB)';
+    document.getElementById('importBtn').disabled = false;
+  }
+}
+function runImport() {
+  const file = document.getElementById('rfoFileInput').files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  fetch('/api/tasks/import', {
+    method: 'POST',
+    headers: {'X-CSRFToken': CSRF},
+    body: fd
+  }).then(r => r.json().then(d => {
+    if (r.ok) { closeModal('modal-import-rfo'); showToast('Imported', (d.created||0) + ' created, ' + (d.skipped||0) + ' skipped', 'green'); location.reload(); }
+    else showToast('Error', d.detail || 'Import failed', 'red');
+  }));
+}
+
+/* ── Keyboard shortcuts ── */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeDetailPanel(); closeKanbanDetail(); }
 });
 </script>
 {% endblock %}
