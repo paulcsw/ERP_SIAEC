@@ -15,11 +15,19 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-COPY pyproject.toml .
-RUN pip install --no-cache-dir .
+# Install dependencies first (layer cache)
+COPY pyproject.toml requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy application code
 COPY . .
+
+# Install the project itself (editable-like, for imports)
+RUN pip install --no-cache-dir --no-deps -e .
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+ENTRYPOINT ["/docker-entrypoint.sh"]
