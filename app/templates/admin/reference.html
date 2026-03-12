@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Reference Data — CIS ERP{% endblock %}
+{% block title %}Reference Data - CIS ERP{% endblock %}
 {% block breadcrumb %}Admin &rsaquo; Reference Data{% endblock %}
 
 {% block content %}
-<div class="p-4 lg:p-5 flex flex-col h-full w-full">
+<div id="admin-content" class="p-4 lg:p-5 flex flex-col h-full w-full">
 
-  {# ── Header ──────────────────────────────────────────────────────── #}
+  {# ?? Header ???????????????????????????????????????????????????????? #}
   <div class="flex items-center justify-between mb-3 shrink-0">
     <div>
       <h1 class="text-lg font-semibold text-navy-900">Reference Data</h1>
@@ -14,14 +14,14 @@
     <button class="btn-outline btn-sm text-xs" onclick="showModal('modal-csv')">CSV Import</button>
   </div>
 
-  {# ── Tabs ────────────────────────────────────────────────────────── #}
+  {# ?? Tabs ?????????????????????????????????????????????????????????? #}
   <div class="flex gap-1 mb-3 border-b border-surf-100">
     <button class="ref-tab active" data-tab="tab-aircraft" onclick="switchRefTab(this)">Aircraft</button>
     <button class="ref-tab" data-tab="tab-wp" onclick="switchRefTab(this)">Work Packages</button>
     <button class="ref-tab" data-tab="tab-ss" onclick="switchRefTab(this)">Shop Streams</button>
   </div>
 
-  {# ── Aircraft Table ──────────────────────────────────────────────── #}
+  {# ?? Aircraft Table ???????????????????????????????????????????????? #}
   <div id="tab-aircraft" class="ref-panel card flex-1 flex flex-col min-h-0">
     <div class="flex-1 overflow-y-auto">
       <table class="tbl">
@@ -44,7 +44,7 @@
     </div>
   </div>
 
-  {# ── Work Packages Table ─────────────────────────────────────────── #}
+  {# ?? Work Packages Table ??????????????????????????????????????????? #}
   <div id="tab-wp" class="ref-panel card flex-1 flex flex-col min-h-0" style="display:none">
     <div class="flex-1 overflow-y-auto">
       <table class="tbl">
@@ -71,7 +71,7 @@
     </div>
   </div>
 
-  {# ── Shop Streams Table ──────────────────────────────────────────── #}
+  {# ?? Shop Streams Table ???????????????????????????????????????????? #}
   <div id="tab-ss" class="ref-panel card flex-1 flex flex-col min-h-0" style="display:none">
     <div class="flex-1 overflow-y-auto">
       <table class="tbl">
@@ -96,8 +96,8 @@
 
 </div>
 
-{# ── CSV Import Modal ──────────────────────────────────────────────── #}
-<div class="modal-overlay" id="modal-csv" style="display:none">
+{# ?? CSV Import Modal ???????????????????????????????????????????????? #}
+<div class="modal-overlay" id="modal-csv">
   <div class="card w-full sm:w-[500px] max-h-[80vh] overflow-y-auto">
     <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between">
       <h3 class="font-semibold text-navy-900">CSV Import &mdash; Reference Data</h3>
@@ -113,7 +113,7 @@
         </select>
       </div>
       <div class="border-2 border-dashed border-surf-200 rounded-lg p-8 text-center">
-        <input type="file" id="csv-file" accept=".csv" class="hidden"/>
+        <input type="file" id="csv-file" accept=".csv" class="hidden" onchange="onCsvFileSelected(this)"/>
         <div class="text-sm text-surf-400">Drop CSV file here or <span class="text-st-blue font-medium cursor-pointer" onclick="document.getElementById('csv-file').click()">browse</span></div>
         <div class="text-[10px] text-surf-300 mt-1">Max 5MB, UTF-8</div>
       </div>
@@ -128,6 +128,16 @@
 
 {% block scripts %}
 <script>
+function refreshAdminReference() {
+  if (typeof htmx === 'undefined') return;
+  htmx.ajax('GET', '/admin/reference', {
+    target: '#admin-content',
+    swap: 'innerHTML',
+    select: '#admin-content > *',
+    pushURL: true,
+  });
+}
+
 function switchRefTab(btn) {
   document.querySelectorAll('.ref-tab').forEach(t=>t.classList.remove('active'));
   btn.classList.add('active');
@@ -135,13 +145,13 @@ function switchRefTab(btn) {
   document.getElementById(btn.dataset.tab).style.display='';
 }
 
-document.getElementById('csv-file').addEventListener('change', function(e) {
-  var f=e.target.files[0];
+function onCsvFileSelected(inputEl) {
+  var f=inputEl.files[0];
   if(f){
     document.getElementById('csv-preview').style.display='';
     document.getElementById('csv-preview-text').textContent='Selected: '+f.name+' ('+Math.round(f.size/1024)+'KB)';
   }
-});
+}
 
 function importCsv() {
   var file=document.getElementById('csv-file').files[0];
@@ -149,11 +159,10 @@ function importCsv() {
   var entity=document.getElementById('csv-entity').value;
   var fd=new FormData();
   fd.append('file',file);
-  fd.append('entity_type',entity);
   var csrf=(document.cookie.match(/csrftoken=([^;]+)/)||[])[1]||'';
-  fetch('/api/reference/import/csv',{method:'POST',headers:{'X-CSRFToken':csrf},body:fd})
+  fetch('/api/reference/import/csv?entity_type='+encodeURIComponent(entity),{method:'POST',headers:{'X-CSRFToken':csrf},body:fd})
     .then(r=>{if(!r.ok)return r.json().then(e=>{throw e});return r.json()})
-    .then(d=>{closeModal('modal-csv');showToast('Imported',d.created+' created, '+d.skipped+' skipped','green');location.reload();})
+    .then(d=>{closeModal('modal-csv');showToast('Imported',d.created_count+' created, '+d.skipped_count+' skipped','green');refreshAdminReference();})
     .catch(e=>showToast('Error',(e&&e.detail)||'Import failed','red'));
 }
 </script>
