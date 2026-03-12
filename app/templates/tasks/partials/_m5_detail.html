@@ -1,7 +1,7 @@
 {# M5: Task Detail — read-only mobile #}
 <div id="mob-m5" class="flex flex-col h-full bg-white">
   <div class="p-4 bg-white border-b border-surf-200 shrink-0">
-    <button hx-get="/tasks/entry/mobile/m3?snapshot_id={{ task.snapshot_id }}&amp;ac={{ ac_reg }}"
+    <button hx-get="/tasks/entry/mobile/m3?snapshot_id={{ task.snapshot_id }}&amp;ac={{ ac_reg }}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}"
             hx-target="#mob-entry-stage"
             class="flex items-center gap-1 text-sm text-navy-600">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

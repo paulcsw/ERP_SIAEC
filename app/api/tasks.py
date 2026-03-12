@@ -761,6 +761,10 @@ async def create_task(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Distribution action must stay ADMIN-only.
+    if body.assigned_supervisor_id is not None:
+        _require_admin(current_user)
+
     await enforce_shop_access(db, current_user, body.shop_id, "EDIT")
 
     status = validate_status(body.status)
@@ -1168,18 +1172,20 @@ async def assign_worker(
 
     await enforce_shop_access(db, current_user, task.shop_id, "EDIT")
 
-    # Validate worker belongs to same shop (check user_shop_access)
-    worker_access = (
-        await db.execute(
-            select(UserShopAccess).where(
-                UserShopAccess.user_id == body.assigned_worker_id,
-                UserShopAccess.shop_id == task.shop_id,
+    # Validate worker belongs to same shop (check user_shop_access).
+    # Null is allowed to clear assignment.
+    if body.assigned_worker_id is not None:
+        worker_access = (
+            await db.execute(
+                select(UserShopAccess).where(
+                    UserShopAccess.user_id == body.assigned_worker_id,
+                    UserShopAccess.shop_id == task.shop_id,
+                )
             )
-        )
-    ).scalar_one_or_none()
+        ).scalar_one_or_none()
 
-    if not worker_access:
-        raise APIError(403, "Worker does not have access to this shop", "SHOP_ACCESS_DENIED")
+        if not worker_access:
+            raise APIError(403, "Worker does not have access to this shop", "SHOP_ACCESS_DENIED")
 
     before = {
         "task_id": task.id,

@@ -205,4 +205,4 @@ class BulkAssignRequest(BaseModel):
 
 
 class AssignWorkerRequest(BaseModel):
-    assigned_worker_id: int
+    assigned_worker_id: int | None = None

@@ -1,9 +1,9 @@
-{# M3: Quick Update — mobile #}
+{# M3: Quick Update - mobile #}
 <div id="mob-m3" class="flex flex-col h-full bg-surf-50">
   {# Header #}
   <div class="p-4 bg-white border-b border-surf-200 shrink-0">
     <div class="flex items-center justify-between">
-      <button hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}"
+      <button hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}"
               hx-target="#mob-entry-stage"
               class="flex items-center gap-1 text-sm text-navy-600">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -16,7 +16,7 @@
           <button class="w-full text-left px-4 py-3 text-sm font-medium text-navy-900 hover:bg-surf-50 border-b border-surf-100"
                   onclick="this.parentElement.style.display='none';document.getElementById('mob-m4-modal').style.display='flex'">+ Add Task</button>
           <button class="w-full text-left px-4 py-3 text-sm font-medium text-navy-900 hover:bg-surf-50"
-                  hx-get="/tasks/entry/mobile/m5?snapshot_id={{ task.snapshot_id }}&amp;ac={{ ac_reg }}"
+                  hx-get="/tasks/entry/mobile/m5?snapshot_id={{ task.snapshot_id }}&amp;ac={{ ac_reg }}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}"
                   hx-target="#mob-entry-stage"
                   onclick="this.parentElement.style.display='none'">View Task Detail</button>
         </div>
@@ -59,11 +59,11 @@
         </div>
       </div>
     </div>
-    {# Worker dropdown — +Add hidden on mobile per spec #}
+    {# Worker dropdown - add hidden on mobile per spec #}
     <div>
       <div class="mob-label">Worker</div>
       <select class="inp w-full h-12 text-base" id="mob-worker-select">
-        <option value="">— Unassigned —</option>
+        <option value="">Unassigned</option>
         {% for w in workers %}
         <option value="{{ w.id }}" {% if task.assigned_worker_id == w.id %}selected{% endif %}>{{ w.name }}</option>
         {% endfor %}
@@ -94,10 +94,10 @@
       </div>
     </div>
   </div>
-  {# Fixed bottom buttons — Save & Next + Save #}
+  {# Fixed bottom buttons - Save & Next + Save #}
   <div class="p-4 border-t border-surf-200 bg-white shrink-0 flex gap-3 mob-safe-bottom">
-    <button type="button" class="btn-outline flex-1 h-12 text-base" onclick="mobSaveTask(true)">Save &amp; Next</button>
-    <button type="button" class="btn-gold flex-1 h-12 text-base font-semibold" onclick="mobSaveTask(false)">Save</button>
+    <button type="button" id="mob-save-next-btn" class="btn-outline flex-1 h-12 text-base" onclick="mobSaveTask(true)">Save &amp; Next</button>
+    <button type="button" id="mob-save-btn" class="btn-gold flex-1 h-12 text-base font-semibold" onclick="mobSaveTask(false)">Save</button>
   </div>
   {# Hidden data #}
   <input type="hidden" id="mob-snapshot-id" value="{{ task.snapshot_id }}"/>
@@ -105,10 +105,14 @@
   <input type="hidden" id="mob-version" value="{{ task.version }}"/>
   <input type="hidden" id="mob-ac-reg" value="{{ ac_reg }}"/>
   <input type="hidden" id="mob-next-snapshot" value="{{ next_snapshot_id or '' }}"/>
+  <input type="hidden" id="mob-status-filter" value="{{ status_filter or '' }}"/>
+  <input type="hidden" id="mob-quick-filter" value="{{ quick_filter or '' }}"/>
   {# M4 Add Task modal #}
   {% include "tasks/partials/_m4_add_task.html" %}
 </div>
 <script>
+let mobTaskSaveInFlight = false;
+
 function mobSelectStatus(btn, status) {
   document.querySelectorAll('#mob-status-grid .status-btn').forEach(function(b){b.classList.remove('active')});
   btn.classList.add('active');
@@ -120,52 +124,147 @@ function mobStepMH(delta) {
   v = Math.max(0, Math.round((v + delta) * 10) / 10);
   inp.value = v;
 }
-function mobSaveTask(goNext) {
-  var snapshotId = document.getElementById('mob-snapshot-id').value;
-  var taskId = document.getElementById('mob-task-id').value;
+function mobLoadStage(url) {
+  if (typeof htmx === 'undefined') return;
+  htmx.ajax('GET', url, { target: '#mob-entry-stage', swap: 'innerHTML' });
+}
+
+function mobBuildFilterQuery() {
+  var status = (document.getElementById('mob-status-filter') || {}).value || '';
+  var quick = (document.getElementById('mob-quick-filter') || {}).value || '';
+  var parts = [];
+  if (status) parts.push('status=' + encodeURIComponent(status));
+  if (quick) parts.push('quick=' + encodeURIComponent(quick));
+  return parts.length ? '&' + parts.join('&') : '';
+}
+
+function mobGetTaskErrorMessage(payload, fallback) {
+  if (!payload) return fallback;
+  if (typeof payload === 'string') return payload;
+  if (typeof payload.detail === 'string') return payload.detail;
+  if (Array.isArray(payload.detail) && payload.detail.length) {
+    var first = payload.detail[0];
+    if (typeof first === 'string') return first;
+    if (first && typeof first.msg === 'string') return first.msg;
+  }
+  if (typeof payload.message === 'string') return payload.message;
+  return fallback;
+}
+
+function mobSetTaskButtonBusy(button, busy, busyText) {
+  if (typeof setTaskEntryButtonBusy === 'function') {
+    setTaskEntryButtonBusy(button, busy, busyText);
+    return;
+  }
+  if (!button) return;
+  if (busy) {
+    button.dataset.prevDisabled = button.disabled ? '1' : '0';
+    button.dataset.prevText = button.textContent;
+    button.disabled = true;
+    button.classList.add('opacity-60', 'cursor-not-allowed');
+    if (busyText) button.textContent = busyText;
+    return;
+  }
+  button.disabled = button.dataset.prevDisabled === '1';
+  button.classList.remove('opacity-60', 'cursor-not-allowed');
+  if (button.dataset.prevText) button.textContent = button.dataset.prevText;
+}
+
+async function mobTaskRequestJson(url, options) {
+  if (typeof taskEntryRequestJson === 'function') {
+    return taskEntryRequestJson(url, options || {});
+  }
+  var opts = options || {};
+  var method = opts.method || 'GET';
+  var headers = {'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || ''};
+  var body;
+  if (opts.json !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify(opts.json);
+  } else if (opts.formData) {
+    body = opts.formData;
+  }
+
+  var res = await fetch(url, { method: method, headers: headers, body: body });
+  var raw = await res.text();
+  var data = {};
+  if (raw) {
+    try { data = JSON.parse(raw); } catch (_) { data = { detail: raw }; }
+  }
+  if (!res.ok) {
+    var err = new Error(mobGetTaskErrorMessage(data, 'Request failed'));
+    err.status = res.status;
+    err.payload = data;
+    throw err;
+  }
+  return data;
+}
+
+async function mobSaveTask(goNext) {
+  if (mobTaskSaveInFlight) return;
+
+  var snapshotId = parseInt((document.getElementById('mob-snapshot-id').value || '').trim(), 10);
+  var taskId = parseInt((document.getElementById('mob-task-id').value || '').trim(), 10);
+  var version = parseInt((document.getElementById('mob-version').value || '').trim(), 10);
+  var mh = parseFloat((document.getElementById('mob-mh').value || '').trim());
+  if (!snapshotId || !taskId || !Number.isFinite(version) || !Number.isFinite(mh)) {
+    showToast('Error', 'Task context is invalid. Reload and try again.', 'red');
+    return;
+  }
+
+  var saveBtn = document.getElementById('mob-save-btn');
+  var nextBtn = document.getElementById('mob-save-next-btn');
   var payload = {
-    version: parseInt(document.getElementById('mob-version').value),
+    version: version,
     status: document.getElementById('mob-status-input').value,
-    mh_incurred_hours: parseFloat(document.getElementById('mob-mh').value) || 0,
+    mh_incurred_hours: mh,
     deadline_date: document.getElementById('mob-deadline').value || null,
     remarks: document.getElementById('mob-remarks').value || null,
     has_issue: document.getElementById('mob-has-issue').checked,
     critical_issue: document.getElementById('mob-critical-issue').value || null
   };
-  var csrf = (document.cookie.match(/csrftoken=([^;]+)/)||[])[1] || '';
-  // Step 1: PATCH snapshot
-  fetch('/api/tasks/snapshots/' + snapshotId, {
-    method: 'PATCH', headers: {'Content-Type':'application/json','X-CSRFToken':csrf},
-    body: JSON.stringify(payload)
-  }).then(function(r){
-    if(!r.ok) return r.json().then(function(e){throw e});
-    return r.json();
-  }).then(function(data){
-    // Step 2: Assign worker if changed
-    var workerId = document.getElementById('mob-worker-select').value;
-    if(workerId) {
-      return fetch('/api/tasks/' + taskId + '/assign-worker', {
-        method: 'PATCH', headers: {'Content-Type':'application/json','X-CSRFToken':csrf},
-        body: JSON.stringify({assigned_worker_id: parseInt(workerId)})
-      }).then(function(r){ return r.ok ? r.json() : null; });
-    }
-  }).then(function(){
+
+  mobTaskSaveInFlight = true;
+  mobSetTaskButtonBusy(saveBtn, true, 'Saving...');
+  mobSetTaskButtonBusy(nextBtn, true, 'Saving...');
+
+  try {
+    await mobTaskRequestJson('/api/tasks/snapshots/' + snapshotId, {
+      method: 'PATCH',
+      json: payload
+    });
+
+    var workerRaw = document.getElementById('mob-worker-select').value;
+    var workerId = workerRaw ? parseInt(workerRaw, 10) : null;
+    await mobTaskRequestJson('/api/tasks/' + taskId + '/assign-worker', {
+      method: 'PATCH',
+      json: { assigned_worker_id: Number.isFinite(workerId) ? workerId : null }
+    });
+
     showToast('Saved', goNext ? 'Loading next task...' : 'Snapshot updated', 'green');
-    if(goNext) {
+    if (goNext) {
       var nextId = document.getElementById('mob-next-snapshot').value;
       var ac = document.getElementById('mob-ac-reg').value;
-      if(nextId) {
-        htmx.ajax('GET', '/tasks/entry/mobile/m3?snapshot_id=' + nextId + '&ac=' + ac, '#mob-entry-stage');
+      var filterQuery = mobBuildFilterQuery();
+      if (nextId) {
+        mobLoadStage('/tasks/entry/mobile/m3?snapshot_id=' + nextId + '&ac=' + ac + filterQuery);
       } else {
-        htmx.ajax('GET', '/tasks/entry/mobile/m2?ac=' + ac, '#mob-entry-stage');
+        mobLoadStage('/tasks/entry/mobile/m2?ac=' + ac + filterQuery);
       }
+    } else {
+      var acCur = document.getElementById('mob-ac-reg').value;
+      mobLoadStage('/tasks/entry/mobile/m3?snapshot_id=' + snapshotId + '&ac=' + acCur + mobBuildFilterQuery());
     }
-  }).catch(function(err){
-    var msg = (err && err.detail) || 'Save failed. Please try again.';
-    var code = (err && err.code) || '';
-    if(code === 'CONFLICT_VERSION') msg = 'Another user modified this task. Please refresh and try again.';
-    if(code === 'MH_DECREASE_FORBIDDEN') msg = 'MH is cumulative and cannot be decreased. Contact admin.';
+  } catch (err) {
+    var code = (err && err.payload && err.payload.code) || '';
+    var msg = (err && err.message) || 'Save failed. Please try again.';
+    if (code === 'CONFLICT_VERSION') msg = 'Another user modified this task. Please refresh and try again.';
+    if (code === 'MH_DECREASE_FORBIDDEN') msg = 'MH is cumulative and cannot be decreased. Contact admin.';
     showToast('Error', msg, 'red');
-  });
+  } finally {
+    mobTaskSaveInFlight = false;
+    mobSetTaskButtonBusy(saveBtn, false);
+    mobSetTaskButtonBusy(nextBtn, false);
+  }
 }
 </script>
