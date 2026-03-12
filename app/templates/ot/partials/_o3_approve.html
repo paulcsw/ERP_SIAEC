@@ -1,11 +1,11 @@
 {# O3: Mobile OT Approve/Endorse #}
 <div class="p-4 space-y-3" id="ot-o3">
   {% if 'WORKER' in current_user.roles and 'SUPERVISOR' not in current_user.roles and 'ADMIN' not in current_user.roles %}
-    {# WORKER: O3 hidden — this shouldn't be reachable but just in case #}
+    {# WORKER: O3 hidden - this should not be reachable, but keep safe fallback #}
     <div class="text-center py-8 text-surf-400 text-sm">Approval is not available for your role.</div>
 
   {% elif 'SUPERVISOR' in current_user.roles and 'ADMIN' not in current_user.roles %}
-    {# SUPERVISOR: PENDING → Endorse #}
+    {# SUPERVISOR: PENDING -> Endorse #}
     <div class="text-sm text-surf-400 mb-3">{{ count }} request{{ 's' if count != 1 }} pending your endorsement</div>
     {% for ot in items %}
     <div class="card p-4 space-y-3" id="mob-approve-{{ ot.id }}">
@@ -21,11 +21,11 @@
         <div class="prog-bar h-1.5 w-20"><div class="prog-fill" style="width:{{ ot.monthly_pct }}%;background:{{ ot.monthly_bar_color }};border-radius:4px"></div></div>
       </div>
       <div class="flex gap-3">
-        <button class="btn-outline flex-1 h-12 text-base" style="color:#b93a3a;border-color:#b93a3a"
-                onclick="mobEndorse({{ ot.id }}, 'REJECT')">Reject</button>
-        <button class="flex-1 h-12 text-base font-semibold rounded-lg border-none cursor-pointer"
+        <button type="button" class="btn-outline flex-1 h-12 text-base" style="color:#b93a3a;border-color:#b93a3a"
+                onclick="mobEndorse({{ ot.id }}, 'REJECT', this)">Reject</button>
+        <button type="button" class="flex-1 h-12 text-base font-semibold rounded-lg border-none cursor-pointer"
                 style="background:#6d28d9;color:#fff"
-                onclick="mobEndorse({{ ot.id }}, 'APPROVE')">Endorse</button>
+                onclick="mobEndorse({{ ot.id }}, 'APPROVE', this)">Endorse</button>
       </div>
     </div>
     {% endfor %}
@@ -34,7 +34,7 @@
     {% endif %}
 
   {% elif 'ADMIN' in current_user.roles %}
-    {# ADMIN: ENDORSED → Approve #}
+    {# ADMIN: ENDORSED -> Approve #}
     <div class="text-sm text-surf-400 mb-3">{{ count }} endorsed request{{ 's' if count != 1 }} awaiting final approval</div>
     {% for ot in items %}
     <div class="card p-4 space-y-3" id="mob-approve-{{ ot.id }}">
@@ -50,10 +50,10 @@
         <div class="prog-bar h-1.5 w-20"><div class="prog-fill" style="width:{{ ot.monthly_pct }}%;background:{{ ot.monthly_bar_color }};border-radius:4px"></div></div>
       </div>
       <div class="flex gap-3">
-        <button class="btn-outline flex-1 h-12 text-base" style="color:#b93a3a;border-color:#b93a3a"
-                onclick="mobApprove({{ ot.id }}, 'REJECT')">Reject</button>
-        <button class="btn-gold flex-1 h-12 text-base font-semibold"
-                onclick="mobApprove({{ ot.id }}, 'APPROVE')">Approve</button>
+        <button type="button" class="btn-outline flex-1 h-12 text-base" style="color:#b93a3a;border-color:#b93a3a"
+                onclick="mobApprove({{ ot.id }}, 'REJECT', this)">Reject</button>
+        <button type="button" class="btn-gold flex-1 h-12 text-base font-semibold"
+                onclick="mobApprove({{ ot.id }}, 'APPROVE', this)">Approve</button>
       </div>
     </div>
     {% endfor %}
@@ -64,42 +64,128 @@
 </div>
 
 <script>
-const csrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
-async function mobEndorse(id, action) {
-  const comment = action === 'REJECT' ? prompt('Rejection reason:') : null;
-  const card = document.getElementById('mob-approve-' + id);
-  const r = await fetch(`/api/ot/${id}/endorse`, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
-    body: JSON.stringify({action, comment})
-  });
-  if (r.ok) {
-    card.style.opacity = '.2';
-    showToast(action === 'APPROVE' ? 'Endorsed' : 'Rejected',
-      `OT-${id} ${action === 'APPROVE' ? 'endorsed → awaiting admin' : 'rejected'}`,
-      action === 'APPROVE' ? 'green' : 'red');
-    setTimeout(() => card.remove(), 800);
-  } else {
-    const d = await r.json();
-    showToast('Error', d.detail || 'Failed', 'red');
+var mobOtApproveCsrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+let mobOtApproveActionInFlight = false;
+
+function getMobOtErrorMessage(payload, fallback) {
+  if (!payload) return fallback;
+  if (typeof payload === 'string') return payload;
+  if (typeof payload.detail === 'string') return payload.detail;
+  if (Array.isArray(payload.detail) && payload.detail.length) {
+    const first = payload.detail[0];
+    if (typeof first === 'string') return first;
+    if (first && typeof first.msg === 'string') return first.msg;
+  }
+  return fallback;
+}
+
+function setMobOtButtonBusy(button, busy, busyText) {
+  if (!button) return;
+  if (busy) {
+    button.dataset.prevDisabled = button.disabled ? '1' : '0';
+    button.dataset.prevHtml = button.innerHTML;
+    button.disabled = true;
+    button.classList.add('opacity-60', 'cursor-not-allowed');
+    if (busyText) button.textContent = busyText;
+    return;
+  }
+  button.disabled = button.dataset.prevDisabled === '1';
+  button.classList.remove('opacity-60', 'cursor-not-allowed');
+  if (button.dataset.prevHtml) button.innerHTML = button.dataset.prevHtml;
+}
+
+async function mobOtRequestJson(url, options = {}) {
+  const { method = 'GET', json } = options;
+  const headers = { 'X-CSRFToken': mobOtApproveCsrf };
+  let body;
+  if (json !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify(json);
+  }
+
+  const res = await fetch(url, { method, headers, body });
+  const raw = await res.text();
+  let data = {};
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = { detail: raw };
+    }
+  }
+  if (!res.ok) {
+    const err = new Error(getMobOtErrorMessage(data, 'Failed'));
+    err.payload = data;
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+function refreshMobOtApproveSegment() {
+  if (typeof htmx === 'undefined') return;
+  htmx.ajax('GET', '/ot/segment/o3', { target: '#ot-stage', swap: 'innerHTML' });
+}
+
+async function runMobOtApproveAction(actionFn) {
+  if (mobOtApproveActionInFlight) return;
+  mobOtApproveActionInFlight = true;
+  try {
+    await actionFn();
+  } finally {
+    mobOtApproveActionInFlight = false;
   }
 }
-async function mobApprove(id, action) {
+
+async function mobEndorse(id, action, button) {
   const comment = action === 'REJECT' ? prompt('Rejection reason:') : null;
+  if (action === 'REJECT' && comment === null) return;
   const card = document.getElementById('mob-approve-' + id);
-  const r = await fetch(`/api/ot/${id}/approve`, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
-    body: JSON.stringify({action, comment})
+  await runMobOtApproveAction(async () => {
+    setMobOtButtonBusy(button, true, action === 'APPROVE' ? 'Endorsing...' : 'Rejecting...');
+    try {
+      await mobOtRequestJson(`/api/ot/${id}/endorse`, {
+        method: 'POST',
+        json: { action, comment },
+      });
+      if (card) card.style.opacity = '.2';
+      showToast(
+        action === 'APPROVE' ? 'Endorsed' : 'Rejected',
+        `OT-${id} ${action === 'APPROVE' ? 'endorsed - awaiting admin' : 'rejected'}`,
+        action === 'APPROVE' ? 'green' : 'red'
+      );
+      refreshMobOtApproveSegment();
+    } catch (err) {
+      showToast('Error', err.message || 'Failed', 'red');
+    } finally {
+      setMobOtButtonBusy(button, false);
+    }
   });
-  if (r.ok) {
-    card.style.opacity = '.2';
-    showToast(action === 'APPROVE' ? 'Approved' : 'Rejected',
-      `OT-${id} ${action.toLowerCase()}d`, action === 'APPROVE' ? 'green' : 'red');
-    setTimeout(() => card.remove(), 800);
-  } else {
-    const d = await r.json();
-    showToast('Error', d.detail || 'Failed', 'red');
-  }
+}
+
+async function mobApprove(id, action, button) {
+  const comment = action === 'REJECT' ? prompt('Rejection reason:') : null;
+  if (action === 'REJECT' && comment === null) return;
+  const card = document.getElementById('mob-approve-' + id);
+  await runMobOtApproveAction(async () => {
+    setMobOtButtonBusy(button, true, action === 'APPROVE' ? 'Approving...' : 'Rejecting...');
+    try {
+      await mobOtRequestJson(`/api/ot/${id}/approve`, {
+        method: 'POST',
+        json: { action, comment },
+      });
+      if (card) card.style.opacity = '.2';
+      showToast(
+        action === 'APPROVE' ? 'Approved' : 'Rejected',
+        `OT-${id} ${action.toLowerCase()}d`,
+        action === 'APPROVE' ? 'green' : 'red'
+      );
+      refreshMobOtApproveSegment();
+    } catch (err) {
+      showToast('Error', err.message || 'Failed', 'red');
+    } finally {
+      setMobOtButtonBusy(button, false);
+    }
+  });
 }
 </script>

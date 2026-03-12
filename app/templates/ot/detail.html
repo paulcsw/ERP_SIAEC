@@ -1,13 +1,14 @@
 {% extends "base.html" %}
-{% block title %}OT Detail — CIS ERP{% endblock %}
+{% block title %}OT Detail - CIS ERP{% endblock %}
 {% block breadcrumb %}<a href="/ot" class="text-surf-400 hover:text-navy-700">OT Requests</a> <span class="text-surf-300 mx-1">/</span> {% if ot %}OT-{{ '%03d' % ot.id }}{% else %}Not Found{% endif %}{% endblock %}
 
 {% block content %}
-<div class="p-4 lg:p-5 flex flex-col h-full w-full overflow-y-auto">
+<div id="ot-content" class="p-4 lg:p-5 flex flex-col h-full w-full overflow-y-auto">
   {% if not ot %}
   <div class="card p-8 text-center">
     <div class="text-surf-400 text-lg mb-2">OT request not found</div>
-    <a href="/ot" class="btn-outline">Back to OT List</a>
+    <a href="/ot" class="btn-outline"
+       hx-get="/ot" hx-target="#ot-content" hx-select="#ot-content > *" hx-swap="innerHTML" hx-push-url="true">Back to OT List</a>
   </div>
   {% else %}
   <div class="flex items-center justify-between mb-3">
@@ -48,7 +49,7 @@
           </div>
           <div class="col-span-2">
             <span class="text-surf-400">Justification</span>
-            <div class="mt-0.5">{{ ot.reason_text or '—' }}</div>
+            <div class="mt-0.5">{{ ot.reason_text or '-' }}</div>
           </div>
           {% if ot.submitted_by_name %}
           <div>
@@ -120,17 +121,18 @@
 
       {# Actions #}
       <div class="flex gap-3">
-        <a href="/ot" class="btn-outline">Back to List</a>
+        <a href="/ot" class="btn-outline"
+           hx-get="/ot" hx-target="#ot-content" hx-select="#ot-content > *" hx-swap="innerHTML" hx-push-url="true">Back to List</a>
         {% if ot.status == 'PENDING' and ot.user_id == current_user.user_id %}
-        <button onclick="cancelOt({{ ot.id }})" class="btn-outline" style="color:#b93a3a;border-color:#b93a3a">Cancel Request</button>
+        <button type="button" onclick="cancelOt({{ ot.id }}, this)" class="btn-outline" style="color:#b93a3a;border-color:#b93a3a">Cancel Request</button>
         {% endif %}
         {% if ot.status == 'PENDING' and 'SUPERVISOR' in current_user.roles and 'ADMIN' not in current_user.roles and ot.user_id != current_user.user_id %}
-        <button onclick="endorseOt({{ ot.id }}, 'APPROVE')" class="btn-purple">Endorse</button>
-        <button onclick="endorseOt({{ ot.id }}, 'REJECT')" class="btn-outline" style="color:#b93a3a;border-color:#b93a3a">Reject</button>
+        <button type="button" onclick="endorseOt({{ ot.id }}, 'APPROVE', this)" class="btn-purple">Endorse</button>
+        <button type="button" onclick="endorseOt({{ ot.id }}, 'REJECT', this)" class="btn-outline" style="color:#b93a3a;border-color:#b93a3a">Reject</button>
         {% endif %}
         {% if ot.status == 'ENDORSED' and 'ADMIN' in current_user.roles and ot.user_id != current_user.user_id %}
-        <button onclick="approveOt({{ ot.id }}, 'APPROVE')" class="btn-gold">Approve</button>
-        <button onclick="approveOt({{ ot.id }}, 'REJECT')" class="btn-outline" style="color:#b93a3a;border-color:#b93a3a">Reject</button>
+        <button type="button" onclick="approveOt({{ ot.id }}, 'APPROVE', this)" class="btn-gold">Approve</button>
+        <button type="button" onclick="approveOt({{ ot.id }}, 'REJECT', this)" class="btn-outline" style="color:#b93a3a;border-color:#b93a3a">Reject</button>
         {% endif %}
       </div>
     </div>
@@ -158,29 +160,137 @@
 {% block scripts %}
 <script>
 const csrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
-async function cancelOt(id) {
+let otDetailActionInFlight = false;
+
+function getOtErrorMessage(payload, fallback) {
+  if (!payload) return fallback;
+  if (typeof payload === 'string') return payload;
+  if (typeof payload.detail === 'string') return payload.detail;
+  if (Array.isArray(payload.detail) && payload.detail.length) {
+    const first = payload.detail[0];
+    if (typeof first === 'string') return first;
+    if (first && typeof first.msg === 'string') return first.msg;
+  }
+  return fallback;
+}
+
+function setOtButtonBusy(button, busy, busyText) {
+  if (!button) return;
+  if (busy) {
+    button.dataset.prevDisabled = button.disabled ? '1' : '0';
+    button.dataset.prevHtml = button.innerHTML;
+    button.disabled = true;
+    button.classList.add('opacity-60', 'cursor-not-allowed');
+    if (busyText) button.textContent = busyText;
+    return;
+  }
+  button.disabled = button.dataset.prevDisabled === '1';
+  button.classList.remove('opacity-60', 'cursor-not-allowed');
+  if (button.dataset.prevHtml) button.innerHTML = button.dataset.prevHtml;
+}
+
+async function otRequestJson(url, options = {}) {
+  const { method = 'GET', json } = options;
+  const headers = { 'X-CSRFToken': csrf };
+  let body;
+  if (json !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify(json);
+  }
+
+  const res = await fetch(url, { method, headers, body });
+  const raw = await res.text();
+  let data = {};
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = { detail: raw };
+    }
+  }
+  if (!res.ok) {
+    const err = new Error(getOtErrorMessage(data, 'Request failed'));
+    err.payload = data;
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+function refreshOtDesktop(path) {
+  if (typeof htmx === 'undefined') return;
+  htmx.ajax('GET', path, {
+    target: '#ot-content',
+    swap: 'innerHTML',
+    select: '#ot-content > *',
+    pushURL: true,
+  });
+}
+async function runOtDetailAction(actionFn) {
+  if (otDetailActionInFlight) return;
+  otDetailActionInFlight = true;
+  try {
+    await actionFn();
+  } finally {
+    otDetailActionInFlight = false;
+  }
+}
+
+async function cancelOt(id, button) {
   if (!confirm('Cancel this OT request?')) return;
-  const r = await fetch(`/api/ot/${id}/cancel`, {method:'PATCH', headers:{'X-CSRFToken':csrf}});
-  if (r.ok) { showToast('Cancelled','OT request cancelled','green'); setTimeout(()=>location.reload(),500); }
-  else { const d = await r.json(); showToast('Error', d.detail||'Failed','red'); }
-}
-async function endorseOt(id, action) {
-  const comment = action === 'REJECT' ? prompt('Rejection reason:') : null;
-  const r = await fetch(`/api/ot/${id}/endorse`, {
-    method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrf},
-    body: JSON.stringify({action, comment})
+  await runOtDetailAction(async () => {
+    setOtButtonBusy(button, true, 'Cancelling...');
+    try {
+      await otRequestJson(`/api/ot/${id}/cancel`, { method: 'PATCH' });
+      showToast('Cancelled', 'OT request cancelled', 'green');
+      refreshOtDesktop(`/ot/${id}`);
+    } catch (err) {
+      showToast('Error', err.message || 'Failed', 'red');
+    } finally {
+      setOtButtonBusy(button, false);
+    }
   });
-  if (r.ok) { showToast(action==='APPROVE'?'Endorsed':'Rejected', `OT-${id} ${action.toLowerCase()}d`,'green'); setTimeout(()=>location.reload(),500); }
-  else { const d = await r.json(); showToast('Error', d.detail||'Failed','red'); }
 }
-async function approveOt(id, action) {
+
+async function endorseOt(id, action, button) {
   const comment = action === 'REJECT' ? prompt('Rejection reason:') : null;
-  const r = await fetch(`/api/ot/${id}/approve`, {
-    method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrf},
-    body: JSON.stringify({action, comment})
+  if (action === 'REJECT' && comment === null) return;
+  await runOtDetailAction(async () => {
+    setOtButtonBusy(button, true, action === 'APPROVE' ? 'Endorsing...' : 'Rejecting...');
+    try {
+      await otRequestJson(`/api/ot/${id}/endorse`, {
+        method: 'POST',
+        json: { action, comment },
+      });
+      showToast(action === 'APPROVE' ? 'Endorsed' : 'Rejected', `OT-${id} ${action.toLowerCase()}d`, action === 'APPROVE' ? 'green' : 'red');
+      refreshOtDesktop(`/ot/${id}`);
+    } catch (err) {
+      showToast('Error', err.message || 'Failed', 'red');
+    } finally {
+      setOtButtonBusy(button, false);
+    }
   });
-  if (r.ok) { showToast(action==='APPROVE'?'Approved':'Rejected', `OT-${id} ${action.toLowerCase()}d`,'green'); setTimeout(()=>location.reload(),500); }
-  else { const d = await r.json(); showToast('Error', d.detail||'Failed','red'); }
+}
+
+async function approveOt(id, action, button) {
+  const comment = action === 'REJECT' ? prompt('Rejection reason:') : null;
+  if (action === 'REJECT' && comment === null) return;
+  await runOtDetailAction(async () => {
+    setOtButtonBusy(button, true, action === 'APPROVE' ? 'Approving...' : 'Rejecting...');
+    try {
+      await otRequestJson(`/api/ot/${id}/approve`, {
+        method: 'POST',
+        json: { action, comment },
+      });
+      showToast(action === 'APPROVE' ? 'Approved' : 'Rejected', `OT-${id} ${action.toLowerCase()}d`, action === 'APPROVE' ? 'green' : 'red');
+      refreshOtDesktop(`/ot/${id}`);
+    } catch (err) {
+      showToast('Error', err.message || 'Failed', 'red');
+    } finally {
+      setOtButtonBusy(button, false);
+    }
+  });
 }
 </script>
 {% endblock %}
+

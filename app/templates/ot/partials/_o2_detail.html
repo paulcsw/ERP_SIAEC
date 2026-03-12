@@ -63,22 +63,98 @@
 
   {# Cancel action #}
   {% if ot.status == 'PENDING' and ot.user_id == current_user.user_id %}
-  <button onclick="mobCancelOt({{ ot.id }})" class="btn-outline w-full h-12 text-base" style="color:#b93a3a;border-color:#b93a3a">Cancel Request</button>
+  <button type="button" onclick="mobCancelOt({{ ot.id }}, this)" class="btn-outline w-full h-12 text-base" style="color:#b93a3a;border-color:#b93a3a">Cancel Request</button>
   {% endif %}
   {% endif %}
 </div>
 
 <script>
-async function mobCancelOt(id) {
-  if (!confirm('Cancel this OT request?')) return;
-  const csrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
-  const r = await fetch(`/api/ot/${id}/cancel`, {method:'PATCH', headers:{'X-CSRFToken':csrf}});
-  if (r.ok) {
-    showToast('Cancelled','OT request cancelled','green');
-    htmx.ajax('GET', '/ot/segment/o2', {target: '#ot-stage', swap: 'innerHTML'});
-  } else {
-    const d = await r.json();
-    showToast('Error', d.detail||'Failed','red');
+var mobOtDetailCsrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+let mobOtDetailActionInFlight = false;
+
+function getMobOtErrorMessage(payload, fallback) {
+  if (!payload) return fallback;
+  if (typeof payload === 'string') return payload;
+  if (typeof payload.detail === 'string') return payload.detail;
+  if (Array.isArray(payload.detail) && payload.detail.length) {
+    const first = payload.detail[0];
+    if (typeof first === 'string') return first;
+    if (first && typeof first.msg === 'string') return first.msg;
   }
+  return fallback;
+}
+
+function setMobOtButtonBusy(button, busy, busyText) {
+  if (!button) return;
+  if (busy) {
+    button.dataset.prevDisabled = button.disabled ? '1' : '0';
+    button.dataset.prevHtml = button.innerHTML;
+    button.disabled = true;
+    button.classList.add('opacity-60', 'cursor-not-allowed');
+    if (busyText) button.textContent = busyText;
+    return;
+  }
+  button.disabled = button.dataset.prevDisabled === '1';
+  button.classList.remove('opacity-60', 'cursor-not-allowed');
+  if (button.dataset.prevHtml) button.innerHTML = button.dataset.prevHtml;
+}
+
+async function mobOtRequestJson(url, options = {}) {
+  const { method = 'GET', json } = options;
+  const headers = { 'X-CSRFToken': mobOtDetailCsrf };
+  let body;
+  if (json !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify(json);
+  }
+
+  const res = await fetch(url, { method, headers, body });
+  const raw = await res.text();
+  let data = {};
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = { detail: raw };
+    }
+  }
+  if (!res.ok) {
+    const err = new Error(getMobOtErrorMessage(data, 'Failed'));
+    err.payload = data;
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+function refreshMobOtHistory() {
+  if (typeof htmx === 'undefined') return;
+  htmx.ajax('GET', '/ot/segment/o2', { target: '#ot-stage', swap: 'innerHTML' });
+}
+
+async function runMobOtDetailAction(actionFn) {
+  if (mobOtDetailActionInFlight) return;
+  mobOtDetailActionInFlight = true;
+  try {
+    await actionFn();
+  } finally {
+    mobOtDetailActionInFlight = false;
+  }
+}
+
+async function mobCancelOt(id, button) {
+  if (!confirm('Cancel this OT request?')) return;
+  await runMobOtDetailAction(async () => {
+    setMobOtButtonBusy(button, true, 'Cancelling...');
+    try {
+      await mobOtRequestJson(`/api/ot/${id}/cancel`, { method: 'PATCH' });
+      showToast('Cancelled', 'OT request cancelled', 'green');
+      refreshMobOtHistory();
+    } catch (err) {
+      showToast('Error', err.message || 'Failed', 'red');
+    } finally {
+      setMobOtButtonBusy(button, false);
+    }
+  });
 }
 </script>

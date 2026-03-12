@@ -3,14 +3,14 @@
 {% block breadcrumb %}OT Requests{% endblock %}
 
 {% block content %}
-<div class="p-4 lg:p-5 flex flex-col h-full w-full">
+<div id="ot-content" class="p-4 lg:p-5 flex flex-col h-full w-full">
   <div class="flex items-center justify-between mb-3 shrink-0">
     <div>
       <h1 class="text-lg font-semibold text-navy-900">OT Requests</h1>
       <p class="text-xs text-surf-400">All overtime requests with 2-stage approval status</p>
     </div>
     <div class="flex gap-2">
-      <select id="status-filter" class="inp h-8 text-xs" onchange="window.location.href='/ot?status='+this.value">
+      <select id="status-filter" class="inp h-8 text-xs" onchange="refreshOtList(true)">
         <option value="" {% if not status_filter %}selected{% endif %}>All Status</option>
         <option value="PENDING" {% if status_filter == 'PENDING' %}selected{% endif %}>PENDING</option>
         <option value="ENDORSED" {% if status_filter == 'ENDORSED' %}selected{% endif %}>ENDORSED</option>
@@ -18,7 +18,7 @@
         <option value="REJECTED" {% if status_filter == 'REJECTED' %}selected{% endif %}>REJECTED</option>
         <option value="CANCELLED" {% if status_filter == 'CANCELLED' %}selected{% endif %}>CANCELLED</option>
       </select>
-      <a href="/api/ot/export/csv" class="btn-outline btn-sm text-xs flex items-center">Export CSV</a>
+      <button type="button" class="btn-outline btn-sm text-xs flex items-center" onclick="exportOtCsv(this)">Export CSV</button>
     </div>
   </div>
 
@@ -40,7 +40,12 @@
         </thead>
         <tbody>
           {% for ot in items %}
-          <tr class="cursor-pointer" onclick="window.location.href='/ot/{{ ot.id }}'">
+          <tr class="cursor-pointer"
+              hx-get="/ot/{{ ot.id }}"
+              hx-target="#ot-content"
+              hx-select="#ot-content > *"
+              hx-swap="innerHTML"
+              hx-push-url="true">
             <td class="font-mono text-xs">OT-{{ '%03d' % ot.id }}</td>
             <td class="text-sm">{{ ot.user_name }}</td>
             <td class="text-xs">{{ ot.date.strftime('%b %d') if ot.date else '' }}</td>
@@ -85,11 +90,11 @@
     <div class="px-4 py-2 border-t border-surf-200 flex items-center justify-between text-xs text-surf-400">
       <span>{{ ((page-1)*per_page)+1 }}&ndash;{{ [page*per_page, total] | min }} of {{ total }} requests</span>
       <div class="flex gap-1">
-        {% if page > 1 %}<a href="/ot?page={{ page-1 }}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="pg-btn">&laquo;</a>{% endif %}
+        {% if page > 1 %}<button type="button" onclick="refreshOtList(false, {{ page - 1 }})" class="pg-btn">&laquo;</button>{% endif %}
         {% for p in range(1, total_pages+1) %}
-        <a href="/ot?page={{ p }}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="pg-btn {% if p == page %}active{% endif %}">{{ p }}</a>
+        <button type="button" onclick="refreshOtList(false, {{ p }})" class="pg-btn {% if p == page %}active{% endif %}">{{ p }}</button>
         {% endfor %}
-        {% if page < total_pages %}<a href="/ot?page={{ page+1 }}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="pg-btn">&raquo;</a>{% endif %}
+        {% if page < total_pages %}<button type="button" onclick="refreshOtList(false, {{ page + 1 }})" class="pg-btn">&raquo;</button>{% endif %}
       </div>
     </div>
     {% endif %}
@@ -118,6 +123,58 @@
 
 {% block scripts %}
 <script>
+function refreshOtList(resetPage, pageOverride) {
+  if (typeof htmx === 'undefined') return;
+
+  const status = document.getElementById('status-filter')?.value || '';
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (resetPage) params.set('page', '1');
+
+  const currentPage = new URLSearchParams(window.location.search).get('page');
+  if (!resetPage && typeof pageOverride !== 'number' && currentPage) {
+    params.set('page', currentPage);
+  }
+  if (typeof pageOverride === 'number') {
+    params.set('page', String(pageOverride));
+  }
+
+  const query = params.toString();
+  htmx.ajax('GET', '/ot' + (query ? '?' + query : ''), {
+    target: '#ot-content',
+    swap: 'innerHTML',
+    select: '#ot-content > *',
+    pushURL: true,
+  });
+}
+
+function downloadOtCsv(url) {
+  const frame = document.createElement('iframe');
+  frame.style.display = 'none';
+  frame.src = url;
+  document.body.appendChild(frame);
+  setTimeout(() => frame.remove(), 60000);
+}
+
+function exportOtCsv(button) {
+  const status = document.getElementById('status-filter')?.value || '';
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  const url = '/api/ot/export/csv' + (params.toString() ? ('?' + params.toString()) : '');
+  downloadOtCsv(url);
+
+  if (!button) return;
+  const prevHtml = button.innerHTML;
+  button.disabled = true;
+  button.classList.add('opacity-60', 'cursor-not-allowed');
+  button.textContent = 'Exporting...';
+  setTimeout(() => {
+    button.disabled = false;
+    button.classList.remove('opacity-60', 'cursor-not-allowed');
+    button.innerHTML = prevHtml;
+  }, 1200);
+}
+
 function switchOtSeg(seg, btn) {
   // Update active button
   btn.closest('.ot-seg-bar').querySelectorAll('button').forEach(b => b.classList.remove('active'));
