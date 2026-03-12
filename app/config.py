@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     AZURE_REDIRECT_URI: str = ""
 
     SESSION_MAX_AGE: int = 28800  # 8 hours
+    DEBUG: bool = False
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
