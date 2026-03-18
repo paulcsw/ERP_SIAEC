@@ -27,7 +27,7 @@ class AuditLog(Base):
     before_json: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
     after_json: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("GETUTCDATE()")
+        DateTime(timezone=True), nullable=False, server_default=text("(GETUTCDATE())")
     )
 
     __table_args__ = (
@@ -35,3 +35,4 @@ class AuditLog(Base):
         Index("idx_audit_actor", "actor_id"),
         Index("idx_audit_created", "created_at"),
     )
+

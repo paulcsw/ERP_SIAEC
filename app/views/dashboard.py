@@ -1,7 +1,7 @@
 """Dashboard SSR view — landing page with KPIs, OT Quota, RFO Progress, Pipeline."""
 from datetime import date
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +11,7 @@ from app.api.stats import COUNTABLE_STATUSES, _parse_month
 from app.models.audit import AuditLog
 from app.models.ot import OtApproval, OtRequest
 from app.models.reference import Aircraft, WorkPackage
+from app.models.shop import Shop
 from app.models.task import TaskItem, TaskSnapshot
 from app.models.user import User
 from app.services.ot_service import MONTHLY_LIMIT_MINUTES
@@ -45,15 +46,56 @@ async def root_redirect():
 @router.get("/dashboard")
 async def dashboard_page(
     request: Request,
+    shop_id: int | None = Query(None, ge=1),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     roles = current_user.get("roles", [])
+    is_admin = "ADMIN" in roles
     first, last = _parse_month(None)  # current month
     month_label = first.strftime("%B %Y")
 
+    shop_rows = (await db.execute(select(Shop).order_by(Shop.code.asc()))).scalars().all()
+    shop_options = [{"id": s.id, "code": s.code, "name": s.name} for s in shop_rows]
+    shop_by_id = {s["id"]: s for s in shop_options}
+
+    selected_shop_id: int | None = None
+    selected_shop_code: str | None = None
+    dashboard_scope_label = "All Shops"
+    shop_select_disabled = False
+
+    if is_admin:
+        if shop_id and shop_id in shop_by_id:
+            selected_shop_id = shop_id
+            selected_shop_code = shop_by_id[shop_id]["code"]
+            dashboard_scope_label = shop_by_id[shop_id]["name"] or selected_shop_code
+    else:
+        shop_select_disabled = True
+        user_team = (current_user.get("team") or "").strip()
+        team_shop = next(
+            (s for s in shop_options if s["code"] == user_team or s["name"] == user_team),
+            None,
+        )
+        if team_shop:
+            selected_shop_id = team_shop["id"]
+            selected_shop_code = team_shop["code"]
+            dashboard_scope_label = team_shop["name"] or team_shop["code"]
+        elif user_team:
+            dashboard_scope_label = user_team
+
+    user_scope_ids: list[int] | None = None
+    if selected_shop_code:
+        user_scope_ids = (
+            await db.execute(
+                select(User.id).where(
+                    User.team == selected_shop_code,
+                    User.is_active == True,  # noqa: E712
+                )
+            )
+        ).scalars().all()
+
     # ── KPI 1: Active Tasks ────────────────────────────────────────
-    active_tasks = (await db.execute(
+    active_tasks_q = (
         select(func.count())
         .select_from(TaskSnapshot)
         .join(TaskItem, TaskSnapshot.task_id == TaskItem.id)
@@ -62,21 +104,26 @@ async def dashboard_page(
             TaskSnapshot.is_deleted == False,
             TaskSnapshot.status != "COMPLETED",
         )
-    )).scalar() or 0
+    )
+    if selected_shop_id is not None:
+        active_tasks_q = active_tasks_q.where(TaskItem.shop_id == selected_shop_id)
+    active_tasks = (await db.execute(active_tasks_q)).scalar() or 0
 
     # ── KPI 2-3: OT Pending / Endorsed ─────────────────────────────
-    ot_pending = (await db.execute(
-        select(func.count()).select_from(OtRequest)
-        .where(OtRequest.status == "PENDING")
-    )).scalar() or 0
-
-    ot_endorsed = (await db.execute(
-        select(func.count()).select_from(OtRequest)
-        .where(OtRequest.status == "ENDORSED")
-    )).scalar() or 0
+    ot_pending_q = select(func.count()).select_from(OtRequest).where(OtRequest.status == "PENDING")
+    ot_endorsed_q = select(func.count()).select_from(OtRequest).where(OtRequest.status == "ENDORSED")
+    if user_scope_ids is not None:
+        if user_scope_ids:
+            ot_pending_q = ot_pending_q.where(OtRequest.user_id.in_(user_scope_ids))
+            ot_endorsed_q = ot_endorsed_q.where(OtRequest.user_id.in_(user_scope_ids))
+        else:
+            ot_pending_q = ot_pending_q.where(OtRequest.id == -1)
+            ot_endorsed_q = ot_endorsed_q.where(OtRequest.id == -1)
+    ot_pending = (await db.execute(ot_pending_q)).scalar() or 0
+    ot_endorsed = (await db.execute(ot_endorsed_q)).scalar() or 0
 
     # ── KPI 4: Critical Issues ──────────────────────────────────────
-    critical_issues = (await db.execute(
+    critical_issues_q = (
         select(func.count())
         .select_from(TaskSnapshot)
         .join(TaskItem, TaskSnapshot.task_id == TaskItem.id)
@@ -85,24 +132,38 @@ async def dashboard_page(
             TaskSnapshot.is_deleted == False,
             TaskSnapshot.has_issue == True,
         )
-    )).scalar() or 0
+    )
+    if selected_shop_id is not None:
+        critical_issues_q = critical_issues_q.where(TaskItem.shop_id == selected_shop_id)
+    critical_issues = (await db.execute(critical_issues_q)).scalar() or 0
 
     # ── KPI 5: Total MH (latest snapshots) ─────────────────────────
-    total_mh_raw = (await db.execute(
+    total_mh_q = (
         select(func.coalesce(func.sum(TaskSnapshot.mh_incurred_hours), 0))
         .join(TaskItem, TaskSnapshot.task_id == TaskItem.id)
         .where(
             TaskItem.is_active == True,
             TaskSnapshot.is_deleted == False,
         )
-    )).scalar() or 0
+    )
+    if selected_shop_id is not None:
+        total_mh_q = total_mh_q.where(TaskItem.shop_id == selected_shop_id)
+    total_mh_raw = (await db.execute(total_mh_q)).scalar() or 0
     total_mh = round(float(total_mh_raw), 1)
 
     # ── Monthly OT Quota (per user) ────────────────────────────────
-    if "ADMIN" in roles:
-        user_rows = (await db.execute(
-            select(User).where(User.is_active == True)
-        )).scalars().all()
+    if is_admin:
+        if selected_shop_code:
+            user_rows = (await db.execute(
+                select(User).where(
+                    User.team == selected_shop_code,
+                    User.is_active == True,  # noqa: E712
+                )
+            )).scalars().all()
+        else:
+            user_rows = (await db.execute(
+                select(User).where(User.is_active == True)
+            )).scalars().all()
     else:
         user_rows = (await db.execute(
             select(User).where(
@@ -143,12 +204,19 @@ async def dashboard_page(
         avg_hours = 0
 
     # ── RFO Progress (per work package) ─────────────────────────────
-    wp_rows = (await db.execute(
+    wp_q = (
         select(WorkPackage, Aircraft)
         .join(Aircraft, WorkPackage.aircraft_id == Aircraft.id)
         .where(WorkPackage.status == "ACTIVE")
         .order_by(WorkPackage.rfo_no)
-    )).all()
+    )
+    if selected_shop_id is not None:
+        wp_q = (
+            wp_q.join(TaskItem, TaskItem.work_package_id == WorkPackage.id)
+            .where(TaskItem.shop_id == selected_shop_id, TaskItem.is_active == True)
+            .distinct()
+        )
+    wp_rows = (await db.execute(wp_q)).all()
 
     rfo_list = []
     grand_total_tasks = 0
@@ -166,6 +234,8 @@ async def dashboard_page(
             )
             .group_by(TaskSnapshot.status)
         )
+        if selected_shop_id is not None:
+            snap_q = snap_q.where(TaskItem.shop_id == selected_shop_id)
         status_rows = (await db.execute(snap_q)).all()
 
         counts = {"COMPLETED": 0, "IN_PROGRESS": 0, "WAITING": 0, "NOT_STARTED": 0}
@@ -177,15 +247,18 @@ async def dashboard_page(
             wp_task_count += cnt
 
         # Planned MH sum
-        planned_raw = (await db.execute(
+        planned_q = (
             select(func.coalesce(func.sum(TaskItem.planned_mh), 0))
             .where(TaskItem.work_package_id == wp.id, TaskItem.is_active == True)
-        )).scalar() or 0
+        )
+        if selected_shop_id is not None:
+            planned_q = planned_q.where(TaskItem.shop_id == selected_shop_id)
+        planned_raw = (await db.execute(planned_q)).scalar() or 0
         planned = float(planned_raw)
 
         total = wp_task_count or 1
         # Overdue count
-        overdue = (await db.execute(
+        overdue_q = (
             select(func.count())
             .select_from(TaskSnapshot)
             .join(TaskItem, TaskSnapshot.task_id == TaskItem.id)
@@ -196,7 +269,13 @@ async def dashboard_page(
                 TaskSnapshot.status != "COMPLETED",
                 TaskSnapshot.deadline_date < date.today(),
             )
-        )).scalar() or 0
+        )
+        if selected_shop_id is not None:
+            overdue_q = overdue_q.where(TaskItem.shop_id == selected_shop_id)
+        overdue = (await db.execute(overdue_q)).scalar() or 0
+
+        if selected_shop_id is not None and wp_task_count == 0 and planned <= 0:
+            continue
 
         done_pct = round(counts["COMPLETED"] / total * 100, 1)
         active_pct = round(counts["IN_PROGRESS"] / total * 100, 1)
@@ -217,9 +296,10 @@ async def dashboard_page(
             status_class = "text-st-blue"
 
         rfo_list.append({
+            "wp_id": wp.id,
             "rfo_no": wp.rfo_no,
             "ac_reg": ac.ac_reg,
-            "description": wp.description,
+            "description": wp.title,
             "done": counts["COMPLETED"],
             "active": counts["IN_PROGRESS"],
             "wait": counts["WAITING"],
@@ -244,6 +324,11 @@ async def dashboard_page(
     ot_month_q = select(OtRequest).where(
         OtRequest.date >= first, OtRequest.date <= last
     )
+    if user_scope_ids is not None:
+        if user_scope_ids:
+            ot_month_q = ot_month_q.where(OtRequest.user_id.in_(user_scope_ids))
+        else:
+            ot_month_q = ot_month_q.where(OtRequest.id == -1)
     ot_rows = (await db.execute(ot_month_q)).scalars().all()
 
     pipeline_pending = sum(1 for r in ot_rows if r.status == "PENDING")
@@ -296,6 +381,10 @@ async def dashboard_page(
     return templates.TemplateResponse("dashboard.html", _ctx(
         request, current_user,
         month_label=month_label,
+        dashboard_scope_label=dashboard_scope_label,
+        shop_options=shop_options,
+        selected_shop_id=selected_shop_id,
+        shop_select_disabled=shop_select_disabled,
         active_tasks=active_tasks,
         ot_pending=ot_pending,
         ot_endorsed=ot_endorsed,

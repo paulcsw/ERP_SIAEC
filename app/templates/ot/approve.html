@@ -3,7 +3,7 @@
 {% block breadcrumb %}OT Final Approval{% endblock %}
 
 {% block content %}
-<div class="p-4 lg:p-5 flex flex-col h-full w-full">
+<div id="ot-content" class="p-4 lg:p-5 flex flex-col h-full w-full">
   <div class="flex items-center justify-between mb-3 shrink-0">
     <div>
       <h1 class="text-lg font-semibold text-navy-900">OT Final Approval</h1>
@@ -44,8 +44,8 @@
             {{ ot.endorse.acted_at.strftime('%b %d, %H:%M') if ot.endorse.acted_at else '' }}
           </div>
           {% endif %}
-          <button class="btn-primary btn-sm text-xs w-24" onclick="approveAction({{ ot.id }}, 'APPROVE')">Approve</button>
-          <button class="btn-outline btn-sm text-xs w-24" style="color:#b93a3a;border-color:#b93a3a" onclick="approveAction({{ ot.id }}, 'REJECT')">Reject</button>
+          <button type="button" class="btn-primary btn-sm text-xs w-24" onclick="approveAction({{ ot.id }}, 'APPROVE', this)">Approve</button>
+          <button type="button" class="btn-outline btn-sm text-xs w-24" style="color:#b93a3a;border-color:#b93a3a" onclick="approveAction({{ ot.id }}, 'REJECT', this)">Reject</button>
         </div>
       </div>
     </div>
@@ -63,22 +63,102 @@
 {% block scripts %}
 <script>
 const csrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
-async function approveAction(id, action) {
-  const comment = action === 'REJECT' ? prompt('Rejection reason:') : null;
-  const card = document.getElementById('approve-card-' + id);
-  const r = await fetch(`/api/ot/${id}/approve`, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
-    body: JSON.stringify({action, comment})
-  });
-  if (r.ok) {
-    card.style.opacity = '.3';
-    showToast(action === 'APPROVE' ? 'Approved' : 'Rejected', `OT-${id} ${action.toLowerCase()}d`, action === 'APPROVE' ? 'green' : 'red');
-    setTimeout(() => card.remove(), 1000);
-  } else {
-    const d = await r.json();
-    showToast('Error', d.detail || 'Action failed', 'red');
+let otApproveActionInFlight = false;
+
+function getOtErrorMessage(payload, fallback) {
+  if (!payload) return fallback;
+  if (typeof payload === 'string') return payload;
+  if (typeof payload.detail === 'string') return payload.detail;
+  if (Array.isArray(payload.detail) && payload.detail.length) {
+    const first = payload.detail[0];
+    if (typeof first === 'string') return first;
+    if (first && typeof first.msg === 'string') return first.msg;
   }
+  return fallback;
+}
+
+function setOtButtonBusy(button, busy, busyText) {
+  if (!button) return;
+  if (busy) {
+    button.dataset.prevDisabled = button.disabled ? '1' : '0';
+    button.dataset.prevHtml = button.innerHTML;
+    button.disabled = true;
+    button.classList.add('opacity-60', 'cursor-not-allowed');
+    if (busyText) button.textContent = busyText;
+    return;
+  }
+  button.disabled = button.dataset.prevDisabled === '1';
+  button.classList.remove('opacity-60', 'cursor-not-allowed');
+  if (button.dataset.prevHtml) button.innerHTML = button.dataset.prevHtml;
+}
+
+async function otRequestJson(url, options = {}) {
+  const { method = 'GET', json } = options;
+  const headers = { 'X-CSRFToken': csrf };
+  let body;
+  if (json !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify(json);
+  }
+
+  const res = await fetch(url, { method, headers, body });
+  const raw = await res.text();
+  let data = {};
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = { detail: raw };
+    }
+  }
+  if (!res.ok) {
+    const err = new Error(getOtErrorMessage(data, 'Action failed'));
+    err.payload = data;
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+function refreshOtApprove() {
+  if (typeof htmx === 'undefined') return;
+  htmx.ajax('GET', '/admin/ot-approve', {
+    target: '#ot-content',
+    swap: 'innerHTML',
+    select: '#ot-content > *',
+    pushURL: true,
+  });
+}
+async function runOtApproveAction(actionFn) {
+  if (otApproveActionInFlight) return;
+  otApproveActionInFlight = true;
+  try {
+    await actionFn();
+  } finally {
+    otApproveActionInFlight = false;
+  }
+}
+
+async function approveAction(id, action, button) {
+  const comment = action === 'REJECT' ? prompt('Rejection reason:') : null;
+  if (action === 'REJECT' && comment === null) return;
+  const card = document.getElementById('approve-card-' + id);
+  await runOtApproveAction(async () => {
+    setOtButtonBusy(button, true, action === 'APPROVE' ? 'Approving...' : 'Rejecting...');
+    try {
+      await otRequestJson(`/api/ot/${id}/approve`, {
+        method: 'POST',
+        json: { action, comment },
+      });
+      if (card) card.style.opacity = '.3';
+      showToast(action === 'APPROVE' ? 'Approved' : 'Rejected', `OT-${id} ${action.toLowerCase()}d`, action === 'APPROVE' ? 'green' : 'red');
+      refreshOtApprove();
+    } catch (err) {
+      showToast('Error', err.message || 'Action failed', 'red');
+    } finally {
+      setOtButtonBusy(button, false);
+    }
+  });
 }
 </script>
 {% endblock %}

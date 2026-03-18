@@ -1,4 +1,7 @@
-from fastapi import FastAPI
+import secrets
+
+from fastapi import FastAPI, Query, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy import text
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -19,6 +22,40 @@ def create_app() -> FastAPI:
         async with get_engine().connect() as conn:
             await conn.execute(text("SELECT 1"))
         return {"status": "ok"}
+
+    # ── Dev login (DEBUG only) ──────────────────────────────────
+    if settings.DEBUG:
+
+        @app.get("/dev/login")
+        async def dev_login(
+            request: Request,
+            role: str = Query(default="WORKER"),
+        ):
+            """Fake login for local development — sets session directly."""
+            valid_roles = {"WORKER", "SUPERVISOR", "ADMIN"}
+            role = role.upper()
+            if role not in valid_roles:
+                role = "WORKER"
+
+            request.session.clear()
+            request.session["user_id"] = 1
+            request.session["employee_no"] = f"DEV-{role}"
+            request.session["display_name"] = f"Dev {role.title()}"
+            request.session["roles"] = [role]
+            request.session["team"] = "DEV"
+
+            csrf_token = secrets.token_hex(32)
+            request.session["csrf_token"] = csrf_token
+
+            response = RedirectResponse("/dashboard", status_code=302)
+            response.set_cookie(
+                key="csrftoken",
+                value=csrf_token,
+                path="/",
+                samesite="lax",
+                httponly=False,
+            )
+            return response
 
     # ── Routers ───────────────────────────────────────────────────
     from app.api.auth import router as auth_router

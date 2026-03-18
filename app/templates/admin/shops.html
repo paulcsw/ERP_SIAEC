@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Shops — CIS ERP{% endblock %}
+{% block title %}Shops - CIS ERP{% endblock %}
 {% block breadcrumb %}Admin &rsaquo; Shops{% endblock %}
 
 {% block content %}
-<div class="p-4 lg:p-5 flex flex-col h-full w-full">
+<div id="admin-content" class="p-4 lg:p-5 flex flex-col h-full w-full">
 
   <div class="flex items-center justify-between mb-3 shrink-0">
     <div>
@@ -36,8 +36,8 @@
   </div>
 </div>
 
-{# ── Add Shop Modal ────────────────────────────────────────────────── #}
-<div class="modal-overlay" id="modal-add-shop" style="display:none">
+{# ?? Add Shop Modal ?????????????????????????????????????????????????? #}
+<div class="modal-overlay" id="modal-add-shop">
   <div class="card w-full sm:w-[380px]">
     <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between">
       <h3 class="font-semibold text-navy-900">Add Shop</h3>
@@ -51,8 +51,8 @@
   </div>
 </div>
 
-{# ── Edit Shop Modal ───────────────────────────────────────────────── #}
-<div class="modal-overlay" id="modal-edit-shop" style="display:none">
+{# ?? Edit Shop Modal ????????????????????????????????????????????????? #}
+<div class="modal-overlay" id="modal-edit-shop">
   <div class="card w-full sm:w-[380px]">
     <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between">
       <h3 class="font-semibold text-navy-900">Edit Shop</h3>
@@ -74,13 +74,22 @@
 {% block scripts %}
 <script>
 var csrf=()=>(document.cookie.match(/csrftoken=([^;]+)/)||[])[1]||'';
+function refreshAdminShops(){
+  if (typeof htmx === 'undefined') return;
+  htmx.ajax('GET','/admin/shops',{
+    target:'#admin-content',
+    swap:'innerHTML',
+    select:'#admin-content > *',
+    pushURL:true,
+  });
+}
 
 function addShop(){
   var body={code:document.getElementById('add-shop-code').value,name:document.getElementById('add-shop-name').value};
   if(!body.code||!body.name){showToast('Error','Code and Name required','red');return;}
   fetch('/api/shops',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(body)})
     .then(r=>{if(!r.ok)return r.json().then(e=>{throw e});return r.json()})
-    .then(()=>{closeModal('modal-add-shop');showToast('Created','Shop added','green');location.reload();})
+    .then(()=>{closeModal('modal-add-shop');showToast('Created','Shop added','green');refreshAdminShops();})
     .catch(e=>showToast('Error',(e&&e.detail)||'Failed','red'));
 }
 
@@ -96,7 +105,7 @@ function saveShop(){
   var body={name:document.getElementById('edit-shop-name').value};
   fetch('/api/shops/'+id,{method:'PATCH',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(body)})
     .then(r=>{if(!r.ok)return r.json().then(e=>{throw e});return r.json()})
-    .then(()=>{closeModal('modal-edit-shop');showToast('Updated','Shop saved','green');location.reload();})
+    .then(()=>{closeModal('modal-edit-shop');showToast('Updated','Shop saved','green');refreshAdminShops();})
     .catch(e=>showToast('Error',(e&&e.detail)||'Failed','red'));
 }
 </script>

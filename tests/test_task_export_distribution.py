@@ -45,6 +45,15 @@ async def _create_task(client, shop_id, ac_id, meeting_date="2026-03-10", **kw):
     return r
 
 
+async def _grant_supervisor_access(db, shop_id, user_id=2, access="EDIT"):
+    from app.models.user_shop_access import UserShopAccess
+
+    async with db() as session:
+        row = UserShopAccess(user_id=user_id, shop_id=shop_id, access=access, granted_by=1)
+        session.add(row)
+        await session.commit()
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Commit 1: GET /api/tasks/export/csv
 # ═══════════════════════════════════════════════════════════════════════
@@ -257,6 +266,7 @@ async def test_import_confirm_creates_tasks(async_client, db):
 @pytest.mark.asyncio
 async def test_import_confirm_with_supervisor_sets_distributed(async_client, db):
     shop_id, ac_id, wp_id = await _seed_shop_and_aircraft(db)
+    await _grant_supervisor_access(db, shop_id)
 
     body = {
         "shop_id": shop_id,
@@ -274,6 +284,21 @@ async def test_import_confirm_with_supervisor_sets_distributed(async_client, db)
     item = r2.json()["items"][0]
     assert item["assigned_supervisor_id"] == 2
     assert item["distributed_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_import_confirm_rejects_non_supervisor_assignee(async_client, db):
+    shop_id, ac_id, wp_id = await _seed_shop_and_aircraft(db)
+    body = {
+        "shop_id": shop_id,
+        "meeting_date": "2026-03-10",
+        "items": [
+            {"ac_reg": "9V-TST", "description": "Bad assignee", "assigned_supervisor_id": 3},
+        ],
+    }
+    r = await async_client.post("/api/tasks/import/confirm", json=body, headers=CSRF)
+    assert r.status_code == 422
+    assert r.json()["code"] == "VALIDATION_ERROR"
 
 
 @pytest.mark.asyncio
@@ -322,6 +347,7 @@ async def test_import_confirm_audit(async_client, db):
 @pytest.mark.asyncio
 async def test_assign_task(async_client, db):
     shop_id, ac_id, wp_id = await _seed_shop_and_aircraft(db)
+    await _grant_supervisor_access(db, shop_id)
     cr = await _create_task(async_client, shop_id, ac_id)
     task_id = cr.json()["task_id"]
 
@@ -334,6 +360,52 @@ async def test_assign_task(async_client, db):
     data = r.json()
     assert data["assigned_supervisor_id"] == 2
     assert data["distributed_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_assign_task_rejects_non_supervisor(async_client, db):
+    shop_id, ac_id, wp_id = await _seed_shop_and_aircraft(db)
+    cr = await _create_task(async_client, shop_id, ac_id)
+    task_id = cr.json()["task_id"]
+
+    r = await async_client.post(
+        f"/api/tasks/{task_id}/assign",
+        json={"assigned_supervisor_id": 3, "shop_id": shop_id},
+        headers=CSRF,
+    )
+    assert r.status_code == 422
+    assert r.json()["code"] == "VALIDATION_ERROR"
+
+
+@pytest.mark.asyncio
+async def test_assign_task_rejects_supervisor_without_shop_access(async_client, db):
+    shop_id, ac_id, wp_id = await _seed_shop_and_aircraft(db)
+    cr = await _create_task(async_client, shop_id, ac_id)
+    task_id = cr.json()["task_id"]
+
+    r = await async_client.post(
+        f"/api/tasks/{task_id}/assign",
+        json={"assigned_supervisor_id": 2, "shop_id": shop_id},
+        headers=CSRF,
+    )
+    assert r.status_code == 403
+    assert r.json()["code"] == "SHOP_ACCESS_DENIED"
+
+
+@pytest.mark.asyncio
+async def test_assign_task_shop_id_mismatch(async_client, db):
+    shop_id, ac_id, wp_id = await _seed_shop_and_aircraft(db)
+    await _grant_supervisor_access(db, shop_id)
+    cr = await _create_task(async_client, shop_id, ac_id)
+    task_id = cr.json()["task_id"]
+
+    r = await async_client.post(
+        f"/api/tasks/{task_id}/assign",
+        json={"assigned_supervisor_id": 2, "shop_id": shop_id + 999},
+        headers=CSRF,
+    )
+    assert r.status_code == 422
+    assert r.json()["code"] == "VALIDATION_ERROR"
 
 
 @pytest.mark.asyncio
@@ -350,6 +422,7 @@ async def test_assign_task_not_found(async_client, db):
 @pytest.mark.asyncio
 async def test_assign_task_audit(async_client, db):
     shop_id, ac_id, wp_id = await _seed_shop_and_aircraft(db)
+    await _grant_supervisor_access(db, shop_id)
     cr = await _create_task(async_client, shop_id, ac_id)
     task_id = cr.json()["task_id"]
 
@@ -376,6 +449,7 @@ async def test_assign_task_audit(async_client, db):
 @pytest.mark.asyncio
 async def test_bulk_assign(async_client, db):
     shop_id, ac_id, wp_id = await _seed_shop_and_aircraft(db)
+    await _grant_supervisor_access(db, shop_id)
     cr1 = await _create_task(async_client, shop_id, ac_id, task_text="Task 1")
     cr2 = await _create_task(async_client, shop_id, ac_id, task_text="Task 2")
 
@@ -395,6 +469,24 @@ async def test_bulk_assign(async_client, db):
         f"/api/tasks/snapshots?meeting_date=2026-03-10&shop_id={shop_id}&assigned_supervisor_id=2"
     )
     assert r2.json()["total"] == 2
+
+
+@pytest.mark.asyncio
+async def test_bulk_assign_rejects_supervisor_without_shop_access(async_client, db):
+    shop_id, ac_id, wp_id = await _seed_shop_and_aircraft(db)
+    cr1 = await _create_task(async_client, shop_id, ac_id, task_text="Task 1")
+    cr2 = await _create_task(async_client, shop_id, ac_id, task_text="Task 2")
+
+    r = await async_client.post(
+        "/api/tasks/bulk-assign",
+        json={
+            "task_ids": [cr1.json()["task_id"], cr2.json()["task_id"]],
+            "assigned_supervisor_id": 2,
+        },
+        headers=CSRF,
+    )
+    assert r.status_code == 403
+    assert r.json()["code"] == "SHOP_ACCESS_DENIED"
 
 
 @pytest.mark.asyncio

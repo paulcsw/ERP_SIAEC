@@ -17,7 +17,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models import Base
 
-# §5.2 user_roles (association table — composite PK, no extra columns)
+# §5.2 user_roles (association table ??composite PK, no extra columns)
 user_roles = Table(
     "user_roles",
     Base.metadata,
@@ -49,10 +49,10 @@ class User(Base):
     )
     azure_oid: Mapped[str | None] = mapped_column(Unicode(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("GETUTCDATE()")
+        DateTime(timezone=True), nullable=False, server_default=text("(GETUTCDATE())")
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("GETUTCDATE()")
+        DateTime(timezone=True), nullable=False, server_default=text("(GETUTCDATE())")
     )
 
     roles: Mapped[list["Role"]] = relationship(
@@ -79,3 +79,4 @@ class Role(Base):
     __table_args__ = (
         CheckConstraint("name IN ('WORKER', 'SUPERVISOR', 'ADMIN')"),
     )
+

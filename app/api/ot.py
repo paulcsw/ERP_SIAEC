@@ -56,6 +56,27 @@ async def _enrich_ot(db: AsyncSession, ot: OtRequest) -> dict:
     }
 
 
+async def _ensure_ot_detail_visible(
+    db: AsyncSession,
+    *,
+    current_user: dict,
+    target_user_id: int,
+) -> None:
+    """Enforce OT detail visibility scope (WORKER self, SUP team, ADMIN all)."""
+    roles = current_user.get("roles", [])
+    if "ADMIN" in roles:
+        return
+    if target_user_id == current_user["user_id"]:
+        return
+    if "SUPERVISOR" in roles:
+        target_team = (
+            await db.execute(select(User.team).where(User.id == target_user_id))
+        ).scalar_one_or_none()
+        if target_team == current_user.get("team"):
+            return
+    raise APIError(403, "Not allowed to view this OT request", "FORBIDDEN")
+
+
 # ── POST /api/ot — submit (self / proxy / bulk) §8.3.1 ─────────────
 
 @router.post("")
@@ -328,6 +349,12 @@ async def get_ot_detail(
     if not ot:
         raise APIError(404, "OT request not found", "NOT_FOUND")
 
+    await _ensure_ot_detail_visible(
+        db,
+        current_user=current_user,
+        target_user_id=ot.user_id,
+    )
+
     return await _enrich_ot(db, ot)
 
 
@@ -385,8 +412,7 @@ async def endorse_ot(
 
     # SUPERVISOR only — ADMIN cannot endorse
     if "SUPERVISOR" not in roles or "ADMIN" in roles:
-        if "SUPERVISOR" not in roles:
-            raise APIError(403, "Only SUPERVISOR can endorse", "FORBIDDEN")
+        raise APIError(403, "Only non-ADMIN SUPERVISOR can endorse", "FORBIDDEN")
 
     ot = (
         await db.execute(select(OtRequest).where(OtRequest.id == ot_id))

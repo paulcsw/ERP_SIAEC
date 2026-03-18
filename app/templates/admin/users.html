@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Users — CIS ERP{% endblock %}
+{% block title %}Users - CIS ERP{% endblock %}
 {% block breadcrumb %}Admin &rsaquo; Users{% endblock %}
 
 {% block content %}
-<div class="p-4 lg:p-5 flex flex-col h-full w-full">
+<div id="admin-content" class="p-4 lg:p-5 flex flex-col h-full w-full">
 
-  {# ── Header ──────────────────────────────────────────────────────── #}
+  {# ?? Header ???????????????????????????????????????????????????????? #}
   <div class="flex items-center justify-between mb-3 shrink-0">
     <div>
       <h1 class="text-lg font-semibold text-navy-900">Personnel Management</h1>
@@ -14,7 +14,7 @@
     <button class="btn-primary btn-sm text-xs" onclick="showModal('modal-add-user')">+ Add User</button>
   </div>
 
-  {# ── User Table ──────────────────────────────────────────────────── #}
+  {# ?? User Table ???????????????????????????????????????????????????? #}
   <div class="card flex-1 flex flex-col min-h-0">
     <div class="flex-1 overflow-y-auto">
       <table class="tbl">
@@ -61,8 +61,8 @@
   </div>
 </div>
 
-{# ── Add User Modal ────────────────────────────────────────────────── #}
-<div class="modal-overlay" id="modal-add-user" style="display:none">
+{# ?? Add User Modal ?????????????????????????????????????????????????? #}
+<div class="modal-overlay" id="modal-add-user">
   <div class="card w-full sm:w-[420px]">
     <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between">
       <h3 class="font-semibold text-navy-900">Add User</h3>
@@ -105,8 +105,8 @@
   </div>
 </div>
 
-{# ── Edit User Modal ───────────────────────────────────────────────── #}
-<div class="modal-overlay" id="modal-edit-user" style="display:none">
+{# ?? Edit User Modal ????????????????????????????????????????????????? #}
+<div class="modal-overlay" id="modal-edit-user">
   <div class="card w-full sm:w-[420px]">
     <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between">
       <h3 class="font-semibold text-navy-900">Edit User</h3>
@@ -164,19 +164,28 @@
 {% block scripts %}
 <script>
 var csrf = () => (document.cookie.match(/csrftoken=([^;]+)/)||[])[1]||'';
+function refreshAdminUsers() {
+  if (typeof htmx === 'undefined') return;
+  htmx.ajax('GET', '/admin/users', {
+    target: '#admin-content',
+    swap: 'innerHTML',
+    select: '#admin-content > *',
+    pushURL: true,
+  });
+}
 
 function addUser() {
   var body = {
     employee_no: document.getElementById('add-empno').value,
     name: document.getElementById('add-name').value,
     team: document.getElementById('add-team').value,
-    role: document.getElementById('add-role').value,
+    roles: [document.getElementById('add-role').value],
     email: document.getElementById('add-email').value || undefined,
   };
   if(!body.employee_no||!body.name){showToast('Error','Employee No and Name are required','red');return;}
   fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(body)})
     .then(r=>{if(!r.ok)return r.json().then(e=>{throw e});return r.json()})
-    .then(()=>{closeModal('modal-add-user');showToast('Created','User added successfully','green');location.reload();})
+    .then(()=>{closeModal('modal-add-user');showToast('Created','User added successfully','green');refreshAdminUsers();})
     .catch(e=>showToast('Error',(e&&e.detail)||'Failed','red'));
 }
 
@@ -197,19 +206,21 @@ function saveUser() {
   var body={
     name:document.getElementById('edit-name').value,
     team:document.getElementById('edit-team').value,
-    role:document.getElementById('edit-role').value,
+    roles:[document.getElementById('edit-role').value],
     email:document.getElementById('edit-email').value||undefined,
   };
   // Update user
   fetch('/api/users/'+id,{method:'PATCH',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(body)})
     .then(r=>{if(!r.ok)return r.json().then(e=>{throw e});return r.json()})
     .then(()=>{
-      // Handle deactivation toggle
-      if(!active){
-        return fetch('/api/users/'+id+'/deactivate',{method:'PATCH',headers:{'X-CSRFToken':csrf()}});
+      // Sync activation toggle
+      if(active){
+        return fetch('/api/users/'+id+'/reactivate',{method:'PATCH',headers:{'X-CSRFToken':csrf()}});
       }
+      return fetch('/api/users/'+id+'/deactivate',{method:'PATCH',headers:{'X-CSRFToken':csrf()}});
     })
-    .then(()=>{closeModal('modal-edit-user');showToast('Updated','User saved','green');location.reload();})
+    .then(r=>{if(!r.ok)return r.json().then(e=>{throw e});return r.json()})
+    .then(()=>{closeModal('modal-edit-user');showToast('Updated','User saved','green');refreshAdminUsers();})
     .catch(e=>showToast('Error',(e&&e.detail)||'Failed','red'));
 }
 </script>

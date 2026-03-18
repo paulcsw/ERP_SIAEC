@@ -1,4 +1,4 @@
-{# M2: Task List — mobile #}
+{# M2: Task List - mobile #}
 <div id="mob-m2" class="flex flex-col h-full bg-surf-50">
   <div class="p-4 bg-white border-b border-surf-200 shrink-0">
     <button hx-get="/tasks/entry/mobile/m1{% if status_filter %}?status={{ status_filter }}{% endif %}"
@@ -22,19 +22,23 @@
   <div class="px-4 py-2 bg-white border-b border-surf-100 shrink-0 space-y-1.5">
     <div class="flex flex-wrap gap-1.5">
       <button class="entry-chip {% if not status_filter %}active{% endif %}"
-              hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}" hx-target="#mob-entry-stage">All</button>
+              hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}" hx-target="#mob-entry-stage">All</button>
       <button class="entry-chip {% if status_filter == 'NOT_STARTED' %}active{% endif %}"
-              hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}&amp;status=NOT_STARTED" hx-target="#mob-entry-stage">Not Started</button>
+              hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}&amp;status=NOT_STARTED{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}" hx-target="#mob-entry-stage">Not Started</button>
       <button class="entry-chip {% if status_filter == 'IN_PROGRESS' %}active{% endif %}"
-              hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}&amp;status=IN_PROGRESS" hx-target="#mob-entry-stage">In Progress</button>
+              hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}&amp;status=IN_PROGRESS{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}" hx-target="#mob-entry-stage">In Progress</button>
       <button class="entry-chip {% if status_filter == 'WAITING' %}active{% endif %}"
-              hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}&amp;status=WAITING" hx-target="#mob-entry-stage">Waiting</button>
+              hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}&amp;status=WAITING{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}" hx-target="#mob-entry-stage">Waiting</button>
       <button class="entry-chip {% if status_filter == 'COMPLETED' %}active{% endif %}"
-              hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}&amp;status=COMPLETED" hx-target="#mob-entry-stage">Completed</button>
+              hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}&amp;status=COMPLETED{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}" hx-target="#mob-entry-stage">Completed</button>
     </div>
     <div class="flex gap-1.5">
-      <button class="entry-qchip" onclick="this.classList.toggle('on')">⚠ Issue</button>
-      <button class="entry-qchip" onclick="this.classList.toggle('on')">🔔 New</button>
+      <button class="entry-qchip {% if quick_filter == 'issue' %}on{% endif %}"
+              hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if quick_filter != 'issue' %}&amp;quick=issue{% endif %}"
+              hx-target="#mob-entry-stage">Issue</button>
+      <button class="entry-qchip {% if quick_filter == 'new' %}on{% endif %}"
+              hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if quick_filter != 'new' %}&amp;quick=new{% endif %}"
+              hx-target="#mob-entry-stage">New</button>
     </div>
   </div>
   {# Task cards #}
@@ -42,7 +46,7 @@
     <div class="divide-y divide-surf-100">
       {% for task in tasks %}
       <div class="px-4 py-3 bg-white cursor-pointer active:bg-surf-50"
-           hx-get="/tasks/entry/mobile/m3?snapshot_id={{ task.snapshot_id }}&amp;ac={{ ac_reg }}"
+           hx-get="/tasks/entry/mobile/m3?snapshot_id={{ task.snapshot_id }}&amp;ac={{ ac_reg }}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}"
            hx-target="#mob-entry-stage"
            hx-push-url="/tasks/entry?ac={{ ac_reg }}&amp;edit={{ task.task_id }}">
         <div class="flex items-center justify-between">
@@ -88,7 +92,7 @@
         <div class="text-xs text-surf-400 mt-1 truncate">&#128172; {{ task.remarks }}</div>
         {% endif %}
         {% if task.critical_issue %}
-        <div class="text-xs mt-0.5" style="color:#b93a3a">⚠ {{ task.critical_issue }}</div>
+        <div class="text-xs mt-0.5" style="color:#b93a3a">Issue: {{ task.critical_issue }}</div>
         {% endif %}
       </div>
       {% else %}

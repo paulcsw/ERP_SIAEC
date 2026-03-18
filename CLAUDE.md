@@ -17,6 +17,18 @@ CIS ERP system for an MRO (Maintenance, Repair, Overhaul) aviation facility in S
 - **Auth**: Azure AD OAuth2 (Authorization Code Flow), server-side sessions (8h default)
 - **Testing**: pytest + httpx
 
+## Current Implementation Notes (2026-03-17)
+
+- **Python runtime policy**: project target is **Python 3.12.x only** (`>=3.12,<3.13`).
+- **OT detail visibility**: OT detail follows list scope (ADMIN all, SUPERVISOR same team, WORKER self only).
+- **OT endorse guard**: any account that has `ADMIN` role is blocked from first-stage endorse.
+- **Task assignment validation**:
+  - `assigned_supervisor_id` must reference an active user with `SUPERVISOR` role.
+  - assignee must have `user_shop_access` for target shop.
+  - single assign endpoint validates `shop_id` matches task shop.
+- **Data Entry SSR visibility** (`/tasks/entry`, mobile views): non-admin users can only view tasks in accessible shops or directly assigned to themselves.
+- **Airline filter normalization**: `3RD` input is normalized to `THIRD_PARTIES`.
+
 ## Key Commands
 
 ```bash

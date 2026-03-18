@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Shop Access — CIS ERP{% endblock %}
+{% block title %}Shop Access - CIS ERP{% endblock %}
 {% block breadcrumb %}Admin &rsaquo; Shop Access{% endblock %}
 
 {% block content %}
-<div class="p-4 lg:p-5 flex flex-col h-full w-full">
+<div id="admin-content" class="p-4 lg:p-5 flex flex-col h-full w-full">
 
   <div class="flex items-center justify-between mb-3 shrink-0">
     <div>
@@ -24,7 +24,7 @@
           <tr>
             <td class="font-mono text-xs">{{ a.employee_no }}</td>
             <td class="text-sm font-medium">{{ a.user_name }}</td>
-            <td class="text-xs">{{ a.shop_code }} — {{ a.shop_name }}</td>
+            <td class="text-xs">{{ a.shop_code }} - {{ a.shop_name }}</td>
             <td>
               <span class="badge {% if a.access == 'MANAGE' %}bg-navy-50 text-navy-700{% elif a.access == 'EDIT' %}bg-gold-50 text-gold-600{% else %}bg-surf-100 text-surf-400{% endif %}">{{ a.access }}</span>
             </td>
@@ -43,8 +43,8 @@
   </div>
 </div>
 
-{# ── Grant Access Modal ────────────────────────────────────────────── #}
-<div class="modal-overlay" id="modal-add-access" style="display:none">
+{# Grant Access Modal #}
+<div class="modal-overlay" id="modal-add-access">
   <div class="card w-full sm:w-[420px]">
     <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between">
       <h3 class="font-semibold text-navy-900">Grant Shop Access</h3>
@@ -55,14 +55,14 @@
         <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">User *</label>
         <select id="add-access-user" class="inp w-full h-9 text-sm">
           <option value="">-- Select --</option>
-          {% for u in users %}<option value="{{ u.id }}">{{ u.employee_no }} — {{ u.name }}</option>{% endfor %}
+          {% for u in users %}<option value="{{ u.id }}">{{ u.employee_no }} - {{ u.name }}</option>{% endfor %}
         </select>
       </div>
       <div>
         <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Shop *</label>
         <select id="add-access-shop" class="inp w-full h-9 text-sm">
           <option value="">-- Select --</option>
-          {% for s in shops %}<option value="{{ s.id }}">{{ s.code }} — {{ s.name }}</option>{% endfor %}
+          {% for s in shops %}<option value="{{ s.id }}">{{ s.code }} - {{ s.name }}</option>{% endfor %}
         </select>
       </div>
       <div>
@@ -78,8 +78,8 @@
   </div>
 </div>
 
-{# ── Edit Access Modal ─────────────────────────────────────────────── #}
-<div class="modal-overlay" id="modal-edit-access" style="display:none">
+{# Edit Access Modal #}
+<div class="modal-overlay" id="modal-edit-access">
   <div class="card w-full sm:w-[380px]">
     <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between">
       <h3 class="font-semibold text-navy-900">Edit Access Level</h3>
@@ -107,13 +107,22 @@
 {% block scripts %}
 <script>
 var csrf=()=>(document.cookie.match(/csrftoken=([^;]+)/)||[])[1]||'';
+function refreshAdminShopAccess(){
+  if (typeof htmx === 'undefined') return;
+  htmx.ajax('GET','/admin/shop-access',{
+    target:'#admin-content',
+    swap:'innerHTML',
+    select:'#admin-content > *',
+    pushURL:true,
+  });
+}
 
 function grantAccess(){
   var body={user_id:parseInt(document.getElementById('add-access-user').value),shop_id:parseInt(document.getElementById('add-access-shop').value),access:document.getElementById('add-access-level').value};
   if(!body.user_id||!body.shop_id){showToast('Error','User and Shop required','red');return;}
   fetch('/api/shop-access',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(body)})
     .then(r=>{if(!r.ok)return r.json().then(e=>{throw e});return r.json()})
-    .then(()=>{closeModal('modal-add-access');showToast('Granted','Access granted','green');location.reload();})
+    .then(()=>{closeModal('modal-add-access');showToast('Granted','Access granted','green');refreshAdminShopAccess();})
     .catch(e=>showToast('Error',(e&&e.detail)||'Failed','red'));
 }
 
@@ -128,7 +137,7 @@ function saveAccess(){
   var body={access:document.getElementById('edit-access-level').value};
   fetch('/api/shop-access/'+id,{method:'PATCH',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(body)})
     .then(r=>{if(!r.ok)return r.json().then(e=>{throw e});return r.json()})
-    .then(()=>{closeModal('modal-edit-access');showToast('Updated','Access level changed','green');location.reload();})
+    .then(()=>{closeModal('modal-edit-access');showToast('Updated','Access level changed','green');refreshAdminShopAccess();})
     .catch(e=>showToast('Error',(e&&e.detail)||'Failed','red'));
 }
 
@@ -136,7 +145,7 @@ function revokeAccess(id){
   if(!confirm('Revoke this access?'))return;
   fetch('/api/shop-access/'+id,{method:'DELETE',headers:{'X-CSRFToken':csrf()}})
     .then(r=>{if(!r.ok)return r.json().then(e=>{throw e});return r.json()})
-    .then(()=>{showToast('Revoked','Access removed','green');location.reload();})
+    .then(()=>{showToast('Revoked','Access removed','green');refreshAdminShopAccess();})
     .catch(e=>showToast('Error',(e&&e.detail)||'Failed','red'));
 }
 </script>

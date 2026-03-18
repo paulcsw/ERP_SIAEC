@@ -27,7 +27,7 @@ class Aircraft(Base):
         Unicode(20), nullable=False, server_default=text("'ACTIVE'")
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("GETUTCDATE()")
+        DateTime(timezone=True), nullable=False, server_default=text("(GETUTCDATE())")
     )
 
     __table_args__ = (
@@ -55,7 +55,7 @@ class WorkPackage(Base):
         Unicode(20), nullable=False, server_default=text("'ACTIVE'")
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("GETUTCDATE()")
+        DateTime(timezone=True), nullable=False, server_default=text("(GETUTCDATE())")
     )
 
     __table_args__ = (
@@ -82,7 +82,7 @@ class ShopStream(Base):
         Unicode(20), nullable=False, server_default=text("'ACTIVE'")
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("GETUTCDATE()")
+        DateTime(timezone=True), nullable=False, server_default=text("(GETUTCDATE())")
     )
 
     __table_args__ = (
@@ -92,3 +92,4 @@ class ShopStream(Base):
         UniqueConstraint("work_package_id", "shop_code", name="uq_shop_stream"),
         Index("idx_ss_wp", "work_package_id"),
     )
+

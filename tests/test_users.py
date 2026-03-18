@@ -81,6 +81,45 @@ async def test_update_user(async_client):
     assert body["team"] == "Airframe"
 
 
+async def test_update_user_employee_no(async_client):
+    create = await async_client.post(
+        "/api/users",
+        json={"employee_no": "E051", "name": "EmpNo Target", "roles": ["WORKER"]},
+        headers=CSRF_HEADERS,
+    )
+    uid = create.json()["id"]
+
+    resp = await async_client.patch(
+        f"/api/users/{uid}",
+        json={"employee_no": "E151"},
+        headers=CSRF_HEADERS,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["employee_no"] == "E151"
+
+
+async def test_update_user_employee_no_duplicate(async_client):
+    u1 = await async_client.post(
+        "/api/users",
+        json={"employee_no": "E152", "name": "U1", "roles": ["WORKER"]},
+        headers=CSRF_HEADERS,
+    )
+    u2 = await async_client.post(
+        "/api/users",
+        json={"employee_no": "E153", "name": "U2", "roles": ["WORKER"]},
+        headers=CSRF_HEADERS,
+    )
+
+    resp = await async_client.patch(
+        f"/api/users/{u2.json()['id']}",
+        json={"employee_no": u1.json()["employee_no"]},
+        headers=CSRF_HEADERS,
+    )
+    assert resp.status_code == 422
+    assert resp.json()["code"] == "VALIDATION_ERROR"
+    assert resp.json()["field"] == "employee_no"
+
+
 async def test_update_user_not_found(async_client):
     resp = await async_client.patch(
         "/api/users/9999",

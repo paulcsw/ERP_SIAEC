@@ -7,8 +7,20 @@
   <div class="flex items-center justify-between mb-4 shrink-0">
     <div>
       <h1 class="text-lg font-semibold text-navy-900">Dashboard</h1>
-      <p class="text-xs text-surf-400 mt-0.5">CIS &middot; {{ current_user.team or 'All Shops' }} &middot; {{ month_label }}</p>
+      <p class="text-xs text-surf-400 mt-0.5">CIS &middot; {{ dashboard_scope_label or current_user.team or 'All Shops' }} &middot; {{ month_label }}</p>
     </div>
+    <form method="get" class="shrink-0">
+      <select name="shop_id" class="inp h-8 text-xs min-w-[160px]" onchange="this.form.submit()"{% if shop_select_disabled %} disabled{% endif %}>
+        {% if not shop_select_disabled %}
+        <option value="">All Shops</option>
+        {% elif selected_shop_id is none %}
+        <option value="" selected>{{ dashboard_scope_label or (current_user.team or 'My Shop') }}</option>
+        {% endif %}
+        {% for s in shop_options %}
+        <option value="{{ s.id }}" {% if selected_shop_id == s.id %}selected{% endif %}>{{ s.name or s.code }}</option>
+        {% endfor %}
+      </select>
+    </form>
   </div>
 
   <!-- KPI row -->
@@ -96,7 +108,7 @@
       </div>
       <div class="flex-1 overflow-y-auto p-3 space-y-2.5">
         {% for rfo in rfo_list %}
-        <a href="/rfo/{{ rfo.rfo_no }}" class="block rounded-lg border border-surf-200 p-3 hover:border-surf-300 cursor-pointer transition-colors">
+        <a href="/rfo?id={{ rfo.wp_id }}" class="block rounded-lg border border-surf-200 p-3 hover:border-surf-300 cursor-pointer transition-colors">
           <div class="flex items-center justify-between mb-1.5">
             <div class="flex items-center gap-2">
               <span class="font-mono text-xs font-semibold text-navy-900">{{ rfo.rfo_no }}</span>

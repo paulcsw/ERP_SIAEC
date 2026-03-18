@@ -1,11 +1,22 @@
-# Environments
-venv/
+# Environments / secrets
 .env
+.env.development
+.env.*
+venv/
+.venv/
 
-# Python
+# Python caches / artifacts
 __pycache__/
 *.py[cod]
 *$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
 
 # OS Files
 .DS_Store

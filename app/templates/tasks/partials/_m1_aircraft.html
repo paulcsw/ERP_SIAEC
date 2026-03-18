@@ -1,4 +1,4 @@
-{# M1: Aircraft List — mobile #}
+{# M1: Aircraft List - mobile #}
 <div id="mob-m1" class="flex flex-col h-full bg-white">
   <div class="p-4 space-y-3 border-b border-surf-100 shrink-0">
     <div class="flex items-center justify-between">
@@ -29,9 +29,9 @@
     {# Quick chips #}
     <div class="flex gap-1.5">
       <button class="entry-qchip {% if quick_filter == 'issue' %}on{% endif %}"
-              hx-get="/tasks/entry/mobile/m1?quick=issue" hx-target="#mob-entry-stage">⚠ Issue</button>
+              hx-get="/tasks/entry/mobile/m1?quick=issue" hx-target="#mob-entry-stage">Issue</button>
       <button class="entry-qchip {% if quick_filter == 'new' %}on{% endif %}"
-              hx-get="/tasks/entry/mobile/m1?quick=new" hx-target="#mob-entry-stage">🔔 New</button>
+              hx-get="/tasks/entry/mobile/m1?quick=new" hx-target="#mob-entry-stage">New</button>
     </div>
   </div>
   <div class="flex-1 overflow-y-auto">

@@ -39,6 +39,15 @@ async def _create_task(client, shop_id, ac_id, meeting_date="2026-03-10", **kw):
     return r
 
 
+async def _grant_supervisor_access(db, shop_id, user_id=2, access="EDIT"):
+    from app.models.user_shop_access import UserShopAccess
+
+    async with db() as session:
+        row = UserShopAccess(user_id=user_id, shop_id=shop_id, access=access, granted_by=1)
+        session.add(row)
+        await session.commit()
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Commit 1: GET /api/tasks/snapshots
 # ═══════════════════════════════════════════════════════════════════════
@@ -121,6 +130,7 @@ async def test_list_snapshots_include_deleted(async_client, db):
 @pytest.mark.asyncio
 async def test_list_snapshots_supervisor_filter(async_client, db):
     shop_id, ac_id = await _seed_shop_and_aircraft(db)
+    await _grant_supervisor_access(db, shop_id)
     await _create_task(async_client, shop_id, ac_id, assigned_supervisor_id=2)
     await _create_task(async_client, shop_id, ac_id, task_text="No sup")
 
@@ -129,6 +139,39 @@ async def test_list_snapshots_supervisor_filter(async_client, db):
     )
     assert r.json()["total"] == 1
     assert r.json()["items"][0]["assigned_supervisor_id"] == 2
+
+
+@pytest.mark.asyncio
+async def test_list_snapshots_airline_filter_before_pagination(async_client, db):
+    """airline_category must be applied before count/pagination."""
+    from app.models.reference import Aircraft
+    from app.models.shop import Shop
+
+    async with db() as session:
+        shop = Shop(code="SMAIR", name="Sheet Metal Air", created_by=1)
+        session.add(shop)
+        await session.flush()
+
+        ac_third = Aircraft(ac_reg="9V-3RD", airline="JAL")
+        ac_sq = Aircraft(ac_reg="9V-SQ2", airline="SQ")
+        session.add(ac_third)
+        session.add(ac_sq)
+        await session.commit()
+        shop_id = shop.id
+        ac_third_id = ac_third.id
+        ac_sq_id = ac_sq.id
+
+    await _create_task(async_client, shop_id, ac_third_id, task_text="TP task")
+    await _create_task(async_client, shop_id, ac_sq_id, task_text="SQ task")
+
+    r = await async_client.get(
+        f"/api/tasks/snapshots?meeting_date=2026-03-10&shop_id={shop_id}&airline_category=SQ&page=1&per_page=1"
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["total"] == 1
+    assert len(data["items"]) == 1
+    assert data["items"][0]["ac_reg"] == "9V-SQ2"
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -150,6 +193,7 @@ async def test_create_task_basic(async_client, db):
 @pytest.mark.asyncio
 async def test_create_task_with_supervisor_sets_distributed_at(async_client, db):
     shop_id, ac_id = await _seed_shop_and_aircraft(db)
+    await _grant_supervisor_access(db, shop_id)
     r = await _create_task(
         async_client, shop_id, ac_id,
         assigned_supervisor_id=2, planned_mh=15.0,
@@ -159,6 +203,14 @@ async def test_create_task_with_supervisor_sets_distributed_at(async_client, db)
     assert data["assigned_supervisor_id"] == 2
     assert data["distributed_at"] is not None
     assert float(data["planned_mh"]) == 15.0
+
+
+@pytest.mark.asyncio
+async def test_create_task_rejects_non_supervisor_assignee(async_client, db):
+    shop_id, ac_id = await _seed_shop_and_aircraft(db)
+    r = await _create_task(async_client, shop_id, ac_id, assigned_supervisor_id=3)
+    assert r.status_code == 422
+    assert r.json()["code"] == "VALIDATION_ERROR"
 
 
 @pytest.mark.asyncio
@@ -591,3 +643,89 @@ async def test_init_week_copies_mh_and_resets_supervisor_updated(async_client, d
     assert float(item["mh_incurred_hours"]) == 42.5
     assert item["supervisor_updated_at"] is None
     assert item["version"] == 1
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Permission enforcement regression tests
+# ═══════════════════════════════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_view_only_cannot_patch_snapshot(db, worker_client, async_client):
+    """Worker with VIEW-only shop access cannot PATCH snapshot (requires EDIT)."""
+    from app.models.user_shop_access import UserShopAccess
+
+    shop_id, ac_id = await _seed_shop_and_aircraft(db)
+
+    # Grant worker (id=3) VIEW-only access
+    async with db() as session:
+        session.add(UserShopAccess(user_id=3, shop_id=shop_id, access="VIEW", granted_by=1))
+        await session.commit()
+
+    # Create task as admin
+    cr = await async_client.post(
+        "/api/tasks",
+        json={"meeting_date": "2026-03-10", "shop_id": shop_id, "aircraft_id": ac_id,
+              "task_text": "View-only test", "status": "NOT_STARTED", "mh_incurred_hours": 0},
+        headers=CSRF,
+    )
+    snap_id = cr.json()["snapshot_id"]
+
+    # Worker with VIEW tries to update → 403
+    r = await worker_client.patch(
+        f"/api/tasks/snapshots/{snap_id}",
+        json={"version": 1, "status": "IN_PROGRESS"},
+        headers=CSRF,
+    )
+    assert r.status_code == 403
+    assert r.json()["code"] == "SHOP_ACCESS_DENIED"
+
+
+@pytest.mark.asyncio
+async def test_view_only_cannot_patch_assign_worker(db, worker_client, async_client):
+    """Worker with VIEW-only shop access cannot PATCH assign-worker (requires EDIT)."""
+    from app.models.user_shop_access import UserShopAccess
+
+    shop_id, ac_id = await _seed_shop_and_aircraft(db)
+
+    # Grant worker (id=3) VIEW-only access
+    async with db() as session:
+        session.add(UserShopAccess(user_id=3, shop_id=shop_id, access="VIEW", granted_by=1))
+        await session.commit()
+
+    # Create task as admin
+    cr = await async_client.post(
+        "/api/tasks",
+        json={"meeting_date": "2026-03-10", "shop_id": shop_id, "aircraft_id": ac_id,
+              "task_text": "Assign test", "status": "NOT_STARTED", "mh_incurred_hours": 0},
+        headers=CSRF,
+    )
+    task_id = cr.json()["task_id"]
+
+    # Worker with VIEW tries to assign-worker → 403
+    r = await worker_client.patch(
+        f"/api/tasks/{task_id}/assign-worker",
+        json={"assigned_worker_id": 3},
+        headers=CSRF,
+    )
+    assert r.status_code == 403
+    assert r.json()["code"] == "SHOP_ACCESS_DENIED"
+
+
+@pytest.mark.asyncio
+async def test_worker_no_shop_access_mobile_tasks_empty(db, worker_client, async_client):
+    """Worker without any shop_access sees zero aircraft on mobile tasks path."""
+    shop_id, ac_id = await _seed_shop_and_aircraft(db)
+
+    # Create task as admin (worker has no shop_access, no assignment)
+    await async_client.post(
+        "/api/tasks",
+        json={"meeting_date": "2026-03-10", "shop_id": shop_id, "aircraft_id": ac_id,
+              "task_text": "Hidden task", "status": "NOT_STARTED", "mh_incurred_hours": 0},
+        headers=CSRF,
+    )
+
+    # Worker with no shop_access hits mobile m1 → page renders but no aircraft
+    r = await worker_client.get("/tasks/entry/mobile/m1")
+    assert r.status_code == 200
+    # No aircraft groups should appear in the HTML
+    assert "9V-SMA" not in r.text

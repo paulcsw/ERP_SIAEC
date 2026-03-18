@@ -1,4 +1,4 @@
-"""Phase 3 — MH Ledger tables (schema only, no MVP feature code)."""
+"""Phase 3 ??MH Ledger tables (schema only, no MVP feature code)."""
 from datetime import date as _date, datetime
 
 from sqlalchemy import (
@@ -37,7 +37,7 @@ class TimeLedgerDaily(Base):
         Integer, nullable=False, server_default=text("1")
     )
     calculated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("GETUTCDATE()")
+        DateTime(timezone=True), nullable=False, server_default=text("(GETUTCDATE())")
     )
 
     __table_args__ = (
@@ -65,3 +65,4 @@ class LedgerAllocationDaily(Base):
     source: Mapped[str | None] = mapped_column(
         Unicode(20), nullable=True, server_default=text("'PLANNED'")
     )
+

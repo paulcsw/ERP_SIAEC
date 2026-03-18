@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(source:*)"
+      "Bash(source:*)",
+      "Bash(wc:*)"
     ]
   }
 }

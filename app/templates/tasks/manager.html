@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Task Manager — CIS ERP{% endblock %}
+{% block title %}Task Manager - CIS ERP{% endblock %}
 {% block breadcrumb %}Tasks &rsaquo; Task Manager{% endblock %}
 
 {% block head %}
@@ -10,6 +10,7 @@
 .kanban-col.drag-over{background:#e8ecf2;outline:2px dashed #2e5a8a;outline-offset:-2px}
 .kanban-card{background:#fff;border:1px solid #dee4ed;border-radius:8px;padding:10px 12px;cursor:pointer;transition:box-shadow .15s,transform .1s}
 .kanban-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.08);transform:translateY(-1px)}
+.kanban-card.dragging{opacity:.45;transform:none}
 .kanban-card .drag-handle{cursor:grab;opacity:.3;transition:opacity .15s}
 .kanban-card:hover .drag-handle{opacity:.7}
 .kanban-drop-zone{min-height:40px;border:2px dashed transparent;border-radius:8px;transition:all .15s}
@@ -41,12 +42,23 @@
 /* Modal overlay */
 .modal-overlay{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
 .modal-overlay.open{opacity:1;pointer-events:auto}
+@media(max-width:767px){
+  #task-content{flex-direction:column}
+  #task-view-kanban{padding:0 12px 12px}
+  .kanban-col{min-width:260px}
+  .split-detail{width:100%!important}
+  .filter-bar{gap:6px}
+  .filter-bar>select,.filter-bar>input,.filter-bar>.relative{flex:1 1 calc(50% - 6px);min-width:120px}
+  .filter-bar .view-pill{flex:0 0 auto}
+  .bottom-bar-responsive{align-items:stretch}
+  .bottom-bar-main{width:100%;justify-content:flex-start;overflow-x:auto;white-space:nowrap;padding-bottom:2px}
+}
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="flex flex-col h-full w-full overflow-hidden">
-  {# ── Header ── #}
+  {# Header #}
   <div class="p-4 pb-0 shrink-0">
     <div class="flex items-center justify-between mb-3">
       <div>
@@ -54,41 +66,52 @@
         <p class="text-xs text-surf-400">Create, distribute, and audit tasks across shops</p>
       </div>
       <div class="flex gap-2">
+        {% if can_init_week %}
+        <button id="initWeekBtn" class="btn-outline btn-sm text-xs flex items-center gap-1" onclick="runInitWeek(this)">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10m-11 9h12a2 2 0 002-2V7a2 2 0 00-2-2H6a2 2 0 00-2 2v11a2 2 0 002 2z"/></svg>
+          Init Week
+        </button>
+        {% endif %}
+        {% if can_manage_tasks %}
         <button class="btn-outline btn-sm text-xs flex items-center gap-1" onclick="showModal('modal-import-rfo')">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
           Import RFO
         </button>
         <button class="btn-gold btn-sm text-xs" onclick="showModal('modal-new-task')">+ Create &amp; Assign</button>
+        {% elif not can_init_week %}
+        <span class="px-2.5 py-1.5 rounded bg-surf-100 text-surf-400 text-xs font-medium">Read-only (SUPERVISOR)</span>
+        {% endif %}
       </div>
     </div>
 
-    {# ── Filters bar ── #}
-    <div class="flex items-center gap-2 flex-wrap mb-3 filter-bar">
-      <select id="f-shop" class="inp h-8 text-xs" onchange="applyFilters()">
+    {# Filters bar #}
+    <form id="task-filter-form" class="flex items-center gap-2 flex-wrap mb-3 filter-bar" onsubmit="event.preventDefault(); refreshManagerContent(false);">
+      <input type="hidden" name="per_page" value="{{ per_page }}">
+      <select id="f-shop" name="shop_id" class="inp h-8 text-xs" onchange="refreshManagerContent(true)">
         <option value="">All Shops</option>
         {% for s in shops %}
         <option value="{{ s.id }}" {% if shop_id == s.id %}selected{% endif %}>{{ s.code }}</option>
         {% endfor %}
       </select>
-      <select id="f-supervisor" class="inp h-8 text-xs" onchange="applyFilters()">
+      <select id="f-supervisor" name="supervisor_id" class="inp h-8 text-xs" onchange="refreshManagerContent(true)">
         <option value="">All Supervisors</option>
         {% for sv in supervisors %}
         <option value="{{ sv.id }}" {% if supervisor_id == sv.id %}selected{% endif %}>{{ sv.name }}</option>
         {% endfor %}
       </select>
-      <input type="date" id="f-date" value="{{ meeting_date }}" class="inp h-8 text-xs" onchange="applyFilters()">
-      <select id="f-airline" class="inp h-8 text-xs" onchange="applyFilters()">
+      <input type="date" id="f-date" name="meeting_date" value="{{ meeting_date }}" class="inp h-8 text-xs" onchange="refreshManagerContent(true)">
+      <select id="f-airline" name="airline" class="inp h-8 text-xs" onchange="refreshManagerContent(true)">
         <option value="">All Airlines</option>
         <option value="SQ" {% if airline_filter == 'SQ' %}selected{% endif %}>SQ</option>
-        <option value="3RD" {% if airline_filter == '3RD' %}selected{% endif %}>3rd Parties</option>
+        <option value="THIRD_PARTIES" {% if airline_filter == 'THIRD_PARTIES' %}selected{% endif %}>3rd Parties</option>
       </select>
-      <select id="f-rfo" class="inp h-8 text-xs" onchange="applyFilters()">
+      <select id="f-rfo" name="rfo" class="inp h-8 text-xs" onchange="refreshManagerContent(true)">
         <option value="">All RFO</option>
         {% for r in all_rfos %}
-        <option value="{{ r.rfo_no }}" {% if rfo_filter == r.rfo_no %}selected{% endif %}>{{ r.rfo_no }} — {{ r.title }}</option>
+        <option value="{{ r.rfo_no }}" {% if rfo_filter == r.rfo_no %}selected{% endif %}>{{ r.rfo_no }} - {{ r.title }}</option>
         {% endfor %}
       </select>
-      <select id="f-status" class="inp h-8 text-xs" onchange="applyFilters()">
+      <select id="f-status" name="status" class="inp h-8 text-xs" onchange="refreshManagerContent(true)">
         <option value="">All Status</option>
         <option value="NOT_STARTED" {% if status_filter == 'NOT_STARTED' %}selected{% endif %}>Not Started</option>
         <option value="IN_PROGRESS" {% if status_filter == 'IN_PROGRESS' %}selected{% endif %}>In Progress</option>
@@ -97,17 +120,19 @@
       </select>
       <div class="relative flex-1 min-w-0 sm:min-w-[180px]">
         <svg class="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-surf-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-        <input id="f-search" class="inp h-8 text-xs w-full pl-8" placeholder="Search tasks, AC reg..." value="{{ search_filter }}"
-               onkeydown="if(event.key==='Enter')applyFilters()">
+        <input id="f-search" name="search" class="inp h-8 text-xs w-full pl-8" placeholder="Search tasks, AC reg..." value="{{ search_filter }}"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();refreshManagerContent(true)}">
       </div>
       <div class="view-pill">
-        <button class="tab-btn active" onclick="switchTaskView('table',this)">&#9776; Table</button>
-        <button class="tab-btn" onclick="switchTaskView('kanban',this)">&#8862; Kanban</button>
-        <button class="tab-btn" onclick="switchTaskView('rfo',this)">&#9636; RFO</button>
+        <button type="button" class="tab-btn active" data-view="table" onclick="setTaskView('table')">&#9776; Table</button>
+        <button type="button" class="tab-btn" data-view="kanban" onclick="setTaskView('kanban')">&#8862; Kanban</button>
+        <button type="button" class="tab-btn" data-view="rfo" onclick="setTaskView('rfo')">&#9636; RFO</button>
       </div>
-    </div>
+    </form>
+  </div>
 
-    {# ── Progress summary bar ── #}
+  <div id="tm-content" class="flex flex-col flex-1 min-h-0 overflow-hidden">
+    {# Progress summary bar #}
     {% set total_all = status_counts.NOT_STARTED + status_counts.IN_PROGRESS + status_counts.WAITING + status_counts.COMPLETED %}
     {% if total_all > 0 %}
     {% set pns = (status_counts.NOT_STARTED / total_all * 100) | round(0) | int %}
@@ -136,24 +161,26 @@
       <span class="text-xs text-st-red font-medium shrink-0 dl-warn">{{ overdue_count }} overdue</span>
       {% endif %}
     </div>
-  </div>
 
-  {# ═══════════ Content area ═══════════ #}
+  {# Content area #}
   <div class="flex flex-1 min-h-0" id="task-content">
 
-    {# ── TABLE VIEW (default) ── #}
+    {# TABLE VIEW (default) #}
     <div id="task-view-table" class="flex flex-col flex-1 min-h-0 relative overflow-hidden">
       {# Bulk action toolbar #}
+      {% if can_manage_tasks %}
       <div id="bulk-bar" class="hidden absolute bottom-16 left-1/2 -translate-x-1/2 z-20 bg-navy-800 text-white rounded-xl px-4 py-2.5 flex items-center gap-3 shadow-xl">
         <span class="text-xs font-medium"><span id="bulk-count">0</span> selected</span>
+        <button class="btn-sm bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs" onclick="bulkChangeStatus()">Change Status</button>
         <button class="btn-sm bg-gold-500 hover:bg-gold-600 text-navy-900 rounded-lg text-xs font-medium" onclick="showModal('modal-bulk-assign')">Assign To&hellip;</button>
         <button class="btn-sm bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs text-st-red" onclick="closeBulk()">&#10005; Cancel</button>
       </div>
+      {% endif %}
 
       <div class="flex-1 overflow-y-auto px-4 pb-4">
         <table class="tbl" id="task-table">
           <thead><tr>
-            <th style="width:32px"><input type="checkbox" class="chk" onchange="toggleAllTasks(this)"></th>
+            <th style="width:32px">{% if can_manage_tasks %}<input type="checkbox" class="chk" onchange="toggleAllTasks(this)">{% endif %}</th>
             <th style="width:110px">AC / RFO</th>
             <th>Task Description</th>
             <th style="width:95px">Assigned</th>
@@ -164,18 +191,39 @@
           <tbody>
             {% if snapshots %}
             {% for snap in snapshots %}
-            <tr class="cursor-pointer" onclick="selectTaskRow(this, {{ loop.index0 }})"
+            {% if snap.status == 'NOT_STARTED' %}
+              {% set st_label = 'Not Started' %}
+              {% set st_style = 'background:#eef1f6;color:#7c8694' %}
+            {% elif snap.status == 'IN_PROGRESS' %}
+              {% set st_label = 'In Progress' %}
+              {% set st_style = 'background:#fdf5e0;color:#a07d12' %}
+            {% elif snap.status == 'WAITING' %}
+              {% set st_label = 'Waiting' %}
+              {% set st_style = 'background:#fdf0f0;color:#b93a3a' %}
+            {% else %}
+              {% set st_label = 'Completed' %}
+              {% set st_style = 'background:#ecf7f0;color:#2d7a4f' %}
+            {% endif %}
+            <tr class="cursor-pointer" onclick="return selectTaskRow(this)"
+                hx-get="/tasks/partials/detail?snapshot_id={{ snap.snapshot_id }}"
+                hx-target="#detail-body"
+                hx-swap="innerHTML"
                 data-task-id="{{ snap.task_id }}" data-snap-id="{{ snap.snapshot_id }}"
                 data-ac="{{ snap.ac_reg or '' }}" data-rfo="{{ snap.rfo_no or '' }}"
                 data-title="{{ snap.task_text }}" data-status="{{ snap.status }}"
                 data-mh="{{ snap.mh_incurred_hours }}" data-shop="{{ snap.shop_code or '' }}"
                 data-deadline="{{ snap.deadline_date or '' }}"
+                data-deadline-display="{{ snap.deadline_display }}"
                 data-remarks="{{ snap.remarks or '' }}"
                 data-issue="{{ snap.critical_issue or '' }}"
                 data-supervisor="{{ snap.assigned_supervisor or '' }}"
                 data-worker="{{ snap.assigned_worker or '' }}"
+                data-distributed="{{ snap.distributed_display }}"
+                data-updated="{{ snap.updated_display }}"
+                data-updated-stamp="{{ snap.updated_stamp }}"
+                data-mh-delta="{{ snap.mh_delta_display }}"
                 data-version="{{ snap.version }}">
-              <td><input type="checkbox" class="chk task-chk" value="{{ snap.task_id }}" onchange="updateBulk()" onclick="event.stopPropagation()"></td>
+              <td>{% if can_manage_tasks %}<input type="checkbox" class="chk task-chk" value="{{ snap.task_id }}" onchange="updateBulk()" onclick="event.stopPropagation()">{% endif %}</td>
               <td>
                 <div class="font-mono text-xs font-bold text-navy-900">{{ snap.ac_reg or '-' }}</div>
                 <div class="font-mono text-[10px] text-surf-400">{{ snap.rfo_no or '-' }}</div>
@@ -184,10 +232,10 @@
                 <div class="text-sm">{{ snap.task_text }}</div>
                 <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
                   {% if snap.remarks %}
-                  <span class="text-[10px] text-surf-400 truncate max-w-[200px]" title="{{ snap.remarks }}">{{ snap.remarks[:50] }}{% if snap.remarks | length > 50 %}&hellip;{% endif %}</span>
+                  <span class="text-[10px] text-surf-400 truncate max-w-[220px]" title="{{ snap.remarks }}">&#128172; {{ snap.remarks[:52] }}{% if snap.remarks | length > 52 %}&hellip;{% endif %}</span>
                   {% endif %}
                   {% if snap.critical_issue %}
-                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-st-redBg text-st-red font-medium">{{ snap.critical_issue[:40] }}</span>
+                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-st-redBg text-st-red font-medium">&#9888; {{ snap.critical_issue[:36] }}{% if snap.critical_issue | length > 36 %}&hellip;{% endif %}</span>
                   {% endif %}
                   {% if not snap.remarks and not snap.critical_issue %}
                   <span class="text-[10px] text-surf-300 italic">No remarks</span>
@@ -205,25 +253,15 @@
                 {% endif %}
               </td>
               <td>
-                {% if snap.status == 'NOT_STARTED' %}
-                <span class="badge badge-not-started">Not Started</span>
-                {% elif snap.status == 'IN_PROGRESS' %}
-                <span class="badge badge-in-progress">In Progress</span>
-                {% elif snap.status == 'WAITING' %}
-                <span class="badge badge-waiting">Waiting</span>
-                {% elif snap.status == 'COMPLETED' %}
-                <span class="badge badge-completed">Completed</span>
-                {% endif %}
+                <span class="badge" style="{{ st_style }}">{{ st_label }}</span>
               </td>
               <td class="text-right">
-                <div class="font-mono text-sm">{{ snap.mh_incurred_hours }}</div>
+                <div class="font-mono text-sm">{{ '%.1f'|format(snap.mh_incurred_hours) }}</div>
+                <div class="text-[10px] {% if snap.mh_delta %}text-st-green font-medium{% else %}text-surf-400{% endif %}">{{ snap.mh_delta_display }}</div>
               </td>
               <td>
-                {% if snap.deadline_date %}
-                <div class="text-xs {% if snap.is_overdue %}text-st-red font-medium{% endif %}">{{ snap.deadline_date }}{% if snap.is_overdue %} &#9888;{% endif %}</div>
-                {% else %}
-                <div class="text-xs text-surf-400">&mdash;</div>
-                {% endif %}
+                <div class="text-xs {% if snap.is_overdue %}text-st-red font-medium{% endif %}">{{ snap.deadline_display if snap.deadline_display else '-' }}</div>
+                <div class="text-[10px] text-surf-400">{{ snap.updated_display }}</div>
               </td>
             </tr>
             {% endfor %}
@@ -241,46 +279,49 @@
       </div>
     </div>
 
-    {# ── KANBAN VIEW ── #}
-    <div id="task-view-kanban" class="hidden flex gap-3 px-4 pb-4 overflow-x-auto overflow-y-hidden min-h-0">
+    {# KANBAN VIEW #}
+    <div id="task-view-kanban" class="hidden flex-1 flex gap-3 px-4 pb-4 overflow-x-auto overflow-y-hidden min-h-0">
       {% set status_cfg = [
-        ('NOT_STARTED', 'NOT STARTED', 'text-st-grey', '', 'bg-surf-200'),
-        ('IN_PROGRESS', 'IN PROGRESS', 'text-st-yellow', 'background:#fefcf5', 'bg-st-yellowBg'),
-        ('WAITING', 'WAITING', 'text-st-red', 'background:#fef5f5', 'bg-st-redBg'),
-        ('COMPLETED', 'COMPLETED', 'text-st-green', 'background:#f5faf7', 'bg-st-greenBg'),
+        ('NOT_STARTED', 'not-started', 'NOT STARTED', 'text-st-grey', '', 'bg-surf-200'),
+        ('IN_PROGRESS', 'in-progress', 'IN PROGRESS', 'text-st-yellow', 'background:#fefcf5', 'bg-st-yellowBg'),
+        ('WAITING', 'waiting', 'WAITING', 'text-st-red', 'background:#fef5f5', 'bg-st-redBg'),
+        ('COMPLETED', 'completed', 'COMPLETED', 'text-st-green', 'background:#f5faf7', 'bg-st-greenBg'),
       ] %}
-      {% for status_key, status_label, text_cls, bg_style, count_bg in status_cfg %}
+      {% for status_key, status_slug, status_label, text_cls, bg_style, count_bg in status_cfg %}
       {% set col_snaps = snapshots | selectattr('status', 'equalto', status_key) | list %}
-      <div class="kanban-col" {% if bg_style %}style="{{ bg_style }}"{% endif %} data-status="{{ status_key | lower | replace('_', '-') }}">
+      <div class="kanban-col" {% if bg_style %}style="{{ bg_style }}"{% endif %} data-status="{{ status_slug }}" {% if can_manage_tasks %}ondragover="kanbanDragOver(event)" ondragleave="kanbanDragLeave(event)" ondrop="kanbanDrop(event)"{% endif %}>
         <div class="text-xs font-semibold {{ text_cls }} mb-1 flex justify-between">
           <span>{{ status_label }}</span>
           <span class="kanban-count {{ count_bg }} px-1.5 rounded">{{ col_snaps | length }}</span>
         </div>
         {% for snap in col_snaps %}
-        <div class="kanban-card{% if status_key != 'NOT_STARTED' %} border-l-2{% endif %}{% if status_key == 'IN_PROGRESS' %} border-st-yellow{% elif status_key == 'WAITING' %} border-st-red{% elif status_key == 'COMPLETED' %} border-st-green{% endif %}{% if status_key == 'COMPLETED' %} opacity-70{% endif %}"
-             onclick="openKanbanDetail(this)"
+        {% set assignee = snap.assigned_worker or snap.assigned_supervisor or 'Unassigned' %}
+        <div class="kanban-card{% if status_key != 'NOT_STARTED' %} border-l-2{% endif %}{% if status_key == 'IN_PROGRESS' %} border-st-yellow{% elif status_key == 'WAITING' %} border-st-red{% elif status_key == 'COMPLETED' %} border-st-green opacity-70{% endif %}"
+             {% if can_manage_tasks %}draggable="true" ondragstart="kanbanDragStart(event)" ondragend="kanbanDragEnd(event)"{% endif %} onclick="openKanbanDetail(this)"
              data-task-id="{{ snap.task_id }}" data-ac="{{ snap.ac_reg or '' }}" data-rfo="{{ snap.rfo_no or '' }}"
-             data-title="{{ snap.task_text }}" data-mh="{{ snap.mh_incurred_hours }}"
-             data-deadline="{{ snap.deadline_date or '' }}"
+             data-title="{{ snap.task_text }}" data-mh="{{ '%.1f'|format(snap.mh_incurred_hours) }}"
+             data-due="{{ snap.deadline_display }}" data-assignee="{{ assignee }}"
              data-worker="{{ snap.assigned_worker or '' }}" data-supervisor="{{ snap.assigned_supervisor or '' }}"
              data-remarks="{{ snap.remarks or '' }}" data-issue="{{ snap.critical_issue or '' }}"
-             data-status="{{ snap.status }}" data-shop="{{ snap.shop_code or '' }}"
-             data-version="{{ snap.version }}">
+             data-issue-meta="{% if snap.critical_issue %}Reported by {{ snap.assigned_supervisor or 'Supervisor' }} &middot; {{ snap.updated_stamp or snap.updated_display }}{% endif %}"
+             data-updated="{{ snap.updated_display }}" data-distributed="{{ snap.distributed_display }}"
+             data-desc="{{ snap.task_text }}{% if snap.remarks %} - {{ snap.remarks }}{% endif %}"
+             data-status="{{ snap.status }}" data-shop="{{ snap.shop_code or '' }}" data-snap-id="{{ snap.snapshot_id }}" data-version="{{ snap.version }}">
           <div class="flex items-center justify-between mb-1">
             <div class="font-mono text-[10px] text-surf-400">{{ snap.ac_reg or '-' }} &middot; {{ snap.rfo_no or '-' }}</div>
             <svg class="drag-handle w-3.5 h-3.5 text-surf-300" fill="currentColor" viewBox="0 0 24 24"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
           </div>
           <div class="text-sm font-medium">{{ snap.task_text }}</div>
           <div class="flex justify-between items-center mt-2 text-[10px]">
-            <span class="font-mono">{{ snap.mh_incurred_hours }} MH</span>
+            <span class="font-mono">{{ '%.1f'|format(snap.mh_incurred_hours) }} MH {% if snap.mh_delta %}<span class="text-st-green">{{ snap.mh_delta_display }}</span>{% endif %}</span>
             {% if snap.has_issue %}
             <span class="text-st-red font-medium">&#9888; Issue</span>
             {% elif snap.is_overdue %}
-            <span class="text-st-red font-medium dl-warn">{{ snap.deadline_date }} &#9888; overdue</span>
+            <span class="text-st-red font-medium dl-warn">{{ snap.deadline_display }} overdue</span>
             {% elif status_key == 'COMPLETED' %}
             <span class="text-st-green">&#10003; Done</span>
-            {% elif snap.deadline_date %}
-            <span>{{ snap.deadline_date }}</span>
+            {% else %}
+            <span>{{ snap.deadline_display }}</span>
             {% endif %}
           </div>
         </div>
@@ -290,8 +331,8 @@
       {% endfor %}
     </div>
 
-    {# ── RFO ACCORDION VIEW ── #}
-    <div id="task-view-rfo" class="hidden flex-col overflow-y-auto px-4 py-3 gap-2 min-h-0">
+    {# RFO ACCORDION VIEW #}
+    <div id="task-view-rfo" class="hidden flex-1 flex flex-col overflow-y-auto px-4 py-3 gap-2 min-h-0">
       {% if rfo_list %}
       {% for grp in rfo_list %}
       <div class="rfo-group{% if loop.first %} open{% endif %}">
@@ -319,32 +360,44 @@
         <div class="{% if not loop.first %}hidden{% endif %}">
           <table class="tbl"><tbody>
             {% for snap in grp.tasks %}
-            <tr class="cursor-pointer hover:bg-surf-50" onclick="selectTaskRow(this, -1)"
+            {% if snap.status == 'NOT_STARTED' %}
+              {% set st_label = 'Not Started' %}
+              {% set st_style = 'background:#eef1f6;color:#7c8694' %}
+            {% elif snap.status == 'IN_PROGRESS' %}
+              {% set st_label = 'In Progress' %}
+              {% set st_style = 'background:#fdf5e0;color:#a07d12' %}
+            {% elif snap.status == 'WAITING' %}
+              {% set st_label = 'Waiting' %}
+              {% set st_style = 'background:#fdf0f0;color:#b93a3a' %}
+            {% else %}
+              {% set st_label = 'Completed' %}
+              {% set st_style = 'background:#ecf7f0;color:#2d7a4f' %}
+            {% endif %}
+            <tr class="cursor-pointer hover:bg-surf-50" onclick="return selectTaskRow(this)"
+                hx-get="/tasks/partials/detail?snapshot_id={{ snap.snapshot_id }}"
+                hx-target="#detail-body"
+                hx-swap="innerHTML"
                 data-task-id="{{ snap.task_id }}" data-snap-id="{{ snap.snapshot_id }}"
                 data-ac="{{ snap.ac_reg or '' }}" data-rfo="{{ snap.rfo_no or '' }}"
                 data-title="{{ snap.task_text }}" data-status="{{ snap.status }}"
                 data-mh="{{ snap.mh_incurred_hours }}" data-shop="{{ snap.shop_code or '' }}"
                 data-deadline="{{ snap.deadline_date or '' }}"
+                data-deadline-display="{{ snap.deadline_display }}"
                 data-remarks="{{ snap.remarks or '' }}"
                 data-issue="{{ snap.critical_issue or '' }}"
                 data-supervisor="{{ snap.assigned_supervisor or '' }}"
                 data-worker="{{ snap.assigned_worker or '' }}"
+                data-distributed="{{ snap.distributed_display }}"
+                data-updated="{{ snap.updated_display }}"
+                data-updated-stamp="{{ snap.updated_stamp }}"
+                data-mh-delta="{{ snap.mh_delta_display }}"
                 data-version="{{ snap.version }}">
               <td class="text-sm" style="width:40%">{{ snap.task_text }}</td>
-              <td style="width:15%">
-                {% if snap.status == 'NOT_STARTED' %}<span class="badge badge-not-started">Not Started</span>
-                {% elif snap.status == 'IN_PROGRESS' %}<span class="badge badge-in-progress">In Progress</span>
-                {% elif snap.status == 'WAITING' %}<span class="badge badge-waiting">Waiting</span>
-                {% elif snap.status == 'COMPLETED' %}<span class="badge badge-completed">Completed</span>
-                {% endif %}
-              </td>
-              <td class="text-right font-mono text-sm" style="width:10%">{{ snap.mh_incurred_hours }}</td>
-              <td class="text-xs" style="width:10%">
-                {% if snap.deadline_date %}
-                <span class="{% if snap.is_overdue %}text-st-red font-medium{% endif %}">{{ snap.deadline_date }}{% if snap.is_overdue %} &#9888;{% endif %}</span>
-                {% else %}&mdash;{% endif %}
-              </td>
-              <td class="text-xs text-surf-400" style="width:15%">
+              <td style="width:15%"><span class="badge" style="{{ st_style }}">{{ st_label }}</span></td>
+              <td class="text-right font-mono text-sm" style="width:10%">{{ '%.1f'|format(snap.mh_incurred_hours) }}</td>
+              <td class="text-xs {% if snap.mh_delta %}text-st-green{% else %}text-surf-400{% endif %}" style="width:10%">{{ snap.mh_delta_display }}</td>
+              <td class="text-xs {% if snap.is_overdue %}text-st-red font-medium{% endif %}" style="width:12%">{{ snap.deadline_display if snap.deadline_display else '-' }}</td>
+              <td class="text-xs text-surf-400" style="width:13%">
                 {% if snap.assigned_supervisor %}{{ snap.assigned_supervisor }}{% else %}<span class="text-st-red italic">Unassigned</span>{% endif %}
               </td>
             </tr>
@@ -359,12 +412,12 @@
     </div>
   </div>
 
-  {# ── Bottom bar ── #}
-  <div class="border-t border-surf-200 bg-white px-4 py-2 flex flex-col sm:flex-row items-center justify-between shrink-0 gap-2">
+  {# Bottom bar #}
+  <div class="border-t border-surf-200 bg-white px-4 py-2 flex flex-col sm:flex-row items-center justify-between shrink-0 gap-2 bottom-bar-responsive">
     <div class="flex items-center gap-3 text-xs">
       <span class="text-surf-400">
         {% if total > 0 %}
-        {{ ((page_num - 1) * per_page) + 1 }}&ndash;{{ [page_num * per_page, total] | min }} of <strong class="text-navy-700">{{ total }}</strong> tasks
+        {{ ((page_num - 1) * per_page) + 1 }}-{{ [page_num * per_page, total] | min }} of <strong class="text-navy-700">{{ total }}</strong> tasks
         {% else %}
         0 tasks
         {% endif %}
@@ -374,30 +427,31 @@
       <span class="text-surf-400">{{ unassigned_count }} unassigned</span>
       {% endif %}
     </div>
-    <div class="flex items-center gap-1">
-      {% if total_pages > 1 %}
+    <div class="flex items-center gap-1 bottom-bar-main">
       {% if page_num > 1 %}
-      <button class="px-2 py-1 rounded text-xs hover:bg-surf-100 text-navy-700" onclick="goPage({{ page_num - 1 }})">&#8249; Prev</button>
+      <button class="px-2 py-1 rounded text-xs hover:bg-surf-100 text-navy-700" onclick="refreshManagerContent(false, {{ page_num - 1 }})">&#8249; Prev</button>
       {% else %}
       <button class="px-2 py-1 rounded text-xs text-surf-300 cursor-not-allowed" disabled>&#8249; Prev</button>
       {% endif %}
       {% for p in range(1, total_pages + 1) %}
-      <button class="px-2 py-1 rounded text-xs {% if p == page_num %}bg-navy-700 text-white font-medium{% else %}hover:bg-surf-100 text-navy-700{% endif %}" onclick="goPage({{ p }})">{{ p }}</button>
+      <button class="px-2 py-1 rounded text-xs {% if p == page_num %}bg-navy-700 text-white font-medium{% else %}hover:bg-surf-100 text-navy-700{% endif %}" onclick="refreshManagerContent(false, {{ p }})">{{ p }}</button>
       {% endfor %}
       {% if page_num < total_pages %}
-      <button class="px-2 py-1 rounded text-xs hover:bg-surf-100 text-navy-700" onclick="goPage({{ page_num + 1 }})">Next &#8250;</button>
+      <button class="px-2 py-1 rounded text-xs hover:bg-surf-100 text-navy-700" onclick="refreshManagerContent(false, {{ page_num + 1 }})">Next &#8250;</button>
       {% else %}
       <button class="px-2 py-1 rounded text-xs text-surf-300 cursor-not-allowed" disabled>Next &#8250;</button>
       {% endif %}
+      {% if can_manage_tasks %}
       <span class="text-surf-200 ml-2">|</span>
+      <button class="btn-outline btn-sm text-xs ml-1" onclick="exportCsv(this)">&#128202; Export CSV</button>
+      <button class="btn-outline btn-sm text-xs" onclick="openAuditLog()">&#128203; Audit</button>
       {% endif %}
-      <button class="btn-outline btn-sm text-xs ml-1" onclick="showToast('Export','Generating Excel report...','green')">Export</button>
-      <button class="btn-outline btn-sm text-xs" onclick="showToast('Audit','Opening full audit trail...','green')">Audit</button>
     </div>
   </div>
 </div>
+</div>
 
-{# ═══════════ Detail Overlay Panel ═══════════ #}
+{# Detail Overlay Panel #}
 <div id="split-backdrop" class="split-backdrop" onclick="closeDetailPanel()"></div>
 <div id="split-detail" class="split-detail w-full sm:w-[380px] overflow-y-auto">
   <div class="p-4">
@@ -411,7 +465,7 @@
   </div>
 </div>
 
-{# ═══════════ Kanban Detail Slide Panel ═══════════ #}
+{# Kanban Detail Slide Panel #}
 <div id="kanban-detail-panel" class="fixed inset-0 z-50 hidden">
   <div class="absolute inset-0 bg-black/30" onclick="closeKanbanDetail()"></div>
   <div class="absolute right-0 top-0 bottom-0 w-full sm:w-[420px] bg-white shadow-2xl flex flex-col transform transition-transform" id="kanban-detail-inner" style="transform:translateX(100%)">
@@ -442,6 +496,10 @@
           <span class="text-sm font-medium text-navy-900" id="kd-assignee"></span>
         </div>
       </div>
+      <div>
+        <div class="text-[10px] uppercase tracking-wider text-surf-400 font-medium mb-1.5">Description</div>
+        <p class="text-sm text-navy-700 leading-relaxed" id="kd-desc"></p>
+      </div>
       <div id="kd-remarks-section">
         <div class="text-[10px] uppercase tracking-wider text-surf-400 font-medium mb-1.5">Remarks</div>
         <div class="bg-surf-50 rounded-lg p-3 text-xs text-navy-700 leading-relaxed" id="kd-remarks"></div>
@@ -450,7 +508,19 @@
         <div class="text-[10px] uppercase tracking-wider text-st-red font-medium mb-1.5">&#9888; Active Issue</div>
         <div class="bg-st-redBg/40 border border-st-red/20 rounded-lg p-3">
           <div class="text-xs font-medium text-st-red" id="kd-issue"></div>
+          <div class="text-[10px] text-surf-500 mt-1" id="kd-issue-meta"></div>
         </div>
+      </div>
+      <div>
+        <div class="text-[10px] uppercase tracking-wider text-surf-400 font-medium mb-1.5">Distribution</div>
+        <div class="bg-surf-50 rounded-lg p-3 space-y-1.5">
+          <div class="flex items-center justify-between text-xs"><span class="text-surf-400">Distributed</span><span class="font-medium" id="kd-distributed"></span></div>
+          <div class="flex items-center justify-between text-xs"><span class="text-surf-400">Last Updated</span><span class="font-medium text-st-green" id="kd-updated"></span></div>
+        </div>
+      </div>
+      <div>
+        <div class="text-[10px] uppercase tracking-wider text-surf-400 font-medium mb-2">Recent Activity</div>
+        <div class="space-y-2 text-xs" id="kd-activity"></div>
       </div>
     </div>
     <div class="px-5 py-3 border-t border-surf-200 flex gap-2 shrink-0">
@@ -460,7 +530,8 @@
   </div>
 </div>
 
-{# ═══════════ Create & Assign Modal ═══════════ #}
+{% if can_manage_tasks %}
+{# Create & Assign Modal #}
 <div class="modal-overlay" id="modal-new-task">
   <div class="card w-full sm:w-[450px]" onclick="event.stopPropagation()">
     <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between">
@@ -512,12 +583,12 @@
           </select>
         </div>
       </div>
-      <button type="submit" class="btn-gold w-full">Create &amp; Assign</button>
+      <button id="createTaskSubmitBtn" type="submit" class="btn-gold w-full">Create &amp; Assign</button>
     </form>
   </div>
 </div>
 
-{# ═══════════ Import RFO Modal ═══════════ #}
+{# Import RFO Modal #}
 <div class="modal-overlay" id="modal-import-rfo">
   <div class="card w-full sm:w-[500px] max-h-[80vh] overflow-y-auto" onclick="event.stopPropagation()">
     <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between">
@@ -533,12 +604,12 @@
       <div id="importPreview" class="hidden card p-3 bg-st-greenBg border-st-green/30">
         <div class="text-xs font-medium text-st-green" id="importPreviewText"></div>
       </div>
-      <button class="btn-gold w-full" id="importBtn" disabled onclick="runImport()">Import</button>
+      <button type="button" class="btn-gold w-full" id="importBtn" disabled onclick="runImport()">Import</button>
     </div>
   </div>
 </div>
 
-{# ═══════════ Bulk Assign Modal ═══════════ #}
+{# Bulk Assign Modal #}
 <div class="modal-overlay" id="modal-bulk-assign">
   <div class="card w-full sm:w-[380px]" onclick="event.stopPropagation()">
     <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between">
@@ -556,118 +627,246 @@
         </select>
       </div>
       <p class="text-xs text-surf-400" id="bulkAssignCount">0 tasks selected</p>
-      <button class="btn-gold w-full" onclick="bulkAssign()">Assign</button>
+      <button type="button" id="bulkAssignBtn" class="btn-gold w-full" onclick="bulkAssign()">Assign</button>
     </div>
   </div>
 </div>
+{% endif %}
 
 {% endblock %}
 
 {% block scripts %}
 <script>
 const CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+const CAN_MANAGE_TASKS = {{ 'true' if can_manage_tasks else 'false' }};
+const CAN_INIT_WEEK = {{ 'true' if can_init_week else 'false' }};
 
-/* ── View switching ── */
-function switchTaskView(view, btn) {
-  ['table','kanban','rfo'].forEach(v => {
-    const el = document.getElementById('task-view-' + v);
-    if (el) { el.classList.toggle('hidden', v !== view); el.classList.toggle('flex', v === view); }
-  });
-  btn.parentElement.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+const STATUS_META = {
+  NOT_STARTED: { label: 'Not Started', bg: '#eef1f6', color: '#7c8694' },
+  IN_PROGRESS: { label: 'In Progress', bg: '#fdf5e0', color: '#a07d12' },
+  WAITING: { label: 'Waiting', bg: '#fdf0f0', color: '#b93a3a' },
+  COMPLETED: { label: 'Completed', bg: '#ecf7f0', color: '#2d7a4f' },
+};
+
+const AIRCRAFT_OPTIONS = [{% for ac in aircraft_list %}{id:{{ ac.id }},reg:"{{ ac.ac_reg }}"},{% endfor %}];
+const WORK_PACKAGE_OPTIONS = [{% for wp in work_packages %}{id:{{ wp.id }},rfo:"{{ wp.rfo_no or '' }}"},{% endfor %}];
+
+let managerActionInFlight = false;
+
+function setButtonBusy(button, busy, busyText) {
+  if (!button) return;
+  if (busy) {
+    button.dataset.prevDisabled = button.disabled ? '1' : '0';
+    button.dataset.prevHtml = button.innerHTML;
+    button.disabled = true;
+    button.classList.add('opacity-60', 'cursor-not-allowed');
+    if (busyText) button.textContent = busyText;
+    return;
+  }
+  button.disabled = button.dataset.prevDisabled === '1';
+  button.classList.remove('opacity-60', 'cursor-not-allowed');
+  if (button.dataset.prevHtml) button.innerHTML = button.dataset.prevHtml;
 }
 
-/* ── Filters ── */
-function applyFilters() {
+function getApiErrorMessage(payload, fallback) {
+  if (!payload) return fallback;
+  if (typeof payload === 'string') return payload;
+  if (typeof payload.detail === 'string') return payload.detail;
+  if (Array.isArray(payload.detail) && payload.detail.length) {
+    const first = payload.detail[0];
+    if (typeof first === 'string') return first;
+    if (first && typeof first.msg === 'string') return first.msg;
+  }
+  if (typeof payload.message === 'string') return payload.message;
+  return fallback;
+}
+
+async function requestJson(url, options = {}) {
+  const { method = 'GET', json, formData, headers = {} } = options;
+  const reqHeaders = { 'X-CSRFToken': CSRF, ...headers };
+  let body;
+  if (formData) body = formData;
+  if (json !== undefined) {
+    reqHeaders['Content-Type'] = 'application/json';
+    body = JSON.stringify(json);
+  }
+
+  const res = await fetch(url, { method, headers: reqHeaders, body });
+  const raw = await res.text();
+  let data = {};
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = { detail: raw };
+    }
+  }
+  if (!res.ok) {
+    const err = new Error(getApiErrorMessage(data, 'Request failed'));
+    err.status = res.status;
+    err.payload = data;
+    throw err;
+  }
+  return data;
+}
+
+async function runManagerAction(actionFn) {
+  if (managerActionInFlight) return false;
+  managerActionInFlight = true;
+  try {
+    await actionFn();
+    return true;
+  } finally {
+    managerActionInFlight = false;
+  }
+}
+
+function downloadFileWithoutNavigation(url) {
+  const frame = document.createElement('iframe');
+  frame.style.display = 'none';
+  frame.src = url;
+  document.body.appendChild(frame);
+  setTimeout(() => frame.remove(), 60000);
+}
+
+function exportCsv(button) {
+  if (!CAN_MANAGE_TASKS) return;
+  const meetingDate = (document.getElementById('f-date')?.value || '').trim();
+  const shopId = (document.getElementById('f-shop')?.value || '').trim();
+  if (!meetingDate || !shopId) {
+    showToast('Error', 'Select Meeting Date and Shop before export', 'red');
+    return;
+  }
   const p = new URLSearchParams();
-  const shop = document.getElementById('f-shop').value;
-  const sup = document.getElementById('f-supervisor').value;
-  const dt = document.getElementById('f-date').value;
-  const airline = document.getElementById('f-airline').value;
-  const rfo = document.getElementById('f-rfo').value;
-  const status = document.getElementById('f-status').value;
-  const search = document.getElementById('f-search').value.trim();
-  if (shop) p.set('shop_id', shop);
-  if (sup) p.set('supervisor_id', sup);
-  if (dt) p.set('meeting_date', dt);
-  if (airline) p.set('airline', airline);
-  if (rfo) p.set('rfo', rfo);
-  if (status) p.set('status', status);
-  if (search) p.set('search', search);
-  window.location.href = '/tasks?' + p.toString();
+  p.set('meeting_date', meetingDate);
+  p.set('shop_id', shopId);
+  downloadFileWithoutNavigation('/api/tasks/export/csv?' + p.toString());
+  setButtonBusy(button, true, 'Exporting...');
+  setTimeout(() => setButtonBusy(button, false), 1200);
 }
 
-function goPage(n) {
-  const p = new URLSearchParams(window.location.search);
-  p.set('page', n);
-  window.location.href = '/tasks?' + p.toString();
+function openAuditLog() {
+  const selectedRow = document.querySelector('#task-content tr.row-sel');
+  const taskId = selectedRow?.dataset?.taskId;
+  if (taskId) {
+    window.location.href = '/tasks/' + taskId;
+    return;
+  }
+
+  const detailLink = document.querySelector('#detail-body a[href^="/tasks/"]');
+  if (detailLink) {
+    window.location.href = detailLink.getAttribute('href');
+    return;
+  }
+
+  const kanbanLink = document.getElementById('kd-entry-link')?.getAttribute('href');
+  if (kanbanLink && kanbanLink.startsWith('/tasks/')) {
+    window.location.href = kanbanLink;
+    return;
+  }
+
+  showToast('Audit Log', 'Select a task first', 'red');
 }
 
-/* ── Table row selection → Detail panel ── */
-function selectTaskRow(tr, idx) {
+async function runInitWeek(button) {
+  if (!CAN_INIT_WEEK) return;
+  const meetingDate = (document.getElementById('f-date')?.value || '').trim();
+  const shopId = (document.getElementById('f-shop')?.value || '').trim();
+  if (!meetingDate || !shopId) {
+    showToast('Error', 'Select Meeting Date and Shop before init', 'red');
+    return;
+  }
+
+  const initBtn = button || document.getElementById('initWeekBtn');
+  await runManagerAction(async () => {
+    setButtonBusy(initBtn, true, 'Running...');
+    try {
+      const d = await requestJson('/api/tasks/init-week', {
+        method: 'POST',
+        json: { meeting_date: meetingDate, shop_id: Number(shopId) },
+      });
+      showToast('Init Week', (d.created_count || 0) + ' created, ' + (d.skipped_count || 0) + ' skipped', 'green');
+      refreshManagerContent(false);
+    } catch (err) {
+      showToast('Error', err.message || 'Init week failed', 'red');
+    } finally {
+      setButtonBusy(initBtn, false);
+    }
+  });
+}
+
+function escapeHtml(v) {
+  return String(v ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+let currentTaskView = 'table';
+
+function setTaskView(view) {
+  currentTaskView = view;
+  ['table', 'kanban', 'rfo'].forEach(v => {
+    const el = document.getElementById('task-view-' + v);
+    if (!el) return;
+    el.classList.toggle('hidden', v !== view);
+    el.classList.toggle('flex', v === view);
+  });
+  document.querySelectorAll('.view-pill .tab-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.view === view);
+  });
+}
+
+function refreshManagerContent(resetPage, pageOverride) {
+  const form = document.getElementById('task-filter-form');
+  if (!form || typeof htmx === 'undefined') return;
+
+  const data = new FormData(form);
+  const currentPage = new URLSearchParams(window.location.search).get('page');
+  if (!resetPage && typeof pageOverride !== 'number' && currentPage) {
+    data.set('page', currentPage);
+  }
+  if (resetPage) data.set('page', '1');
+  if (typeof pageOverride === 'number') data.set('page', String(pageOverride));
+
+  const params = new URLSearchParams();
+  for (const [k, v] of data.entries()) {
+    if (String(v).trim()) params.set(k, String(v).trim());
+  }
+
+  const query = params.toString();
+  htmx.ajax('GET', '/tasks' + (query ? '?' + query : ''), {
+    target: '#tm-content',
+    swap: 'innerHTML',
+    select: '#tm-content > *',
+    pushURL: true,
+  });
+}
+
+function selectTaskRow(tr) {
   const detail = document.getElementById('split-detail');
   const backdrop = document.getElementById('split-backdrop');
+  const title = tr.dataset.title || 'Task Detail';
+  const titleEl = document.getElementById('detail-title');
+  const detailBody = document.getElementById('detail-body');
   const wasSelected = tr.classList.contains('row-sel');
-
   document.querySelectorAll('.tbl tbody tr').forEach(r => r.classList.remove('row-sel'));
 
   if (wasSelected) {
     detail.classList.remove('open');
     backdrop.classList.remove('open');
-  } else {
-    tr.classList.add('row-sel');
-    detail.classList.add('open');
-    backdrop.classList.add('open');
-    populateDetail(tr.dataset);
+    return false;
   }
-}
-
-function populateDetail(d) {
-  document.getElementById('detail-title').textContent = d.title || 'Task Detail';
-  const statusMap = {
-    'NOT_STARTED': {label:'Not Started', cls:'badge-not-started'},
-    'IN_PROGRESS': {label:'In Progress', cls:'badge-in-progress'},
-    'WAITING': {label:'Waiting', cls:'badge-waiting'},
-    'COMPLETED': {label:'Completed', cls:'badge-completed'},
-  };
-  const s = statusMap[d.status] || statusMap['NOT_STARTED'];
-  let html = `
-    <div class="grid grid-cols-2 gap-2 text-xs">
-      <div><span class="text-surf-400">AC Reg</span><div class="font-medium font-mono">${d.ac || '-'}</div></div>
-      <div><span class="text-surf-400">RFO No.</span><div class="font-medium font-mono">${d.rfo || '-'}</div></div>
-      <div><span class="text-surf-400">Shop</span><div class="font-medium">${d.shop || '-'}</div></div>
-      <div><span class="text-surf-400">Status</span><div><span class="badge ${s.cls}">${s.label}</span></div></div>
-    </div>
-    <hr class="border-surf-100">
-    <div class="text-xs font-semibold text-navy-700 mb-2">Distribution</div>
-    <div class="bg-surf-50 rounded-lg p-3 space-y-2">
-      <div class="flex items-center justify-between text-xs">
-        <span class="text-surf-400">Supervisor</span>
-        <span class="font-medium">${d.supervisor || 'Unassigned'}</span>
-      </div>
-      <div class="flex items-center justify-between text-xs">
-        <span class="text-surf-400">Worker</span>
-        <span class="font-medium">${d.worker || 'Unassigned'}</span>
-      </div>
-    </div>
-    <hr class="border-surf-100">`;
-  if (d.remarks) {
-    html += `<div class="text-xs font-semibold text-navy-700 mb-2">Remarks</div>
-      <div class="bg-surf-50 rounded-lg p-3 text-xs text-navy-700 leading-relaxed">${d.remarks}</div>`;
+  tr.classList.add('row-sel');
+  if (titleEl) titleEl.textContent = title;
+  if (detailBody) {
+    detailBody.innerHTML = '<div class="text-center py-8 text-surf-400 text-sm">Loading detail...</div>';
   }
-  if (d.issue) {
-    html += `<div class="text-xs font-semibold text-st-red mb-2 mt-3 flex items-center gap-1.5">&#9888; Active Issue</div>
-      <div class="bg-st-redBg/40 border border-st-red/20 rounded-lg p-3 text-xs text-navy-700 leading-relaxed">
-        <div class="font-medium text-st-red">${d.issue}</div>
-      </div>`;
-  }
-  html += `<hr class="border-surf-100">
-    <div class="text-xs font-semibold text-navy-700 mb-2">Manhours</div>
-    <div class="flex justify-between text-xs"><span class="text-surf-400">Cumulative</span><span class="font-bold text-navy-700">${d.mh} MH</span></div>`;
-  if (d.deadline) {
-    html += `<div class="flex justify-between text-xs mt-1"><span class="text-surf-400">Deadline</span><span class="font-medium">${d.deadline}</span></div>`;
-  }
-  document.getElementById('detail-body').innerHTML = html;
+  detail.classList.add('open');
+  backdrop.classList.add('open');
+  return true;
 }
 
 function closeDetailPanel() {
@@ -676,81 +875,227 @@ function closeDetailPanel() {
   document.querySelectorAll('.tbl tbody tr').forEach(r => r.classList.remove('row-sel'));
 }
 
-/* ── Bulk selection ── */
 function toggleAllTasks(el) {
   document.querySelectorAll('#task-table tbody .chk').forEach(c => c.checked = el.checked);
   updateBulk();
 }
+
 function updateBulk() {
+  if (!CAN_MANAGE_TASKS) return;
+  const bulkBar = document.getElementById('bulk-bar');
+  if (!bulkBar) return;
   const n = document.querySelectorAll('#task-table tbody .chk:checked').length;
-  document.getElementById('bulk-bar').classList.toggle('hidden', n === 0);
+  bulkBar.classList.toggle('hidden', n === 0);
   document.getElementById('bulk-count').textContent = n;
   document.getElementById('bulkAssignCount').textContent = n + ' tasks selected';
 }
+
 function closeBulk() {
+  if (!CAN_MANAGE_TASKS) return;
   document.querySelectorAll('#task-table .chk').forEach(c => c.checked = false);
-  document.getElementById('bulk-bar').classList.add('hidden');
+  const bulkBar = document.getElementById('bulk-bar');
+  if (bulkBar) bulkBar.classList.add('hidden');
 }
-function bulkAssign() {
+
+async function bulkChangeStatus() {
+  if (!CAN_MANAGE_TASKS) return;
+  const checked = Array.from(document.querySelectorAll('#task-table tbody .chk:checked'));
+  if (!checked.length) return;
+  const updates = checked.map(c => {
+    const row = c.closest('tr');
+    return {
+      snapshot_id: Number(row.dataset.snapId),
+      version: Number(row.dataset.version),
+      status: 'IN_PROGRESS',
+    };
+  });
+  try {
+    await requestJson('/api/tasks/snapshots/batch', {
+      method: 'PATCH',
+      json: { updates },
+    });
+    showToast('Status Updated', checked.length + ' tasks moved to In Progress', 'green');
+    refreshManagerContent(false);
+  } catch (err) {
+    showToast('Error', err.message || 'Bulk status update failed', 'red');
+  }
+}
+
+async function bulkAssign() {
+  if (!CAN_MANAGE_TASKS) return;
   const svId = document.getElementById('bulkSupervisorSelect').value;
   if (!svId) { showToast('Error', 'Please select a supervisor', 'red'); return; }
   const taskIds = Array.from(document.querySelectorAll('.task-chk:checked')).map(c => Number(c.value));
-  fetch('/api/tasks/bulk-assign', {
-    method: 'PATCH',
-    headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
-    body: JSON.stringify({task_ids: taskIds, assigned_supervisor_id: Number(svId)})
-  }).then(r => {
-    if (r.ok) { showToast('Assigned', taskIds.length + ' tasks assigned', 'green'); closeModal('modal-bulk-assign'); location.reload(); }
-    else r.json().then(d => showToast('Error', d.detail || 'Failed', 'red'));
+  if (!taskIds.length) { showToast('Error', 'Select at least one task', 'red'); return; }
+
+  const assignBtn = document.getElementById('bulkAssignBtn');
+  await runManagerAction(async () => {
+    setButtonBusy(assignBtn, true, 'Assigning...');
+    try {
+      await requestJson('/api/tasks/bulk-assign', {
+        method: 'POST',
+        json: { task_ids: taskIds, assigned_supervisor_id: Number(svId) },
+      });
+      showToast('Assigned', taskIds.length + ' tasks assigned', 'green');
+      closeModal('modal-bulk-assign');
+      refreshManagerContent(false);
+    } catch (err) {
+      showToast('Error', err.message || 'Failed', 'red');
+    } finally {
+      setButtonBusy(assignBtn, false);
+    }
   });
 }
 
-/* ── Kanban detail ── */
+let draggedCard = null;
+let isDragging = false;
+
+function kanbanDragStart(e) {
+  draggedCard = e.target.closest('.kanban-card');
+  isDragging = true;
+  setTimeout(() => draggedCard?.classList.add('dragging'), 0);
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', draggedCard?.dataset.taskId || '');
+}
+
+function kanbanDragEnd() {
+  if (draggedCard) draggedCard.classList.remove('dragging');
+  document.querySelectorAll('.kanban-col').forEach(c => c.classList.remove('drag-over'));
+  isDragging = false;
+  draggedCard = null;
+}
+
+function kanbanDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const col = e.target.closest('.kanban-col');
+  if (col) col.classList.add('drag-over');
+}
+
+function kanbanDragLeave(e) {
+  const col = e.target.closest('.kanban-col');
+  if (col && !col.contains(e.relatedTarget)) col.classList.remove('drag-over');
+}
+
+async function kanbanDrop(e) {
+  if (!CAN_MANAGE_TASKS) return;
+  e.preventDefault();
+  const col = e.target.closest('.kanban-col');
+  if (!col || !draggedCard) return;
+  col.classList.remove('drag-over');
+
+  const dropZone = col.querySelector('.kanban-drop-zone');
+  if (dropZone) col.insertBefore(draggedCard, dropZone);
+  else col.appendChild(draggedCard);
+
+  const statusSlug = col.dataset.status;
+  const statusMap = { 'not-started': 'NOT_STARTED', 'in-progress': 'IN_PROGRESS', 'waiting': 'WAITING', 'completed': 'COMPLETED' };
+  const apiStatus = statusMap[statusSlug];
+  const snapId = draggedCard.dataset.snapId;
+  const version = parseInt(draggedCard.dataset.version, 10);
+
+  draggedCard.classList.remove('border-l-2', 'border-st-yellow', 'border-st-red', 'border-st-green', 'opacity-70');
+  const borderMap = { 'in-progress': 'border-st-yellow', 'waiting': 'border-st-red', 'completed': 'border-st-green' };
+  if (borderMap[statusSlug]) {
+    draggedCard.classList.add('border-l-2', borderMap[statusSlug]);
+    if (statusSlug === 'completed') draggedCard.classList.add('opacity-70');
+  }
+  updateKanbanCounts();
+
+  if (snapId && apiStatus) {
+    try {
+      const result = await requestJson('/api/tasks/snapshots/' + snapId, {
+        method: 'PATCH',
+        json: { version: version, status: apiStatus },
+      });
+      draggedCard.dataset.version = result.version || (version + 1);
+      draggedCard.dataset.status = apiStatus;
+      const labelMap = { 'not-started': 'Not Started', 'in-progress': 'In Progress', 'waiting': 'Waiting', 'completed': 'Completed' };
+      showToast('Status Updated', (draggedCard.dataset.title || 'Task') + ' -> ' + labelMap[statusSlug], 'green');
+    } catch (err) {
+      showToast('Error', err.message || 'Failed to update status', 'red');
+      refreshManagerContent(false);
+    }
+  }
+}
+
+function updateKanbanCounts() {
+  document.querySelectorAll('.kanban-col').forEach(col => {
+    const cards = col.querySelectorAll('.kanban-card[draggable]');
+    const countEl = col.querySelector('.kanban-count');
+    if (countEl) countEl.textContent = cards.length;
+  });
+}
+
 function openKanbanDetail(card) {
+  if (isDragging) return;
+  const d = card.dataset;
   const panel = document.getElementById('kanban-detail-panel');
   const inner = document.getElementById('kanban-detail-inner');
-  const d = card.dataset;
+
   document.getElementById('kd-task-id').textContent = 'Task #' + (d.taskId || '');
   document.getElementById('kd-title').textContent = d.title || '';
   document.getElementById('kd-ac').textContent = d.ac || '-';
   document.getElementById('kd-rfo').textContent = d.rfo || '-';
   document.getElementById('kd-mh').textContent = d.mh || '0.0';
-  document.getElementById('kd-due').textContent = d.deadline || '-';
-  const worker = d.worker || d.supervisor || '';
-  document.getElementById('kd-assignee').textContent = worker || 'Unassigned';
-  const initials = worker ? worker.split(' ').map(w => w[0]).join('').toUpperCase() : '??';
-  document.getElementById('kd-avatar').textContent = initials;
+  document.getElementById('kd-due').textContent = d.due || '-';
+  document.getElementById('kd-assignee').textContent = d.assignee || 'Unassigned';
+  document.getElementById('kd-desc').textContent = d.desc || '';
+
+  const initials = (d.assignee || 'NA').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  document.getElementById('kd-avatar').textContent = initials || 'NA';
 
   const remarksSec = document.getElementById('kd-remarks-section');
-  if (d.remarks) { remarksSec.classList.remove('hidden'); document.getElementById('kd-remarks').textContent = d.remarks; }
-  else { remarksSec.classList.add('hidden'); }
+  if (d.remarks) {
+    remarksSec.classList.remove('hidden');
+    document.getElementById('kd-remarks').textContent = d.remarks;
+  } else {
+    remarksSec.classList.add('hidden');
+  }
 
   const issueSec = document.getElementById('kd-issue-section');
-  if (d.issue) { issueSec.classList.remove('hidden'); document.getElementById('kd-issue').textContent = d.issue; }
-  else { issueSec.classList.add('hidden'); }
+  if (d.issue) {
+    issueSec.classList.remove('hidden');
+    document.getElementById('kd-issue').textContent = d.issue;
+    document.getElementById('kd-issue-meta').textContent = d.issueMeta || '';
+  } else {
+    issueSec.classList.add('hidden');
+    document.getElementById('kd-issue-meta').textContent = '';
+  }
 
-  const statusMap = {
-    'NOT_STARTED': {label:'Not Started', bg:'#eef1f6', color:'#7c8694'},
-    'IN_PROGRESS': {label:'In Progress', bg:'#fdf5e0', color:'#a07d12'},
-    'WAITING': {label:'Waiting', bg:'#fdf0f0', color:'#b93a3a'},
-    'COMPLETED': {label:'Completed', bg:'#ecf7f0', color:'#2d7a4f'},
-  };
-  const st = statusMap[d.status] || statusMap['NOT_STARTED'];
+  document.getElementById('kd-distributed').textContent = d.distributed || '-';
+  document.getElementById('kd-updated').textContent = d.updated || '-';
+
+  const col = card.closest('.kanban-col');
+  const st = {
+    'not-started': STATUS_META.NOT_STARTED,
+    'in-progress': STATUS_META.IN_PROGRESS,
+    'waiting': STATUS_META.WAITING,
+    'completed': STATUS_META.COMPLETED,
+  }[col?.dataset.status || 'not-started'];
   const badge = document.getElementById('kd-status-badge');
-  badge.textContent = st.label; badge.style.background = st.bg; badge.style.color = st.color;
+  badge.textContent = st.label;
+  badge.style.background = st.bg;
+  badge.style.color = st.color;
+
+  const activity = [];
+  if (d.updated) activity.push(`<div class="flex gap-2"><span class="text-surf-400 shrink-0 w-16">${escapeHtml(d.updated)}</span><span class="text-navy-700">Snapshot updated</span></div>`);
+  if (d.distributed) activity.push(`<div class="flex gap-2"><span class="text-surf-400 shrink-0 w-16">${escapeHtml(d.distributed)}</span><span class="text-navy-700">Task distributed</span></div>`);
+  if (d.issue) activity.push(`<div class="flex gap-2"><span class="text-surf-400 shrink-0 w-16">Issue</span><span class="text-navy-700">${escapeHtml(d.issue)}</span></div>`);
+  if (!activity.length) activity.push('<div class="text-surf-400">No recent activity</div>');
+  document.getElementById('kd-activity').innerHTML = activity.join('');
 
   document.getElementById('kd-entry-link').href = '/tasks/' + (d.taskId || '');
-
   panel.classList.remove('hidden');
   requestAnimationFrame(() => { inner.style.transform = 'translateX(0)'; });
 }
+
 function closeKanbanDetail() {
   const inner = document.getElementById('kanban-detail-inner');
   inner.style.transform = 'translateX(100%)';
   setTimeout(() => document.getElementById('kanban-detail-panel').classList.add('hidden'), 250);
 }
 
-/* ── RFO accordion ── */
 function toggleRfo(header) {
   const group = header.closest('.rfo-group');
   const body = header.nextElementSibling;
@@ -760,88 +1105,194 @@ function toggleRfo(header) {
   group.classList.toggle('open');
 }
 
-/* ── Modals ── */
+function resetImportModalState() {
+  const fileInput = document.getElementById('rfoFileInput');
+  const preview = document.getElementById('importPreview');
+  const previewText = document.getElementById('importPreviewText');
+  const importBtn = document.getElementById('importBtn');
+  if (fileInput) fileInput.value = '';
+  if (preview) preview.classList.add('hidden');
+  if (previewText) previewText.textContent = '';
+  if (importBtn) {
+    importBtn.disabled = true;
+    importBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+    importBtn.textContent = 'Import';
+  }
+}
+
 function showModal(id) { document.getElementById(id).classList.add('open'); }
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+  if (id === 'modal-import-rfo') resetImportModalState();
+  if (id === 'modal-bulk-assign') {
+    const el = document.getElementById('bulkSupervisorSelect');
+    if (el) el.value = '';
+  }
+  if (id === 'modal-new-task') {
+    const form = document.getElementById('createTaskForm');
+    if (form) form.reset();
+  }
+}
 document.querySelectorAll('.modal-overlay').forEach(m => {
   m.addEventListener('click', e => { if (e.target === m) closeModal(m.id); });
 });
 
-/* ── Create Task ── */
-function createTask(e) {
+async function createTask(e) {
+  if (!CAN_MANAGE_TASKS) return false;
   e.preventDefault();
   const form = document.getElementById('createTaskForm');
   const fd = new FormData(form);
+  const meetingDate = (document.getElementById('f-date')?.value || '').trim();
+  if (!meetingDate) {
+    showToast('Error', 'Select Meeting Date first', 'red');
+    return false;
+  }
+
   const body = {
+    meeting_date: meetingDate,
     task_text: fd.get('task_text'),
     shop_id: Number(fd.get('shop_id')),
     planned_mh: parseFloat(fd.get('planned_mh')) || 0,
   };
-  /* Resolve aircraft by ac_reg */
+
   const acReg = fd.get('ac_reg');
-  /* Find aircraft_id from the known list */
-  const acOpts = [{% for ac in aircraft_list %}{id:{{ ac.id }},reg:"{{ ac.ac_reg }}"},{% endfor %}];
-  const acMatch = acOpts.find(a => a.reg.toLowerCase() === acReg.toLowerCase());
+  const acMatch = AIRCRAFT_OPTIONS.find(a => a.reg.toLowerCase() === String(acReg || '').toLowerCase());
   if (!acMatch) { showToast('Error', 'Aircraft "' + acReg + '" not found in system', 'red'); return false; }
   body.aircraft_id = acMatch.id;
+
   if (fd.get('deadline_date')) body.deadline_date = fd.get('deadline_date');
-  /* Resolve work_package by rfo_no */
+
   const rfoNo = fd.get('rfo_no');
   if (rfoNo) {
-    const wpOpts = [{% for wp in work_packages %}{id:{{ wp.id }},rfo:"{{ wp.rfo_no or '' }}"},{% endfor %}];
-    const wpMatch = wpOpts.find(w => w.rfo === rfoNo);
+    const wpMatch = WORK_PACKAGE_OPTIONS.find(w => w.rfo === rfoNo);
     if (wpMatch) body.work_package_id = wpMatch.id;
   }
-  const supId = fd.get('assigned_supervisor_id');
 
-  fetch('/api/tasks', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
-    body: JSON.stringify(body)
-  }).then(r => r.json().then(d => {
-    if (r.ok) {
+  const supId = fd.get('assigned_supervisor_id');
+  const submitBtn = document.getElementById('createTaskSubmitBtn');
+  await runManagerAction(async () => {
+    setButtonBusy(submitBtn, true, 'Saving...');
+    try {
+      const created = await requestJson('/api/tasks', {
+        method: 'POST',
+        json: body,
+      });
+
       if (supId) {
-        fetch('/api/tasks/' + d.task_id + '/assign', {
-          method: 'PATCH',
-          headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
-          body: JSON.stringify({assigned_supervisor_id: Number(supId)})
-        }).then(() => { closeModal('modal-new-task'); showToast('Created & Assigned', 'Task distributed', 'green'); location.reload(); });
+        try {
+          await requestJson('/api/tasks/' + created.task_id + '/assign', {
+            method: 'POST',
+            json: { assigned_supervisor_id: Number(supId), shop_id: Number(body.shop_id) },
+          });
+          closeModal('modal-new-task');
+          showToast('Created & Assigned', 'Task distributed', 'green');
+          refreshManagerContent(false);
+        } catch (assignErr) {
+          closeModal('modal-new-task');
+          showToast('Partial Success', 'Task created, but assign failed: ' + (assignErr.message || 'Unknown error'), 'red');
+          refreshManagerContent(false);
+        }
       } else {
-        closeModal('modal-new-task'); showToast('Created', 'Task created successfully', 'green'); location.reload();
+        closeModal('modal-new-task');
+        showToast('Created', 'Task created successfully', 'green');
+        refreshManagerContent(false);
       }
-    } else {
-      showToast('Error', d.detail || 'Creation failed', 'red');
+    } catch (err) {
+      showToast('Error', err.message || 'Creation failed', 'red');
+    } finally {
+      setButtonBusy(submitBtn, false);
     }
-  }));
+  });
   return false;
 }
 
-/* ── Import ── */
 function previewImport(input) {
-  if (input.files.length) {
-    document.getElementById('importPreview').classList.remove('hidden');
-    document.getElementById('importPreviewText').textContent = 'File: ' + input.files[0].name + ' (' + Math.round(input.files[0].size/1024) + ' KB)';
-    document.getElementById('importBtn').disabled = false;
-  }
-}
-function runImport() {
-  const file = document.getElementById('rfoFileInput').files[0];
-  if (!file) return;
-  const fd = new FormData();
-  fd.append('file', file);
-  fetch('/api/tasks/import', {
-    method: 'POST',
-    headers: {'X-CSRFToken': CSRF},
-    body: fd
-  }).then(r => r.json().then(d => {
-    if (r.ok) { closeModal('modal-import-rfo'); showToast('Imported', (d.created||0) + ' created, ' + (d.skipped||0) + ' skipped', 'green'); location.reload(); }
-    else showToast('Error', d.detail || 'Import failed', 'red');
-  }));
+  if (!input.files.length) return;
+  document.getElementById('importPreview').classList.remove('hidden');
+  document.getElementById('importPreviewText').textContent = 'File: ' + input.files[0].name + ' (' + Math.round(input.files[0].size / 1024) + ' KB)';
+  document.getElementById('importBtn').disabled = false;
 }
 
-/* ── Keyboard shortcuts ── */
+async function runImport() {
+  if (!CAN_MANAGE_TASKS) return;
+  const file = document.getElementById('rfoFileInput').files[0];
+  if (!file) return;
+  const meetingDate = (document.getElementById('f-date')?.value || '').trim();
+  const shopId = (document.getElementById('f-shop')?.value || '').trim();
+  if (!meetingDate || !shopId) {
+    showToast('Error', 'Select Meeting Date and Shop before import', 'red');
+    return;
+  }
+
+  const importBtn = document.getElementById('importBtn');
+  await runManagerAction(async () => {
+    setButtonBusy(importBtn, true, 'Importing...');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+
+      const preview = await requestJson('/api/tasks/import', {
+        method: 'POST',
+        formData: fd,
+      });
+
+      const validItems = (preview.preview || [])
+        .filter(row => row.valid)
+        .map(row => ({
+          ac_reg: row.ac_reg,
+          rfo_no: row.rfo_no || null,
+          description: row.description || '',
+          planned_mh: Number(row.planned_mh || 0),
+          assigned_supervisor_id: null,
+        }));
+
+      if (!validItems.length) {
+        showToast('Import', 'No valid rows to import', 'red');
+        return;
+      }
+
+      const confirmed = await requestJson('/api/tasks/import/confirm', {
+        method: 'POST',
+        json: {
+          shop_id: Number(shopId),
+          meeting_date: meetingDate,
+          items: validItems,
+        },
+      });
+
+      closeModal('modal-import-rfo');
+      showToast('Imported', (confirmed.created_count || 0) + ' tasks created', 'green');
+      refreshManagerContent(false);
+    } catch (err) {
+      showToast('Error', err.message || 'Import failed', 'red');
+    } finally {
+      const isOpen = document.getElementById('modal-import-rfo')?.classList.contains('open');
+      if (isOpen) setButtonBusy(importBtn, false);
+    }
+  });
+}
+
+setTaskView(currentTaskView);
+
+document.body.addEventListener('htmx:afterSwap', (evt) => {
+  if (!evt.target || evt.target.id !== 'tm-content') return;
+  closeDetailPanel();
+  closeBulk();
+  setTaskView(currentTaskView);
+});
+
+document.body.addEventListener('htmx:responseError', (evt) => {
+  if (!evt.detail?.target || evt.detail.target.id !== 'detail-body') return;
+  const detailBody = document.getElementById('detail-body');
+  if (!detailBody) return;
+  detailBody.innerHTML = '<div class="text-center py-8 text-st-red text-sm">Failed to load task detail.</div>';
+});
+
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeDetailPanel(); closeKanbanDetail(); }
 });
 </script>
 {% endblock %}
+
+
+

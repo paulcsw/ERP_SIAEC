@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db, require_role
 from app.models.ot import OtApproval, OtRequest
 from app.models.reference import WorkPackage
-from app.models.user import User
+from app.models.user import Role, User, user_roles
+from app.models.user_shop_access import UserShopAccess
 from app.services.ot_service import MONTHLY_LIMIT_MINUTES, _monthly_used_minutes
 from app.views import templates
 
@@ -26,13 +27,43 @@ STATUS_BADGES = {
 }
 
 
-async def _team_users_with_hours(db: AsyncSession, team: str | None, month: date) -> list[dict]:
-    """Get team users with their monthly OT hours for the roster."""
-    if not team:
-        return []
-    users = (
-        await db.execute(select(User).where(User.team == team, User.is_active == True))
-    ).scalars().all()
+async def _team_users_with_hours(
+    db: AsyncSession,
+    team: str | None,
+    month: date,
+    include_all_if_empty: bool = False,
+) -> list[dict]:
+    """Get worker roster with monthly OT usage. Optionally fall back to all teams."""
+    users = []
+    if team:
+        users = (
+            await db.execute(
+                select(User)
+                .join(user_roles, User.id == user_roles.c.user_id)
+                .join(Role, Role.id == user_roles.c.role_id)
+                .where(
+                    User.team == team,
+                    User.is_active == True,  # noqa: E712
+                    Role.name == "WORKER",
+                )
+                .order_by(User.name.asc())
+            )
+        ).scalars().unique().all()
+
+    if include_all_if_empty and not users:
+        users = (
+            await db.execute(
+                select(User)
+                .join(user_roles, User.id == user_roles.c.user_id)
+                .join(Role, Role.id == user_roles.c.role_id)
+                .where(
+                    User.is_active == True,  # noqa: E712
+                    Role.name == "WORKER",
+                )
+                .order_by(User.name.asc())
+            )
+        ).scalars().unique().all()
+
     result = []
     for u in users:
         used = await _monthly_used_minutes(db, u.id, month)
@@ -41,6 +72,7 @@ async def _team_users_with_hours(db: AsyncSession, team: str | None, month: date
             "id": u.id,
             "name": u.name,
             "employee_no": u.employee_no,
+            "team": u.team,
             "used_hours": round(used / 60, 1),
             "limit_hours": round(MONTHLY_LIMIT_MINUTES / 60, 1),
             "used_pct": pct,
@@ -122,6 +154,17 @@ async def _enrich_ot_list(db: AsyncSession, rows: list) -> list[dict]:
     return items
 
 
+async def _has_task_access(db: AsyncSession, user: dict) -> bool:
+    """Check if user has any shop_access row (or is ADMIN/SUPERVISOR)."""
+    roles = user.get("roles", [])
+    if "ADMIN" in roles or "SUPERVISOR" in roles:
+        return True
+    row = (await db.execute(
+        select(UserShopAccess.id).where(UserShopAccess.user_id == user["user_id"]).limit(1)
+    )).scalar_one_or_none()
+    return row is not None
+
+
 def _ctx(request, user, **kw):
     """Build base template context."""
     # Map active_page → page for sidebar highlighting
@@ -152,11 +195,20 @@ async def ot_submit_page(
     today = date.today()
     my_used = await _monthly_used_minutes(db, current_user["user_id"], today)
     roles = current_user.get("roles", [])
-    is_sup_or_admin = "SUPERVISOR" in roles or "ADMIN" in roles
+    is_admin = "ADMIN" in roles
+    is_sup_or_admin = "SUPERVISOR" in roles or is_admin
 
     team_users = []
+    roster_scope_label = current_user.get("team") or "All Teams"
     if is_sup_or_admin:
-        team_users = await _team_users_with_hours(db, current_user.get("team"), today)
+        team_users = await _team_users_with_hours(
+            db,
+            current_user.get("team"),
+            today,
+            include_all_if_empty=is_admin,
+        )
+        if is_admin and team_users and any(u.get("team") != current_user.get("team") for u in team_users):
+            roster_scope_label = "All Teams"
 
     # Work packages for RFO dropdown
     wps = (await db.execute(select(WorkPackage))).scalars().all()
@@ -170,6 +222,7 @@ async def ot_submit_page(
         my_used_pct=round(my_used / MONTHLY_LIMIT_MINUTES * 100, 1),
         my_remaining_hours=round((MONTHLY_LIMIT_MINUTES - my_used) / 60, 1),
         team_users=team_users,
+        roster_scope_label=roster_scope_label,
         is_sup_or_admin=is_sup_or_admin,
         rfo_options=rfo_options,
         today=today.isoformat(),
@@ -221,11 +274,18 @@ async def ot_list_page(
     my_used = await _monthly_used_minutes(db, current_user["user_id"], today)
     team_users = []
     if "SUPERVISOR" in roles or "ADMIN" in roles:
-        team_users = await _team_users_with_hours(db, current_user.get("team"), today)
+        team_users = await _team_users_with_hours(
+            db,
+            current_user.get("team"),
+            today,
+            include_all_if_empty="ADMIN" in roles,
+        )
 
     # Work packages for RFO dropdown (mobile O1)
     wps = (await db.execute(select(WorkPackage))).scalars().all()
     rfo_options = [{"id": wp.id, "rfo_no": wp.rfo_no or f"WP-{wp.id}"} for wp in wps]
+
+    task_access = await _has_task_access(db, current_user)
 
     return templates.TemplateResponse("ot/list.html", _ctx(
         request, current_user,
@@ -244,6 +304,7 @@ async def ot_list_page(
         is_sup_or_admin="SUPERVISOR" in roles or "ADMIN" in roles,
         rfo_options=rfo_options,
         today=today.isoformat(),
+        has_task_access=task_access,
     ))
 
 
@@ -331,7 +392,12 @@ async def ot_segment(
         my_used = await _monthly_used_minutes(db, current_user["user_id"], today)
         team_users = []
         if "SUPERVISOR" in roles or "ADMIN" in roles:
-            team_users = await _team_users_with_hours(db, current_user.get("team"), today)
+            team_users = await _team_users_with_hours(
+                db,
+                current_user.get("team"),
+                today,
+                include_all_if_empty="ADMIN" in roles,
+            )
         wps = (await db.execute(select(WorkPackage))).scalars().all()
         rfo_options = [{"id": wp.id, "rfo_no": wp.rfo_no or f"WP-{wp.id}"} for wp in wps]
 

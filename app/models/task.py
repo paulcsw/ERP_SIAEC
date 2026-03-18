@@ -57,7 +57,7 @@ class TaskItem(Base):
         BigInteger, ForeignKey("users.id", ondelete="NO ACTION"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("GETUTCDATE()")
+        DateTime(timezone=True), nullable=False, server_default=text("(GETUTCDATE())")
     )
     created_by: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="NO ACTION"), nullable=False
@@ -123,13 +123,13 @@ class TaskSnapshot(Base):
         DateTime(timezone=True), nullable=True
     )
     last_updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("GETUTCDATE()")
+        DateTime(timezone=True), nullable=False, server_default=text("(GETUTCDATE())")
     )
     last_updated_by: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="NO ACTION"), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("GETUTCDATE()")
+        DateTime(timezone=True), nullable=False, server_default=text("(GETUTCDATE())")
     )
 
     # Relationships
@@ -145,3 +145,4 @@ class TaskSnapshot(Base):
         Index("idx_snap_meeting_deleted", "meeting_date", "is_deleted"),
         Index("idx_snap_task", "task_id"),
     )
+

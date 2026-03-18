@@ -1,4 +1,4 @@
-"""Phase 2 — Attendance tables (schema only, no MVP feature code)."""
+"""Phase 2 ??Attendance tables (schema only, no MVP feature code)."""
 from datetime import date as _date, datetime, time as _time
 
 from sqlalchemy import (
@@ -69,5 +69,6 @@ class AttendanceEvent(Base):
         BigInteger, ForeignKey("users.id", ondelete="NO ACTION"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("GETUTCDATE()")
+        DateTime(timezone=True), nullable=False, server_default=text("(GETUTCDATE())")
     )
+

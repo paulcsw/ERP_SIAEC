@@ -14,7 +14,7 @@ class Shop(Base):
     code: Mapped[str] = mapped_column(Unicode(50), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(Unicode(200), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("GETUTCDATE()")
+        DateTime(timezone=True), nullable=False, server_default=text("(GETUTCDATE())")
     )
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -22,3 +22,4 @@ class Shop(Base):
     created_by: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="NO ACTION"), nullable=True
     )
+

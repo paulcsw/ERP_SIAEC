@@ -44,16 +44,20 @@
       </div>
 
       {# Technician selector (SUPERVISOR/ADMIN only) #}
-      {% if is_sup_or_admin and team_users %}
+      {% if is_sup_or_admin %}
       <div>
         <div class="mob-label">Technician</div>
         <select name="target_user" class="inp w-full h-12 text-base">
           <option value="">&mdash; Self &mdash;</option>
+          {% if team_users %}
           {% for u in team_users %}
           {% if not u.at_limit %}
           <option value="{{ u.id }}">{{ u.name }} ({{ u.employee_no }})</option>
           {% endif %}
           {% endfor %}
+          {% else %}
+          <option value="" disabled>No technicians available</option>
+          {% endif %}
         </select>
       </div>
       {% endif %}
@@ -85,6 +89,69 @@
 </div>
 
 <script>
+var mobOtCsrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+let mobOtSubmitInFlight = false;
+
+function getMobOtErrorMessage(payload, fallback) {
+  if (!payload) return fallback;
+  if (typeof payload === 'string') return payload;
+  if (typeof payload.detail === 'string') return payload.detail;
+  if (Array.isArray(payload.detail) && payload.detail.length) {
+    const first = payload.detail[0];
+    if (typeof first === 'string') return first;
+    if (first && typeof first.msg === 'string') return first.msg;
+  }
+  return fallback;
+}
+
+function setMobSubmitBusy(button, busy, busyText) {
+  if (!button) return;
+  if (busy) {
+    button.dataset.prevDisabled = button.disabled ? '1' : '0';
+    button.dataset.prevHtml = button.innerHTML;
+    button.disabled = true;
+    button.classList.add('opacity-60', 'cursor-not-allowed');
+    if (busyText) button.textContent = busyText;
+    return;
+  }
+  button.disabled = button.dataset.prevDisabled === '1';
+  button.classList.remove('opacity-60', 'cursor-not-allowed');
+  if (button.dataset.prevHtml) button.innerHTML = button.dataset.prevHtml;
+}
+
+async function mobOtRequestJson(url, options = {}) {
+  const { method = 'GET', json } = options;
+  const headers = { 'X-CSRFToken': mobOtCsrf };
+  let body;
+  if (json !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify(json);
+  }
+
+  const res = await fetch(url, { method, headers, body });
+  const raw = await res.text();
+  let data = {};
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = { detail: raw };
+    }
+  }
+  if (!res.ok) {
+    const err = new Error(getMobOtErrorMessage(data, 'Submission failed'));
+    err.payload = data;
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+function refreshMobOtSegment(segment) {
+  if (typeof htmx === 'undefined') return;
+  htmx.ajax('GET', '/ot/segment/' + segment, { target: '#ot-stage', swap: 'innerHTML' });
+}
+
 // Auto-calc duration
 function mobCalcDuration() {
   const s = document.getElementById('mob-start')?.value;
@@ -116,10 +183,17 @@ function mobCalcDuration() {
 }
 document.getElementById('mob-start')?.addEventListener('change', mobCalcDuration);
 document.getElementById('mob-end')?.addEventListener('change', mobCalcDuration);
+mobCalcDuration();
 
 // Submit
 document.getElementById('mob-ot-form')?.addEventListener('submit', async function(ev) {
   ev.preventDefault();
+  if (mobOtSubmitInFlight) return;
+  mobOtSubmitInFlight = true;
+
+  const submitBtn = document.getElementById('mob-submit-btn');
+  setMobSubmitBusy(submitBtn, true, 'Submitting...');
+
   const fd = new FormData(this);
   const body = {
     date: fd.get('date'),
@@ -132,19 +206,18 @@ document.getElementById('mob-ot-form')?.addEventListener('submit', async functio
   const targetUser = fd.get('target_user');
   if (targetUser) body.user_ids = [Number(targetUser)];
 
-  const csrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
-  const resp = await fetch('/api/ot', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
-    body: JSON.stringify(body),
-  });
-  const data = await resp.json();
-  if (resp.ok) {
+  try {
+    await mobOtRequestJson('/api/ot', {
+      method: 'POST',
+      json: body,
+    });
     showToast('Submitted', 'OT pending supervisor endorsement', 'green');
-    // Refresh O1
-    htmx.ajax('GET', '/ot/segment/o1', {target: '#ot-stage', swap: 'innerHTML'});
-  } else {
-    showToast('Error', data.detail || 'Submission failed', 'red');
+    refreshMobOtSegment('o1');
+  } catch (err) {
+    showToast('Error', err.message || 'Submission failed', 'red');
+  } finally {
+    mobOtSubmitInFlight = false;
+    setMobSubmitBusy(submitBtn, false);
   }
 });
 </script>

@@ -1,4 +1,4 @@
-{# M4: Add Task Modal — full-screen on mobile, overlay on desktop #}
+{# M4: Add Task Modal - full-screen on mobile, overlay on desktop #}
 <div id="mob-m4-modal" style="display:none" class="mob-fullscreen-modal">
   <div class="p-4 bg-white border-b border-surf-200 flex items-center justify-between shrink-0">
     <h2 class="text-lg font-bold text-navy-900">Add Task</h2>
@@ -11,6 +11,8 @@
     <input type="hidden" id="m4-meeting-date" value="{{ meeting_date or '' }}"/>
     <input type="hidden" id="m4-shop-id" value="{{ shop_id or '' }}"/>
     <input type="hidden" id="m4-wp-id" value="{{ work_package_id or '' }}"/>
+    <input type="hidden" id="m4-status-filter" value="{{ status_filter or '' }}"/>
+    <input type="hidden" id="m4-quick-filter" value="{{ quick_filter or '' }}"/>
     <div>
       <div class="mob-label">Description</div>
       <textarea id="m4-task-text" class="inp w-full text-base h-24 resize-none" placeholder="Task description..." required></textarea>
@@ -51,39 +53,164 @@
   </div>
   <div class="modal-footer flex gap-3">
     <button type="button" class="btn-outline flex-1 h-12 text-base" onclick="this.closest('#mob-m4-modal').style.display='none'">Cancel</button>
-    <button type="button" class="btn-primary flex-1 h-12 text-base font-semibold" onclick="mobCreateTask()">Add Task</button>
+    <button type="button" id="m4-add-task-btn" class="btn-primary flex-1 h-12 text-base font-semibold" onclick="mobCreateTask()">Add Task</button>
   </div>
 </div>
 <script>
-function mobCreateTask() {
+let mobCreateTaskInFlight = false;
+
+function m4GetErrorMessage(payload, fallback) {
+  if (!payload) return fallback;
+  if (typeof payload === 'string') return payload;
+  if (typeof payload.detail === 'string') return payload.detail;
+  if (Array.isArray(payload.detail) && payload.detail.length) {
+    var first = payload.detail[0];
+    if (typeof first === 'string') return first;
+    if (first && typeof first.msg === 'string') return first.msg;
+  }
+  if (typeof payload.message === 'string') return payload.message;
+  return fallback;
+}
+
+function m4SetButtonBusy(button, busy, busyText) {
+  if (typeof setTaskEntryButtonBusy === 'function') {
+    setTaskEntryButtonBusy(button, busy, busyText);
+    return;
+  }
+  if (!button) return;
+  if (busy) {
+    button.dataset.prevDisabled = button.disabled ? '1' : '0';
+    button.dataset.prevText = button.textContent;
+    button.disabled = true;
+    button.classList.add('opacity-60', 'cursor-not-allowed');
+    if (busyText) button.textContent = busyText;
+    return;
+  }
+  button.disabled = button.dataset.prevDisabled === '1';
+  button.classList.remove('opacity-60', 'cursor-not-allowed');
+  if (button.dataset.prevText) button.textContent = button.dataset.prevText;
+}
+
+async function m4RequestJson(url, options) {
+  if (typeof taskEntryRequestJson === 'function') {
+    return taskEntryRequestJson(url, options || {});
+  }
+  var opts = options || {};
+  var method = opts.method || 'GET';
+  var headers = {'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || ''};
+  var body;
+  if (opts.json !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify(opts.json);
+  } else if (opts.formData) {
+    body = opts.formData;
+  }
+
+  var res = await fetch(url, { method: method, headers: headers, body: body });
+  var raw = await res.text();
+  var data = {};
+  if (raw) {
+    try { data = JSON.parse(raw); } catch (_) { data = { detail: raw }; }
+  }
+  if (!res.ok) {
+    var err = new Error(m4GetErrorMessage(data, 'Request failed'));
+    err.status = res.status;
+    err.payload = data;
+    throw err;
+  }
+  return data;
+}
+
+async function mobCreateTask() {
+  if (mobCreateTaskInFlight) return;
+
+  var taskText = (document.getElementById('m4-task-text').value || '').trim();
+  if (!taskText) {
+    showToast('Error', 'Task description is required', 'red');
+    return;
+  }
+
+  var aircraftId = parseInt(document.getElementById('m4-aircraft-id').value || '', 10);
+  var shopId = parseInt(document.getElementById('m4-shop-id').value || '', 10);
+  var meetingDate = (document.getElementById('m4-meeting-date').value || '').trim();
+  if (!Number.isFinite(aircraftId) || !Number.isFinite(shopId) || !meetingDate) {
+    showToast('Error', 'Aircraft, shop, and meeting date are required.', 'red');
+    return;
+  }
+
+  var plannedMhRaw = (document.getElementById('m4-planned-mh').value || '').trim();
+  var plannedMh = plannedMhRaw ? parseFloat(plannedMhRaw) : null;
+  if (plannedMhRaw && !Number.isFinite(plannedMh)) {
+    showToast('Error', 'Planned MH must be a number.', 'red');
+    return;
+  }
+
+  var wpRaw = (document.getElementById('m4-wp-id').value || '').trim();
+  var wpId = wpRaw ? parseInt(wpRaw, 10) : null;
+
   var payload = {
-    task_text: document.getElementById('m4-task-text').value,
+    task_text: taskText,
     status: document.getElementById('m4-status').value,
-    aircraft_id: parseInt(document.getElementById('m4-aircraft-id').value) || undefined,
-    shop_id: parseInt(document.getElementById('m4-shop-id').value) || undefined,
-    meeting_date: document.getElementById('m4-meeting-date').value || undefined,
-    work_package_id: parseInt(document.getElementById('m4-wp-id').value) || undefined,
-    planned_mh: parseFloat(document.getElementById('m4-planned-mh').value) || undefined,
+    aircraft_id: aircraftId,
+    shop_id: shopId,
+    meeting_date: meetingDate,
+    work_package_id: Number.isFinite(wpId) ? wpId : undefined,
+    planned_mh: plannedMh,
     deadline_date: document.getElementById('m4-deadline').value || undefined,
-    remarks: document.getElementById('m4-remarks').value || undefined,
+    remarks: document.getElementById('m4-remarks').value || undefined
   };
-  // Clean undefined
-  Object.keys(payload).forEach(function(k){ if(payload[k] === undefined) delete payload[k]; });
-  var csrf = (document.cookie.match(/csrftoken=([^;]+)/)||[])[1] || '';
-  fetch('/api/tasks', {
-    method: 'POST', headers: {'Content-Type':'application/json','X-CSRFToken':csrf},
-    body: JSON.stringify(payload)
-  }).then(function(r){
-    if(!r.ok) return r.json().then(function(e){throw e});
-    return r.json();
-  }).then(function(){
+
+  Object.keys(payload).forEach(function (k) {
+    if (payload[k] === undefined || payload[k] === null || payload[k] === '') delete payload[k];
+  });
+
+  var submitBtn = document.getElementById('m4-add-task-btn');
+  mobCreateTaskInFlight = true;
+  m4SetButtonBusy(submitBtn, true, 'Adding...');
+
+  try {
+    var created = await m4RequestJson('/api/tasks', {
+      method: 'POST',
+      json: payload
+    });
+
+    var workerRaw = document.getElementById('m4-worker').value;
+    if (workerRaw) {
+      await m4RequestJson('/api/tasks/' + created.task_id + '/assign-worker', {
+        method: 'PATCH',
+        json: { assigned_worker_id: parseInt(workerRaw, 10) }
+      });
+    }
+
     showToast('Created', 'Task added successfully', 'green');
     document.getElementById('mob-m4-modal').style.display = 'none';
-    // Reload M2
+    document.getElementById('m4-task-text').value = '';
+    document.getElementById('m4-planned-mh').value = '';
+    document.getElementById('m4-deadline').value = '';
+    document.getElementById('m4-remarks').value = '';
+    document.getElementById('m4-worker').value = '';
+
     var ac = document.getElementById('mob-ac-reg') ? document.getElementById('mob-ac-reg').value : '';
-    if(ac) htmx.ajax('GET', '/tasks/entry/mobile/m2?ac=' + ac, '#mob-entry-stage');
-  }).catch(function(err){
-    showToast('Error', (err && err.detail) || 'Failed to create task', 'red');
-  });
+    var statusFilter = (document.getElementById('m4-status-filter') || {}).value || '';
+    var quickFilter = (document.getElementById('m4-quick-filter') || {}).value || '';
+    var filterParts = [];
+    if (statusFilter) filterParts.push('status=' + encodeURIComponent(statusFilter));
+    if (quickFilter) filterParts.push('quick=' + encodeURIComponent(quickFilter));
+    var filterQuery = filterParts.length ? '&' + filterParts.join('&') : '';
+    if (ac) {
+      if (typeof mobLoadStage === 'function') {
+        mobLoadStage('/tasks/entry/mobile/m2?ac=' + ac + filterQuery);
+      } else if (typeof htmx !== 'undefined') {
+        htmx.ajax('GET', '/tasks/entry/mobile/m2?ac=' + ac + filterQuery, { target: '#mob-entry-stage', swap: 'innerHTML' });
+      }
+    } else if (typeof htmx !== 'undefined') {
+      htmx.ajax('GET', '/tasks/entry/mobile/m1', { target: '#mob-entry-stage', swap: 'innerHTML' });
+    }
+  } catch (err) {
+    showToast('Error', (err && err.message) || 'Failed to create task', 'red');
+  } finally {
+    mobCreateTaskInFlight = false;
+    m4SetButtonBusy(submitBtn, false);
+  }
 }
 </script>

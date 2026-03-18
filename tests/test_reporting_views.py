@@ -598,10 +598,10 @@ class TestAlembic003Import:
     """Verify Alembic migration 003 can import views."""
 
     def test_import_migration(self):
-        from alembic.versions import __path__ as alembic_path
-        import importlib.util
-        import os
-        migration_dir = alembic_path[0] if hasattr(alembic_path, '__iter__') else str(alembic_path)
-        # Just verify the module structure is importable
+        # Use file path to avoid package-name collision with installed `alembic`.
+        from pathlib import Path
+
+        migration_path = Path("alembic/versions/003_reporting_views.py")
+        assert migration_path.exists()
         from scripts.create_views import VIEWS as imported_views
         assert len(imported_views) == 16

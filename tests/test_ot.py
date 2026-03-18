@@ -1,9 +1,15 @@
 """OT API tests (Branch 04 — commits 1-4)."""
+from datetime import date, timedelta
+
 import pytest
-from tests.conftest import CSRF_HEADERS
+from httpx import ASGITransport, AsyncClient
+
+from app.main import app
+from tests.conftest import CSRF_HEADERS, _make_session_cookie
 
 
-TOMORROW = "2026-03-11"
+TODAY = date.today()
+TOMORROW = (TODAY + timedelta(days=1)).isoformat()
 OT_BASE = {
     "date": TOMORROW,
     "start_time": "18:00",
@@ -18,11 +24,19 @@ OT_BASE = {
 async def test_self_submit(async_client, db):
     """ADMIN self-submits OT — should succeed."""
     resp = await async_client.post("/api/ot", json=OT_BASE, headers=CSRF_HEADERS)
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["user_id"] == 1
     assert data["requested_minutes"] == 120
     assert data["status"] == "PENDING"
+
+
+async def test_past_date_submit_rejected(async_client, db):
+    """Past OT date is rejected per SSOT."""
+    body = {**OT_BASE, "date": (date.today() - timedelta(days=1)).isoformat()}
+    resp = await async_client.post("/api/ot", json=body, headers=CSRF_HEADERS)
+    assert resp.status_code == 422
+    assert resp.json()["code"] == "VALIDATION_ERROR"
 
 
 async def test_minutes_mismatch(async_client, db):
@@ -51,9 +65,14 @@ async def test_duplicate_ot(async_client, db):
 async def test_monthly_limit(async_client, db):
     """Exceed 72h (4320 min) per month → 422 OT_MONTHLY_LIMIT_EXCEEDED."""
     # Submit many 10h blocks (600 min each) — 7 fills 4200, 8th → 4800 > 4320
+    if TODAY.month == 12:
+        month_anchor = date(TODAY.year + 1, 1, 1)
+    else:
+        month_anchor = date(TODAY.year, TODAY.month + 1, 1)
+
     for i in range(7):
         body = {
-            "date": f"2026-03-{11 + i:02d}",
+            "date": (month_anchor + timedelta(days=i)).isoformat(),
             "start_time": "08:00",
             "end_time": "18:00",
             "reason_code": "AOG",
@@ -62,7 +81,7 @@ async def test_monthly_limit(async_client, db):
         assert r.status_code == 200, f"Request {i+1} failed: {r.json()}"
 
     body = {
-        "date": "2026-03-20",
+        "date": (month_anchor + timedelta(days=7)).isoformat(),
         "start_time": "08:00",
         "end_time": "18:00",
         "reason_code": "AOG",
@@ -123,6 +142,36 @@ async def test_ot_detail(async_client, db):
     resp = await async_client.get(f"/api/ot/{ot_id}")
     assert resp.status_code == 200
     assert resp.json()["id"] == ot_id
+
+
+async def test_ot_detail_forbidden_other_user(worker_client, async_client, db):
+    """WORKER cannot access another user's OT by direct ID."""
+    create = await async_client.post(
+        "/api/ot",
+        json={**OT_BASE, "user_ids": [4]},
+        headers=CSRF_HEADERS,
+    )
+    assert create.status_code == 200
+    ot_id = create.json()["created"][0]["id"]
+
+    resp = await worker_client.get(f"/api/ot/{ot_id}")
+    assert resp.status_code == 403
+    assert resp.json()["code"] == "FORBIDDEN"
+
+
+async def test_ot_detail_forbidden_cross_team_supervisor(sup_client, async_client, db):
+    """SUPERVISOR cannot access OT from a different team."""
+    create = await async_client.post(
+        "/api/ot",
+        json={**OT_BASE, "user_ids": [4]},
+        headers=CSRF_HEADERS,
+    )
+    assert create.status_code == 200
+    ot_id = create.json()["created"][0]["id"]
+
+    resp = await sup_client.get(f"/api/ot/{ot_id}")
+    assert resp.status_code == 403
+    assert resp.json()["code"] == "FORBIDDEN"
 
 
 async def test_cancel_pending(async_client, db):
@@ -201,6 +250,29 @@ async def test_admin_cannot_endorse(async_client, worker_client, db):
         headers=CSRF_HEADERS,
     )
     assert resp.status_code == 403
+
+
+async def test_admin_supervisor_combo_cannot_endorse(worker_client, db):
+    """Account with ADMIN role cannot perform first-stage endorse."""
+    ot_id = await _create_worker_ot(worker_client)
+    mixed_session = {
+        "user_id": 1,
+        "employee_no": "E001",
+        "display_name": "Test Admin",
+        "roles": ["SUPERVISOR", "ADMIN"],
+        "team": "Sheet Metal",
+        "csrf_token": "test-csrf-token-abc123",
+    }
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as mixed_client:
+        mixed_client.cookies.set("session", _make_session_cookie(mixed_session))
+        resp = await mixed_client.post(
+            f"/api/ot/{ot_id}/endorse",
+            json={"action": "APPROVE"},
+            headers=CSRF_HEADERS,
+        )
+    assert resp.status_code == 403
+    assert resp.json()["code"] == "FORBIDDEN"
 
 
 async def test_full_2stage_approval(sup_client, async_client, worker_client, db):

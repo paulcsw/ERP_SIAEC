@@ -150,6 +150,24 @@ async def update_user(
 
     before = _user_to_response(user)
 
+    if body.employee_no is not None:
+        dup_emp = (
+            await db.execute(
+                select(User).where(
+                    User.employee_no == body.employee_no,
+                    User.id != user_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if dup_emp:
+            raise APIError(
+                422,
+                f"employee_no '{body.employee_no}' already exists",
+                "VALIDATION_ERROR",
+                field="employee_no",
+            )
+        user.employee_no = body.employee_no
+
     if body.name is not None:
         user.name = body.name
     if body.email is not None:

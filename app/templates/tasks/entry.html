@@ -30,38 +30,38 @@
 {% endblock %}
 
 {% block content %}
-<div class="flex h-full min-h-0">
+<div id="task-entry-content" class="flex h-full min-h-0">
 
-  {# ── Left Panel: Aircraft List ── #}
+  {# ???? Left Panel: Aircraft List ???? #}
   <div class="w-[280px] shrink-0 border-r border-surf-200 bg-white flex flex-col h-full">
     <div class="p-4 border-b border-surf-200">
       <h2 class="text-base font-semibold text-navy-900">My Assigned Tasks</h2>
       <p class="text-xs text-surf-400 mt-0.5">{{ shop_context or 'All Shops' }}</p>
     </div>
 
-    {# Status filter chips #}
+    {# Status filter chips — preserve quick_filter #}
     <div class="px-4 py-3 flex flex-wrap gap-1.5 border-b border-surf-100">
       <button class="entry-chip {% if not status_filter %}active{% endif %}"
-              hx-get="/tasks/entry" hx-target="body" hx-push-url="true">All</button>
+              hx-get="/tasks/entry{% if quick_filter %}?quick={{ quick_filter }}{% endif %}" hx-target="#task-entry-content" hx-select="#task-entry-content > *" hx-swap="innerHTML" hx-push-url="true">All</button>
       <button class="entry-chip {% if status_filter == 'NOT_STARTED' %}active{% endif %}"
-              hx-get="/tasks/entry?status=NOT_STARTED" hx-target="body" hx-push-url="true">Not Started</button>
+              hx-get="/tasks/entry?status=NOT_STARTED{% if quick_filter %}&quick={{ quick_filter }}{% endif %}" hx-target="#task-entry-content" hx-select="#task-entry-content > *" hx-swap="innerHTML" hx-push-url="true">Not Started</button>
       <button class="entry-chip {% if status_filter == 'IN_PROGRESS' %}active{% endif %}"
-              hx-get="/tasks/entry?status=IN_PROGRESS" hx-target="body" hx-push-url="true">In Progress</button>
+              hx-get="/tasks/entry?status=IN_PROGRESS{% if quick_filter %}&quick={{ quick_filter }}{% endif %}" hx-target="#task-entry-content" hx-select="#task-entry-content > *" hx-swap="innerHTML" hx-push-url="true">In Progress</button>
       <button class="entry-chip {% if status_filter == 'WAITING' %}active{% endif %}"
-              hx-get="/tasks/entry?status=WAITING" hx-target="body" hx-push-url="true">Waiting</button>
+              hx-get="/tasks/entry?status=WAITING{% if quick_filter %}&quick={{ quick_filter }}{% endif %}" hx-target="#task-entry-content" hx-select="#task-entry-content > *" hx-swap="innerHTML" hx-push-url="true">Waiting</button>
       <button class="entry-chip {% if status_filter == 'COMPLETED' %}active{% endif %}"
-              hx-get="/tasks/entry?status=COMPLETED" hx-target="body" hx-push-url="true">Completed</button>
+              hx-get="/tasks/entry?status=COMPLETED{% if quick_filter %}&quick={{ quick_filter }}{% endif %}" hx-target="#task-entry-content" hx-select="#task-entry-content > *" hx-swap="innerHTML" hx-push-url="true">Completed</button>
     </div>
 
-    {# Quick filter chips #}
+    {# Quick filter chips — preserve status_filter #}
     <div class="px-4 py-2 flex gap-1.5 border-b border-surf-100">
       <button class="entry-chip {% if quick_filter == 'issue' %}active{% endif %}"
-              hx-get="/tasks/entry?quick=issue" hx-target="body" hx-push-url="true">
+              hx-get="/tasks/entry?{% if quick_filter != 'issue' %}quick=issue{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" hx-target="#task-entry-content" hx-select="#task-entry-content > *" hx-swap="innerHTML" hx-push-url="true">
         <svg class="w-3 h-3 inline -mt-0.5 mr-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92z" clip-rule="evenodd"/></svg>
         Issue
       </button>
       <button class="entry-chip {% if quick_filter == 'new' %}active{% endif %}"
-              hx-get="/tasks/entry?quick=new" hx-target="body" hx-push-url="true">
+              hx-get="/tasks/entry?{% if quick_filter != 'new' %}quick=new{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" hx-target="#task-entry-content" hx-select="#task-entry-content > *" hx-swap="innerHTML" hx-push-url="true">
         <svg class="w-3 h-3 inline -mt-0.5 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
         New
       </button>
@@ -72,8 +72,8 @@
       {% if ac_groups %}
       {% for ac in ac_groups %}
       <div class="ac-card {% if selected_ac == ac.ac_reg %}selected{% endif %}"
-           hx-get="/tasks/entry?ac={{ ac.ac_reg }}{% if status_filter %}&status={{ status_filter }}{% endif %}"
-           hx-target="body" hx-push-url="true">
+           hx-get="/tasks/entry?ac={{ ac.ac_reg }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if quick_filter %}&quick={{ quick_filter }}{% endif %}"
+           hx-target="#task-entry-content" hx-select="#task-entry-content > *" hx-swap="innerHTML" hx-push-url="true">
         <div class="flex items-center justify-between">
           <div>
             <div class="text-sm font-semibold text-navy-900">{{ ac.ac_reg }}</div>
@@ -101,7 +101,7 @@
     </div>
   </div>
 
-  {# ── Right Panel: Task List + Edit ── #}
+  {# ???? Right Panel: Task List + Edit ???? #}
   <div class="flex-1 flex flex-col min-h-0 min-w-0">
 
     {# Aircraft context header #}
@@ -125,8 +125,9 @@
         {% for task in tasks %}
         <div class="task-card {% if editing_task_id == task.task_id %}editing{% endif %}"
              id="task-card-{{ task.task_id }}"
-             hx-get="/tasks/entry?ac={{ selected_ac }}&edit={{ task.task_id }}{% if status_filter %}&status={{ status_filter }}{% endif %}"
-             hx-target="body" hx-push-url="true">
+             data-task-id="{{ task.task_id }}"
+             hx-get="/tasks/entry?ac={{ selected_ac }}&edit={{ task.task_id }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if quick_filter %}&quick={{ quick_filter }}{% endif %}"
+             hx-target="#task-entry-content" hx-select="#task-entry-content > *" hx-swap="innerHTML" hx-push-url="true">
           <div class="flex items-start justify-between gap-3">
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 mb-1">
@@ -165,16 +166,17 @@
         {% endfor %}
       </div>
 
-      {# ── Edit Panel (shown when task selected) ── #}
+      {# ???? Edit Panel (shown when task selected) ???? #}
       {% if editing_task %}
       <div class="max-w-4xl mx-auto mt-6" id="editPanel">
         <div class="quick-update-card p-5 mb-4">
           <h4 class="text-sm font-semibold text-navy-900 mb-3">Quick Update</h4>
-          <form hx-patch="/api/tasks/{{ editing_task.task_id }}/snapshots/{{ editing_task.snapshot_id }}"
-                hx-target="body" hx-push-url="false"
-                hx-headers='js:{"X-CSRFToken": document.cookie.match(/csrftoken=([^;]+)/)?.[1] || ""}'
-                hx-on::after-request="if(event.detail.successful){showToast('Saved','Task updated successfully','green')}">
+          <form id="desktopQuickUpdateForm"
+                data-task-id="{{ editing_task.task_id }}"
+                data-snapshot-id="{{ editing_task.snapshot_id }}"
+                onsubmit="return submitDesktopQuickUpdate(event)">
             <input type="hidden" name="version" value="{{ editing_task.version }}">
+            <input type="hidden" name="submit_mode" id="desktopSubmitMode" value="save">
 
             <div class="grid grid-cols-2 gap-4 mb-4">
               {# Left: Status + MH + Issue #}
@@ -230,10 +232,19 @@
 
             <div class="flex items-center justify-between">
               <span class="text-[11px] text-surf-400">Version {{ editing_task.version }}</span>
-              <button type="submit" class="btn-gold">
-                Save &amp; Next
-                <svg class="w-4 h-4 inline ml-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
-              </button>
+              <div class="flex items-center gap-2">
+                <button type="submit" class="btn-outline h-10 px-4 text-sm"
+                        data-submit-mode="save"
+                        onclick="setDesktopSubmitMode('save')">
+                  Save
+                </button>
+                <button type="submit" class="btn-gold h-10 px-4 text-sm flex items-center justify-center gap-1.5"
+                        data-submit-mode="next"
+                        onclick="setDesktopSubmitMode('next')">
+                  Save &amp; Next
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+                </button>
+              </div>
             </div>
           </form>
         </div>
@@ -256,7 +267,7 @@
   </div>
 </div>
 
-{# ── Add Task Modal (modal-overlay pattern) ── #}
+{# ???? Add Task Modal (modal-overlay pattern) ???? #}
 <div class="modal-overlay" id="modal-entry-task">
   <div class="card w-full sm:w-[420px] modal-entry-task-card" onclick="event.stopPropagation()">
     <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between shrink-0">
@@ -268,17 +279,19 @@
           <h3 class="font-semibold text-navy-900">Add Task</h3>
         </div>
         {% if selected_ac %}
-        <div class="text-[11px] text-surf-400 mt-0.5">{{ selected_ac }} · {{ shop_context or 'All Shops' }}</div>
+        <div class="text-[11px] text-surf-400 mt-0.5">{{ selected_ac }} &middot; {{ shop_context or 'All Shops' }}</div>
         {% endif %}
       </div>
       <button onclick="closeModal('modal-entry-task')" class="text-surf-400 hover:text-navy-700 text-lg hidden sm:block">&times;</button>
     </div>
     <div class="p-5 space-y-3 overflow-y-auto" style="max-height:calc(100vh - 160px)">
-      <form id="entryTaskForm" hx-post="/api/tasks" hx-target="body"
-            hx-on::after-request="if(event.detail.successful){closeModal('modal-entry-task');showToast('Created','Task added','green')}">
+      <form id="entryTaskForm" onsubmit="return submitDesktopCreateTask(event)">
         {% if selected_ac_id %}
         <input type="hidden" name="aircraft_id" value="{{ selected_ac_id }}">
         {% endif %}
+        <input type="hidden" name="meeting_date" value="{{ selected_meeting_date or '' }}">
+        <input type="hidden" name="shop_id" value="{{ selected_shop_id or '' }}">
+        <input type="hidden" name="work_package_id" value="{{ selected_work_package_id or '' }}">
         <div class="space-y-3">
           <div>
             <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Task Description *</label>
@@ -331,7 +344,7 @@
 <div class="mob-page active" id="mob-tasks">
   <div class="flex flex-col h-full relative overflow-hidden" id="mob-entry-wrap">
     <div id="mob-entry-stage">
-      {# M1: Aircraft List — initial mobile view #}
+      {# M1: Aircraft List ??initial mobile view #}
       {% include "tasks/partials/_m1_aircraft.html" %}
     </div>
   </div>
@@ -340,19 +353,282 @@
 
 {% block scripts %}
 <script>
-// Status button toggling (desktop)
+const TASK_ENTRY_CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+let taskEntryActionInFlight = false;
+
+function setTaskEntryButtonBusy(button, busy, busyText) {
+  if (!button) return;
+  if (busy) {
+    button.dataset.prevDisabled = button.disabled ? '1' : '0';
+    button.dataset.prevHtml = button.innerHTML;
+    button.disabled = true;
+    button.classList.add('opacity-60', 'cursor-not-allowed');
+    if (busyText) button.textContent = busyText;
+    return;
+  }
+  button.disabled = button.dataset.prevDisabled === '1';
+  button.classList.remove('opacity-60', 'cursor-not-allowed');
+  if (button.dataset.prevHtml) button.innerHTML = button.dataset.prevHtml;
+}
+
+function getTaskEntryErrorMessage(payload, fallback) {
+  if (!payload) return fallback;
+  if (typeof payload === 'string') return payload;
+  if (typeof payload.detail === 'string') return payload.detail;
+  if (Array.isArray(payload.detail) && payload.detail.length) {
+    const first = payload.detail[0];
+    if (typeof first === 'string') return first;
+    if (first && typeof first.msg === 'string') return first.msg;
+  }
+  if (typeof payload.message === 'string') return payload.message;
+  return fallback;
+}
+
+async function taskEntryRequestJson(url, options = {}) {
+  const { method = 'GET', json, formData, headers = {} } = options;
+  const reqHeaders = { 'X-CSRFToken': TASK_ENTRY_CSRF, ...headers };
+  let body;
+  if (formData) body = formData;
+  if (json !== undefined) {
+    reqHeaders['Content-Type'] = 'application/json';
+    body = JSON.stringify(json);
+  }
+
+  const res = await fetch(url, { method, headers: reqHeaders, body });
+  const raw = await res.text();
+  let data = {};
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = { detail: raw };
+    }
+  }
+  if (!res.ok) {
+    const err = new Error(getTaskEntryErrorMessage(data, 'Request failed'));
+    err.status = res.status;
+    err.payload = data;
+    throw err;
+  }
+  return data;
+}
+
+async function runTaskEntryAction(actionFn) {
+  if (taskEntryActionInFlight) return false;
+  taskEntryActionInFlight = true;
+  try {
+    await actionFn();
+    return true;
+  } finally {
+    taskEntryActionInFlight = false;
+  }
+}
+
+function refreshTaskEntry(options = {}) {
+  if (typeof htmx === 'undefined') return;
+  const params = new URLSearchParams(window.location.search || '');
+  if (Object.prototype.hasOwnProperty.call(options, 'edit')) {
+    if (options.edit === null || options.edit === undefined || options.edit === '') {
+      params.delete('edit');
+    } else {
+      params.set('edit', String(options.edit));
+    }
+  }
+  const query = params.toString() ? '?' + params.toString() : '';
+  htmx.ajax('GET', '/tasks/entry' + query, {
+    target: '#task-entry-content',
+    swap: 'innerHTML',
+    select: '#task-entry-content > *',
+    pushURL: true,
+  });
+}
+
+function setDesktopSubmitMode(mode) {
+  const form = document.getElementById('desktopQuickUpdateForm');
+  if (!form) return;
+  const modeInput = form.elements['submit_mode'];
+  if (modeInput) modeInput.value = mode;
+}
+
+function getNextDesktopTaskId(currentTaskId) {
+  const cards = Array.from(document.querySelectorAll('#taskCardList .task-card'));
+  if (!cards.length) return null;
+  const idx = cards.findIndex((card) => Number(card.dataset.taskId) === currentTaskId);
+  if (idx < 0 || idx >= cards.length - 1) return null;
+  const nextId = Number(cards[idx + 1].dataset.taskId);
+  return Number.isFinite(nextId) ? nextId : null;
+}
+
 function setStatus(btn, status) {
-  document.getElementById('statusInput').value = status;
-  document.querySelectorAll('#statusButtons .status-btn').forEach(b => {
+  const statusInput = document.getElementById('statusInput');
+  if (!statusInput) return;
+  statusInput.value = status;
+  document.querySelectorAll('#statusButtons .status-btn').forEach((b) => {
     b.className = 'status-btn';
   });
   const cls = {
-    'NOT_STARTED': 'active-not-started',
-    'IN_PROGRESS': 'active-in-progress',
-    'WAITING': 'active-waiting',
-    'COMPLETED': 'active-completed'
+    NOT_STARTED: 'active-not-started',
+    IN_PROGRESS: 'active-in-progress',
+    WAITING: 'active-waiting',
+    COMPLETED: 'active-completed',
   };
   btn.classList.add(cls[status] || '');
+}
+
+function toOptionalNumber(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function toOptionalInt(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function submitDesktopQuickUpdate(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const mode = (form.elements['submit_mode']?.value || 'save').trim().toLowerCase();
+  if (form.elements['submit_mode']) form.elements['submit_mode'].value = 'save';
+  const submitBtn = event.submitter
+    || form.querySelector(`[data-submit-mode="${mode}"]`)
+    || form.querySelector('button[type="submit"]');
+  const snapshotId = parseInt(form.dataset.snapshotId, 10);
+  const taskId = parseInt(form.dataset.taskId, 10);
+  const version = parseInt((form.elements['version']?.value || '').trim(), 10);
+  const status = (form.elements['status']?.value || '').trim();
+  const workerId = toOptionalInt(form.elements['assigned_worker_id']?.value);
+  const nextTaskId = mode === 'next' ? getNextDesktopTaskId(taskId) : null;
+
+  if (!snapshotId || !taskId || !Number.isFinite(version) || !status) {
+    showToast('Error', 'Task context is missing. Reload and try again.', 'red');
+    return false;
+  }
+
+  const mhValue = toOptionalNumber(form.elements['mh_incurred_hours']?.value);
+  if (mhValue === null) {
+    showToast('Error', 'MH Incurred must be a valid number.', 'red');
+    return false;
+  }
+
+  runTaskEntryAction(async () => {
+    setTaskEntryButtonBusy(submitBtn, true, 'Saving...');
+    try {
+      await taskEntryRequestJson('/api/tasks/snapshots/' + snapshotId, {
+        method: 'PATCH',
+        json: {
+          version,
+          status,
+          mh_incurred_hours: mhValue,
+          deadline_date: (form.elements['deadline_date']?.value || '').trim() || null,
+          remarks: (form.elements['remarks']?.value || '').trim() || null,
+          critical_issue: (form.elements['critical_issue']?.value || '').trim() || null,
+          has_issue: !!form.elements['has_issue']?.checked,
+        },
+      });
+
+      await taskEntryRequestJson('/api/tasks/' + taskId + '/assign-worker', {
+        method: 'PATCH',
+        json: { assigned_worker_id: workerId },
+      });
+
+      if (mode === 'next' && nextTaskId) {
+        showToast('Saved & Next', 'Loading next task...', 'green');
+        refreshTaskEntry({ edit: nextTaskId });
+      } else {
+        showToast('Saved', 'Task updated', 'green');
+        refreshTaskEntry({ edit: taskId });
+      }
+    } catch (err) {
+      const code = err?.payload?.code || '';
+      let message = err?.message || 'Save failed';
+      if (code === 'CONFLICT_VERSION') {
+        message = 'Another user modified this task. Please reload and retry.';
+      } else if (code === 'MH_DECREASE_FORBIDDEN') {
+        message = 'MH is cumulative and cannot be decreased.';
+      }
+      showToast('Error', message, 'red');
+    } finally {
+      setTaskEntryButtonBusy(submitBtn, false);
+    }
+  });
+  return false;
+}
+
+function submitDesktopCreateTask(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submitBtn = document.querySelector('#modal-entry-task .btn-gold');
+  const taskText = (form.elements['task_text']?.value || '').trim();
+  const aircraftId = toOptionalInt(form.elements['aircraft_id']?.value);
+  const shopId = toOptionalInt(form.elements['shop_id']?.value);
+  const workPackageId = toOptionalInt(form.elements['work_package_id']?.value);
+  const meetingDate = (form.elements['meeting_date']?.value || '').trim();
+  const workerId = toOptionalInt(form.elements['assigned_worker_id']?.value);
+
+  if (!taskText) {
+    showToast('Error', 'Task description is required.', 'red');
+    return false;
+  }
+  if (!meetingDate || aircraftId === null || shopId === null) {
+    showToast('Error', 'Aircraft, shop, and meeting date are required.', 'red');
+    return false;
+  }
+
+  const payload = {
+    meeting_date: meetingDate,
+    shop_id: shopId,
+    aircraft_id: aircraftId,
+    task_text: taskText,
+    status: (form.elements['status']?.value || 'NOT_STARTED').trim() || 'NOT_STARTED',
+  };
+
+  const plannedMhValue = toOptionalNumber(form.elements['planned_mh']?.value);
+  if (plannedMhValue !== null) payload.planned_mh = plannedMhValue;
+  if (workPackageId !== null) payload.work_package_id = workPackageId;
+
+  const deadlineDate = (form.elements['deadline_date']?.value || '').trim();
+  if (deadlineDate) payload.deadline_date = deadlineDate;
+
+  const remarks = (form.elements['remarks']?.value || '').trim();
+  if (remarks) payload.remarks = remarks;
+
+  runTaskEntryAction(async () => {
+    setTaskEntryButtonBusy(submitBtn, true, 'Creating...');
+    try {
+      const created = await taskEntryRequestJson('/api/tasks', {
+        method: 'POST',
+        json: payload,
+      });
+
+      if (workerId !== null) {
+        try {
+          await taskEntryRequestJson('/api/tasks/' + created.task_id + '/assign-worker', {
+            method: 'PATCH',
+            json: { assigned_worker_id: workerId },
+          });
+        } catch (assignErr) {
+          showToast('Partial Success', 'Task created, worker assign failed: ' + (assignErr.message || 'Unknown error'), 'red');
+          closeModal('modal-entry-task');
+          form.reset();
+          refreshTaskEntry();
+          return;
+        }
+      }
+
+      showToast('Created', 'Task added successfully', 'green');
+      closeModal('modal-entry-task');
+      form.reset();
+      refreshTaskEntry();
+    } catch (err) {
+      showToast('Error', err?.message || 'Creation failed', 'red');
+    } finally {
+      setTaskEntryButtonBusy(submitBtn, false);
+    }
+  });
+  return false;
 }
 </script>
 {% endblock %}

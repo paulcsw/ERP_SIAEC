@@ -13,7 +13,7 @@ from app.api.deps import get_current_user, get_db
 from app.models.reference import Aircraft, WorkPackage
 from app.models.shop import Shop
 from app.models.task import TaskItem, TaskSnapshot
-from app.models.user import User
+from app.models.user import Role, User, user_roles
 from app.models.user_shop_access import UserShopAccess
 from app.schemas.common import APIError, PaginatedResponse, pagination_params
 from app.schemas.task import (
@@ -39,7 +39,6 @@ from app.services.audit_service import write_audit
 from app.services.shop_access_service import enforce_shop_access
 from app.services.task_service import (
     check_mh_decrease,
-    is_sq_airline,
     validate_status,
     init_week,
 )
@@ -89,6 +88,65 @@ def _require_admin(current_user: dict) -> None:
         raise APIError(403, "Insufficient permissions", "FORBIDDEN")
 
 
+def _normalize_airline_category(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip().upper()
+    if normalized == "3RD":
+        normalized = "THIRD_PARTIES"
+    if normalized not in {"ALL", "SQ", "THIRD_PARTIES"}:
+        raise APIError(
+            422,
+            "airline_category must be one of ALL, SQ, THIRD_PARTIES",
+            "VALIDATION_ERROR",
+            field="airline_category",
+        )
+    return normalized
+
+
+async def _validate_assigned_supervisor(
+    db: AsyncSession,
+    *,
+    assigned_supervisor_id: int,
+    shop_id: int,
+) -> None:
+    """Ensure assignment target is an active SUPERVISOR with access to shop."""
+    supervisor_id = (
+        await db.execute(
+            select(User.id)
+            .join(user_roles, User.id == user_roles.c.user_id)
+            .join(Role, Role.id == user_roles.c.role_id)
+            .where(
+                User.id == assigned_supervisor_id,
+                User.is_active == True,
+                Role.name == "SUPERVISOR",
+            )
+        )
+    ).scalar_one_or_none()
+    if supervisor_id is None:
+        raise APIError(
+            422,
+            "assigned_supervisor_id must reference an active SUPERVISOR",
+            "VALIDATION_ERROR",
+            field="assigned_supervisor_id",
+        )
+
+    has_access = (
+        await db.execute(
+            select(UserShopAccess.id).where(
+                UserShopAccess.user_id == assigned_supervisor_id,
+                UserShopAccess.shop_id == shop_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if has_access is None:
+        raise APIError(
+            403,
+            "Supervisor does not have access to this shop",
+            "SHOP_ACCESS_DENIED",
+        )
+
+
 # ── 1. GET /api/tasks/snapshots ──────────────────────────────────────
 
 @router.get("/snapshots", response_model=PaginatedResponse[SnapshotListItem])
@@ -107,6 +165,7 @@ async def list_snapshots(
     db: AsyncSession = Depends(get_db),
 ):
     await enforce_shop_access(db, current_user, shop_id, "VIEW")
+    normalized_airline_category = _normalize_airline_category(airline_category)
 
     if status is not None:
         status = validate_status(status)
@@ -153,6 +212,19 @@ async def list_snapshots(
     if has_issue is not None:
         q = q.where(TaskSnapshot.has_issue == has_issue)
         cq = cq.where(TaskSnapshot.has_issue == has_issue)
+
+    if normalized_airline_category and normalized_airline_category != "ALL":
+        sq_condition = func.lower(func.trim(func.coalesce(Aircraft.airline, ""))).in_(
+            ["sq", "singapore airlines"]
+        )
+        q = q.join(Aircraft, Aircraft.id == TaskItem.aircraft_id)
+        cq = cq.join(Aircraft, Aircraft.id == TaskItem.aircraft_id)
+        if normalized_airline_category == "SQ":
+            q = q.where(sq_condition)
+            cq = cq.where(sq_condition)
+        else:
+            q = q.where(~sq_condition)
+            cq = cq.where(~sq_condition)
 
     total = (await db.execute(cq)).scalar() or 0
 
@@ -203,16 +275,6 @@ async def list_snapshots(
         ac = ac_map.get(task.aircraft_id)
         wp = wp_map.get(task.work_package_id) if task.work_package_id else None
         shop = shop_map.get(task.shop_id)
-
-        # §7.2.8 Airline filter
-        if airline_category:
-            cat = airline_category.upper()
-            if cat == "SQ" and ac and not is_sq_airline(ac.airline):
-                total -= 1
-                continue
-            if cat == "THIRD_PARTIES" and ac and is_sq_airline(ac.airline):
-                total -= 1
-                continue
 
         items.append({
             "snapshot_id": snap.id,
@@ -761,6 +823,10 @@ async def create_task(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Distribution action must stay ADMIN-only.
+    if body.assigned_supervisor_id is not None:
+        _require_admin(current_user)
+
     await enforce_shop_access(db, current_user, body.shop_id, "EDIT")
 
     status = validate_status(body.status)
@@ -782,6 +848,13 @@ async def create_task(
         if not wp:
             raise APIError(422, "Work package not found", "VALIDATION_ERROR", field="work_package_id")
         rfo_no = wp.rfo_no
+
+    if body.assigned_supervisor_id is not None:
+        await _validate_assigned_supervisor(
+            db,
+            assigned_supervisor_id=body.assigned_supervisor_id,
+            shop_id=body.shop_id,
+        )
 
     now = datetime.now(timezone.utc)
 
@@ -975,10 +1048,23 @@ async def import_confirm(
 ):
     _require_admin(current_user)
 
+    shop = (
+        await db.execute(select(Shop).where(Shop.id == body.shop_id))
+    ).scalar_one_or_none()
+    if not shop:
+        raise APIError(422, "Shop not found", "VALIDATION_ERROR", field="shop_id")
+
     now = datetime.now(timezone.utc)
     created_count = 0
 
     for item in body.items:
+        if item.assigned_supervisor_id is not None:
+            await _validate_assigned_supervisor(
+                db,
+                assigned_supervisor_id=item.assigned_supervisor_id,
+                shop_id=body.shop_id,
+            )
+
         # Resolve aircraft
         ac = (
             await db.execute(select(Aircraft).where(Aircraft.ac_reg == item.ac_reg))
@@ -1069,6 +1155,17 @@ async def bulk_assign(
         missing = [tid for tid in body.task_ids if tid not in found_ids]
         raise APIError(404, f"Tasks not found: {missing}", "NOT_FOUND")
 
+    validated_shops: set[int] = set()
+    for task in tasks:
+        if task.shop_id in validated_shops:
+            continue
+        await _validate_assigned_supervisor(
+            db,
+            assigned_supervisor_id=body.assigned_supervisor_id,
+            shop_id=task.shop_id,
+        )
+        validated_shops.add(task.shop_id)
+
     for task in tasks:
         before = {
             "task_id": task.id,
@@ -1115,6 +1212,19 @@ async def assign_task(
     ).scalar_one_or_none()
     if not task:
         raise APIError(404, "Task not found", "NOT_FOUND")
+
+    if body.shop_id != task.shop_id:
+        raise APIError(
+            422,
+            "shop_id must match task.shop_id",
+            "VALIDATION_ERROR",
+            field="shop_id",
+        )
+    await _validate_assigned_supervisor(
+        db,
+        assigned_supervisor_id=body.assigned_supervisor_id,
+        shop_id=task.shop_id,
+    )
 
     now = datetime.now(timezone.utc)
 
@@ -1168,18 +1278,20 @@ async def assign_worker(
 
     await enforce_shop_access(db, current_user, task.shop_id, "EDIT")
 
-    # Validate worker belongs to same shop (check user_shop_access)
-    worker_access = (
-        await db.execute(
-            select(UserShopAccess).where(
-                UserShopAccess.user_id == body.assigned_worker_id,
-                UserShopAccess.shop_id == task.shop_id,
+    # Validate worker belongs to same shop (check user_shop_access).
+    # Null is allowed to clear assignment.
+    if body.assigned_worker_id is not None:
+        worker_access = (
+            await db.execute(
+                select(UserShopAccess).where(
+                    UserShopAccess.user_id == body.assigned_worker_id,
+                    UserShopAccess.shop_id == task.shop_id,
+                )
             )
-        )
-    ).scalar_one_or_none()
+        ).scalar_one_or_none()
 
-    if not worker_access:
-        raise APIError(403, "Worker does not have access to this shop", "SHOP_ACCESS_DENIED")
+        if not worker_access:
+            raise APIError(403, "Worker does not have access to this shop", "SHOP_ACCESS_DENIED")
 
     before = {
         "task_id": task.id,

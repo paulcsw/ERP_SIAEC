@@ -97,6 +97,15 @@ async def submit_single(
             field="reason_code",
         )
 
+    # SSOT: OT can only be submitted for today/future.
+    if ot_date < date.today():
+        raise APIError(
+            422,
+            "OT date must be today or in the future",
+            "VALIDATION_ERROR",
+            field="date",
+        )
+
     # Compute minutes
     computed = compute_minutes(start_time, end_time)
     if computed <= 0:
@@ -173,6 +182,15 @@ async def submit_bulk(
     """Bulk OT submit. Returns {created: [...], skipped: [...]}."""
     if reason_code not in VALID_REASON_CODES:
         raise APIError(422, f"Invalid reason_code '{reason_code}'", "VALIDATION_ERROR", field="reason_code")
+
+    # SSOT: OT can only be submitted for today/future.
+    if ot_date < date.today():
+        raise APIError(
+            422,
+            "OT date must be today or in the future",
+            "VALIDATION_ERROR",
+            field="date",
+        )
 
     computed = compute_minutes(start_time, end_time)
     if computed <= 0:

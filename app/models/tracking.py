@@ -1,4 +1,4 @@
-"""Phase 3 — MH Tracking tables (schema only, no MVP feature code)."""
+"""Phase 3 ??MH Tracking tables (schema only, no MVP feature code)."""
 from datetime import date as _date, datetime
 
 from sqlalchemy import (
@@ -37,7 +37,7 @@ class DailyAssignment(Base):
         BigInteger, ForeignKey("users.id", ondelete="NO ACTION"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("GETUTCDATE()")
+        DateTime(timezone=True), nullable=False, server_default=text("(GETUTCDATE())")
     )
 
     __table_args__ = (
@@ -66,9 +66,10 @@ class WorklogBlock(Base):
     )
     minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("GETUTCDATE()")
+        DateTime(timezone=True), nullable=False, server_default=text("(GETUTCDATE())")
     )
 
     __table_args__ = (
         CheckConstraint("minutes > 0"),
     )
+
