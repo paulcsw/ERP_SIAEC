@@ -274,10 +274,12 @@ html[data-font-size="xlarge"] #mobile-app{font-size:20px}
       <span class="hide-col">OT Approve</span>
     </a>
     {% endif %}
+    {% if 'SUPERVISOR' in current_user.roles or 'ADMIN' in current_user.roles %}
     <a href="/stats/ot" class="nav-item {% if page == 'ot_stats' %}active{% endif %}">
       <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
       <span class="hide-col">OT Dashboard</span>
     </a>
+    {% endif %}
 
     {# -- Admin -- #}
     <div class="nav-section hide-col">Admin</div>
@@ -299,10 +301,12 @@ html[data-font-size="xlarge"] #mobile-app{font-size:20px}
       <span class="hide-col">Shop Access</span>
     </a>
     {% endif %}
+    {% if 'SUPERVISOR' in current_user.roles or 'ADMIN' in current_user.roles %}
     <a href="/rfo" class="nav-item {% if page == 'rfo' %}active{% endif %}">
       <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
       <span class="hide-col">RFO Detail</span>
     </a>
+    {% endif %}
     {% if 'ADMIN' in current_user.roles %}
     <a href="/admin/settings" class="nav-item {% if page == 'settings' %}active{% endif %}">
       <svg class="w-[18px] h-[18px] shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
@@ -352,7 +356,11 @@ html[data-font-size="xlarge"] #mobile-app{font-size:20px}
   </div>
   {# Bottom Tab Bar #}
   <div class="mob-tab-bar">
-    <a href="/tasks/entry" class="tab-item {% if active_tab == 'tasks' %}active{% endif %}" data-tab="tasks">
+    {% set _task_tab_disabled = has_task_access is defined and not has_task_access %}
+    <a href="{% if not _task_tab_disabled %}/tasks/entry{% else %}#{% endif %}"
+       class="tab-item {% if active_tab == 'tasks' %}active{% endif %}{% if _task_tab_disabled %} opacity-30{% endif %}"
+       data-tab="tasks"
+       {% if _task_tab_disabled %}aria-disabled="true" onclick="return false;" style="pointer-events:none"{% endif %}>
       <span class="tab-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24">
           <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"></path>
@@ -362,7 +370,7 @@ html[data-font-size="xlarge"] #mobile-app{font-size:20px}
         </svg>
       </span>
       <span>Tasks</span>
-      {% if mob_badge_tasks is defined and mob_badge_tasks > 0 %}
+      {% if not _task_tab_disabled and mob_badge_tasks is defined and mob_badge_tasks > 0 %}
       <span class="tab-badge">{{ mob_badge_tasks }}</span>
       {% endif %}
     </a>

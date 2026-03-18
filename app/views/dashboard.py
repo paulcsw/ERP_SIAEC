@@ -296,9 +296,10 @@ async def dashboard_page(
             status_class = "text-st-blue"
 
         rfo_list.append({
+            "wp_id": wp.id,
             "rfo_no": wp.rfo_no,
             "ac_reg": ac.ac_reg,
-            "description": wp.description,
+            "description": wp.title,
             "done": counts["COMPLETED"],
             "active": counts["IN_PROGRESS"],
             "wait": counts["WAITING"],

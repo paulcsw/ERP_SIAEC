@@ -27,7 +27,7 @@ class UserShopAccess(Base):
     )
     access: Mapped[str] = mapped_column(Unicode(20), nullable=False)
     granted_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("GETUTCDATE()")
+        DateTime(timezone=True), nullable=False, server_default=text("(GETUTCDATE())")
     )
     granted_by: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="NO ACTION"), nullable=False
@@ -41,3 +41,4 @@ class UserShopAccess(Base):
         CheckConstraint("access IN ('VIEW','EDIT','MANAGE')"),
         UniqueConstraint("user_id", "shop_id", name="uq_user_shop"),
     )
+

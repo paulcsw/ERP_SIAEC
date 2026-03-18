@@ -15,6 +15,7 @@ from app.models.system_config import SystemConfig
 from app.models.task import TaskItem, TaskSnapshot
 from app.models.user import User
 from app.models.user_shop_access import UserShopAccess
+from app.schemas.common import APIError
 from app.views import templates
 
 router = APIRouter(tags=["task-views"])
@@ -61,8 +62,88 @@ def _format_relative(dt: datetime | None) -> str:
     return dt.strftime("%b %d")
 
 
+async def _get_allowed_shop_ids(db: AsyncSession, user: dict) -> set[int] | None:
+    """Return scoped shop ids for non-admin users; None means full access."""
+    if "ADMIN" in user.get("roles", []):
+        return None
+    rows = (
+        await db.execute(
+            select(UserShopAccess.shop_id).where(
+                UserShopAccess.user_id == user["user_id"]
+            )
+        )
+    ).all()
+    return {row.shop_id for row in rows}
+
+
+async def _get_max_access_level(db: AsyncSession, user: dict) -> str | None:
+    """Return the highest shop access level for a non-admin user (VIEW/EDIT/MANAGE), or None.
+
+    ADMIN users always return 'MANAGE'. SUPERVISOR returns at least 'EDIT'.
+    """
+    roles = user.get("roles", [])
+    if "ADMIN" in roles:
+        return "MANAGE"
+    rows = (
+        await db.execute(
+            select(UserShopAccess.access).where(
+                UserShopAccess.user_id == user["user_id"]
+            )
+        )
+    ).scalars().all()
+    if not rows:
+        # SUPERVISOR without explicit shop_access still gets task access
+        if "SUPERVISOR" in roles:
+            return "EDIT"
+        return None
+    hierarchy = {"VIEW": 1, "EDIT": 2, "MANAGE": 3}
+    best = max(rows, key=lambda a: hierarchy.get(a, 0))
+    return best
+
+
+def _entry_visibility_clause(
+    user: dict,
+    allowed_shop_ids: set[int] | None,
+):
+    """Visibility for Data Entry SSR/mobile: shop access or direct assignment."""
+    if "ADMIN" in user.get("roles", []):
+        return None
+    uid = user["user_id"]
+    predicates = [
+        TaskItem.assigned_supervisor_id == uid,
+        TaskItem.assigned_worker_id == uid,
+    ]
+    if allowed_shop_ids:
+        predicates.append(TaskItem.shop_id.in_(allowed_shop_ids))
+    return or_(*predicates)
+
+
+def _can_view_task_item(user: dict, allowed_shop_ids: set[int] | None, task: TaskItem) -> bool:
+    if "ADMIN" in user.get("roles", []):
+        return True
+    uid = user["user_id"]
+    if allowed_shop_ids and task.shop_id in allowed_shop_ids:
+        return True
+    if task.assigned_supervisor_id == uid or task.assigned_worker_id == uid:
+        return True
+    return False
+
+
+def _normalize_airline_filter(value: str | None) -> str:
+    if not value:
+        return ""
+    upper = value.upper()
+    if upper == "3RD":
+        return "THIRD_PARTIES"
+    return upper
+
+
 async def _compute_mob_badges(db: AsyncSession, user: dict) -> dict:
     """Compute mobile tab badge counts."""
+    roles = user.get("roles", [])
+    allowed_shop_ids = await _get_allowed_shop_ids(db, user)
+    visibility_clause = _entry_visibility_clause(user, allowed_shop_ids)
+
     # Tasks badge: NEW tasks (distributed_at NOT NULL, supervisor_updated_at IS NULL)
     new_q = (
         select(func.count())
@@ -75,15 +156,20 @@ async def _compute_mob_badges(db: AsyncSession, user: dict) -> dict:
             TaskSnapshot.supervisor_updated_at.is_(None),
         )
     )
+    if visibility_clause is not None:
+        new_q = new_q.where(visibility_clause)
     new_count = (await db.execute(new_q)).scalar() or 0
 
     # OT badge: pending approval count
-    roles = user.get("roles", [])
     ot_count = 0
     if "SUPERVISOR" in roles and "ADMIN" not in roles:
+        team_user_ids = (
+            await db.execute(select(User.id).where(User.team == user.get("team")))
+        ).scalars().all()
         ot_q = select(func.count()).select_from(OtRequest).where(
             OtRequest.status == "PENDING",
             OtRequest.user_id != user["user_id"],
+            OtRequest.user_id.in_(team_user_ids),
         )
         ot_count = (await db.execute(ot_q)).scalar() or 0
     elif "ADMIN" in roles:
@@ -192,6 +278,7 @@ async def task_manager_page(
 ):
     roles = current_user.get("roles", [])
     is_admin = "ADMIN" in roles
+    airline_filter = _normalize_airline_filter(airline)
 
     allowed_shop_ids: set[int] | None = None
     manageable_shop_ids: set[int] = set()
@@ -237,10 +324,10 @@ async def task_manager_page(
         q = q.where(TaskSnapshot.meeting_date == meeting_date)
     if shop_id:
         q = q.where(TaskItem.shop_id == shop_id)
-    if airline:
-        if airline == "SQ":
+    if airline_filter:
+        if airline_filter == "SQ":
             q = q.where(Aircraft.airline == "SQ")
-        elif airline == "3RD":
+        elif airline_filter == "THIRD_PARTIES":
             q = q.where(Aircraft.airline != "SQ")
     if supervisor_id:
         q = q.where(TaskItem.assigned_supervisor_id == supervisor_id)
@@ -258,10 +345,10 @@ async def task_manager_page(
             base_q = base_q.where(TaskSnapshot.meeting_date == meeting_date)
         if shop_id:
             base_q = base_q.where(TaskItem.shop_id == shop_id)
-        if airline:
-            if airline == "SQ":
+        if airline_filter:
+            if airline_filter == "SQ":
                 base_q = base_q.where(Aircraft.airline == "SQ")
-            elif airline == "3RD":
+            elif airline_filter == "THIRD_PARTIES":
                 base_q = base_q.where(Aircraft.airline != "SQ")
         if supervisor_id:
             base_q = base_q.where(TaskItem.assigned_supervisor_id == supervisor_id)
@@ -411,7 +498,7 @@ async def task_manager_page(
         can_init_week=can_init_week,
         meeting_date=meeting_date or "",
         shop_id=shop_id,
-        airline_filter=airline or "",
+        airline_filter=airline_filter,
         supervisor_id=supervisor_id,
         status_filter=status or "",
         rfo_filter=rfo or "",
@@ -622,6 +709,11 @@ async def task_entry_page(
     configs = await _get_config_map(db)
     threshold_hours = int(configs.get("needs_update_threshold_hours", "72"))
     threshold_dt = datetime.now(timezone.utc) - timedelta(hours=threshold_hours)
+    allowed_shop_ids = await _get_allowed_shop_ids(db, current_user)
+    max_access = await _get_max_access_level(db, current_user)
+    has_task_access = max_access is not None
+    can_edit = max_access in ("EDIT", "MANAGE")
+    visibility_clause = _entry_visibility_clause(current_user, allowed_shop_ids)
 
     workers = await _get_workers(db)
 
@@ -635,6 +727,8 @@ async def task_entry_page(
         .join(TaskSnapshot, TaskSnapshot.task_id == TaskItem.id)
         .where(TaskItem.is_active == True, TaskSnapshot.is_deleted == False)
     )
+    if visibility_clause is not None:
+        ac_q = ac_q.where(visibility_clause)
     if status:
         ac_q = ac_q.where(TaskSnapshot.status == status)
 
@@ -657,6 +751,8 @@ async def task_entry_page(
                 TaskSnapshot.supervisor_updated_at.is_(None),
             )
         )
+        if visibility_clause is not None:
+            new_q = new_q.where(visibility_clause)
         new_count = (await db.execute(new_q)).scalar() or 0
 
         # Check for NEEDS UPDATE badge: supervisor_updated_at older than threshold
@@ -673,6 +769,8 @@ async def task_entry_page(
                 TaskSnapshot.supervisor_updated_at < threshold_dt,
             )
         )
+        if visibility_clause is not None:
+            needs_q = needs_q.where(visibility_clause)
         needs_count = (await db.execute(needs_q)).scalar() or 0
 
         ac_groups.append({
@@ -692,6 +790,8 @@ async def task_entry_page(
             .where(TaskItem.is_active == True, TaskSnapshot.is_deleted == False, TaskSnapshot.has_issue == True)
             .distinct()
         )
+        if visibility_clause is not None:
+            issue_q = issue_q.where(visibility_clause)
         ac_regs_with_issue = set(r[0] for r in (await db.execute(issue_q)).all())
         ac_groups = [g for g in ac_groups if g["ac_reg"] in ac_regs_with_issue]
     elif quick == "new":
@@ -719,6 +819,8 @@ async def task_entry_page(
                 TaskSnapshot.is_deleted == False,
             )
         )
+        if visibility_clause is not None:
+            task_q = task_q.where(visibility_clause)
         if status:
             task_q = task_q.where(TaskSnapshot.status == status)
 
@@ -785,6 +887,8 @@ async def task_entry_page(
         editing_task_id=edit,
         workers=workers,
         shop_context=current_user.get("team", "All Shops"),
+        has_task_access=has_task_access,
+        can_edit=can_edit,
         **badges,
     ))
 
@@ -938,6 +1042,8 @@ async def mobile_m1(
     configs = await _get_config_map(db)
     threshold_hours = int(configs.get("needs_update_threshold_hours", "72"))
     threshold_dt = datetime.now(timezone.utc) - timedelta(hours=threshold_hours)
+    allowed_shop_ids = await _get_allowed_shop_ids(db, current_user)
+    visibility_clause = _entry_visibility_clause(current_user, allowed_shop_ids)
 
     ac_q = (
         select(Aircraft.ac_reg, func.count(TaskSnapshot.id).label("task_count"))
@@ -945,6 +1051,8 @@ async def mobile_m1(
         .join(TaskSnapshot, TaskSnapshot.task_id == TaskItem.id)
         .where(TaskItem.is_active == True, TaskSnapshot.is_deleted == False)
     )
+    if visibility_clause is not None:
+        ac_q = ac_q.where(visibility_clause)
     if status:
         ac_q = ac_q.where(TaskSnapshot.status == status)
     ac_q = ac_q.group_by(Aircraft.ac_reg).order_by(Aircraft.ac_reg)
@@ -953,24 +1061,38 @@ async def mobile_m1(
     ac_groups = []
     total_new = 0
     for row in ac_rows:
-        new_count = (await db.execute(
-            select(func.count()).select_from(TaskSnapshot)
+        new_q = (
+            select(func.count())
+            .select_from(TaskSnapshot)
             .join(TaskItem, TaskSnapshot.task_id == TaskItem.id)
             .join(Aircraft, TaskItem.aircraft_id == Aircraft.id)
-            .where(Aircraft.ac_reg == row.ac_reg, TaskItem.is_active == True,
-                   TaskSnapshot.is_deleted == False,
-                   TaskItem.distributed_at.isnot(None),
-                   TaskSnapshot.supervisor_updated_at.is_(None))
-        )).scalar() or 0
-        needs_count = (await db.execute(
-            select(func.count()).select_from(TaskSnapshot)
+            .where(
+                Aircraft.ac_reg == row.ac_reg,
+                TaskItem.is_active == True,
+                TaskSnapshot.is_deleted == False,
+                TaskItem.distributed_at.isnot(None),
+                TaskSnapshot.supervisor_updated_at.is_(None),
+            )
+        )
+        needs_q = (
+            select(func.count())
+            .select_from(TaskSnapshot)
             .join(TaskItem, TaskSnapshot.task_id == TaskItem.id)
             .join(Aircraft, TaskItem.aircraft_id == Aircraft.id)
-            .where(Aircraft.ac_reg == row.ac_reg, TaskItem.is_active == True,
-                   TaskSnapshot.is_deleted == False,
-                   TaskSnapshot.supervisor_updated_at.isnot(None),
-                   TaskSnapshot.supervisor_updated_at < threshold_dt)
-        )).scalar() or 0
+            .where(
+                Aircraft.ac_reg == row.ac_reg,
+                TaskItem.is_active == True,
+                TaskSnapshot.is_deleted == False,
+                TaskSnapshot.supervisor_updated_at.isnot(None),
+                TaskSnapshot.supervisor_updated_at < threshold_dt,
+            )
+        )
+        if visibility_clause is not None:
+            new_q = new_q.where(visibility_clause)
+            needs_q = needs_q.where(visibility_clause)
+
+        new_count = (await db.execute(new_q)).scalar() or 0
+        needs_count = (await db.execute(needs_q)).scalar() or 0
         total_new += new_count
         ac_groups.append({
             "ac_reg": row.ac_reg, "task_count": row.task_count,
@@ -979,12 +1101,20 @@ async def mobile_m1(
         })
 
     if quick == "issue":
-        issue_regs = set(r[0] for r in (await db.execute(
-            select(Aircraft.ac_reg).join(TaskItem, TaskItem.aircraft_id == Aircraft.id)
+        issue_q = (
+            select(Aircraft.ac_reg)
+            .join(TaskItem, TaskItem.aircraft_id == Aircraft.id)
             .join(TaskSnapshot, TaskSnapshot.task_id == TaskItem.id)
-            .where(TaskItem.is_active == True, TaskSnapshot.is_deleted == False, TaskSnapshot.has_issue == True)
+            .where(
+                TaskItem.is_active == True,
+                TaskSnapshot.is_deleted == False,
+                TaskSnapshot.has_issue == True,
+            )
             .distinct()
-        )).all())
+        )
+        if visibility_clause is not None:
+            issue_q = issue_q.where(visibility_clause)
+        issue_regs = set(r[0] for r in (await db.execute(issue_q)).all())
         ac_groups = [g for g in ac_groups if g["ac_reg"] in issue_regs]
     elif quick == "new":
         ac_groups = [g for g in ac_groups if g["has_new"]]
@@ -1013,6 +1143,8 @@ async def mobile_m2(
     configs = await _get_config_map(db)
     threshold_hours = int(configs.get("needs_update_threshold_hours", "72"))
     threshold_dt = datetime.now(timezone.utc) - timedelta(hours=threshold_hours)
+    allowed_shop_ids = await _get_allowed_shop_ids(db, current_user)
+    visibility_clause = _entry_visibility_clause(current_user, allowed_shop_ids)
     workers = await _get_workers(db)
 
     task_q = (
@@ -1023,6 +1155,8 @@ async def mobile_m2(
         .outerjoin(User, TaskItem.assigned_worker_id == User.id)
         .where(Aircraft.ac_reg == ac, TaskItem.is_active == True, TaskSnapshot.is_deleted == False)
     )
+    if visibility_clause is not None:
+        task_q = task_q.where(visibility_clause)
     if status:
         task_q = task_q.where(TaskSnapshot.status == status)
     task_q = task_q.order_by(TaskItem.id)
@@ -1101,6 +1235,10 @@ async def mobile_m3(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    allowed_shop_ids = await _get_allowed_shop_ids(db, current_user)
+    max_access = await _get_max_access_level(db, current_user)
+    can_edit = max_access in ("EDIT", "MANAGE")
+    visibility_clause = _entry_visibility_clause(current_user, allowed_shop_ids)
     workers = await _get_workers(db)
 
     snap = (await db.execute(select(TaskSnapshot).where(TaskSnapshot.id == snapshot_id))).scalar_one_or_none()
@@ -1113,12 +1251,14 @@ async def mobile_m3(
         })
 
     task_item = (await db.execute(select(TaskItem).where(TaskItem.id == snap.task_id))).scalar_one()
+    if not _can_view_task_item(current_user, allowed_shop_ids, task_item):
+        raise APIError(403, "Shop access denied", "SHOP_ACCESS_DENIED")
     worker = None
     if task_item.assigned_worker_id:
         worker = (await db.execute(select(User).where(User.id == task_item.assigned_worker_id))).scalar_one_or_none()
 
     # Determine next snapshot for Save & Next
-    next_snap = (await db.execute(
+    next_q = (
         select(TaskSnapshot)
         .join(TaskItem, TaskSnapshot.task_id == TaskItem.id)
         .join(Aircraft, TaskItem.aircraft_id == Aircraft.id)
@@ -1128,9 +1268,10 @@ async def mobile_m3(
             TaskSnapshot.is_deleted == False,
             TaskSnapshot.id > snapshot_id,
         )
-        .order_by(TaskSnapshot.id)
-        .limit(1)
-    )).scalar_one_or_none()
+    )
+    if visibility_clause is not None:
+        next_q = next_q.where(visibility_clause)
+    next_snap = (await db.execute(next_q.order_by(TaskSnapshot.id).limit(1))).scalar_one_or_none()
 
     last_sync = ""
     if snap.last_updated_at:
@@ -1160,6 +1301,7 @@ async def mobile_m3(
         "meeting_date": snap.meeting_date.isoformat() if snap.meeting_date else "",
         "shop_id": task_item.shop_id or "",
         "work_package_id": task_item.work_package_id or "",
+        "can_edit": can_edit,
     })
 
 
@@ -1202,6 +1344,7 @@ async def mobile_m5(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    allowed_shop_ids = await _get_allowed_shop_ids(db, current_user)
     snap = (await db.execute(select(TaskSnapshot).where(TaskSnapshot.id == snapshot_id))).scalar_one_or_none()
     if not snap:
         return templates.TemplateResponse("tasks/partials/_m5_detail.html", {
@@ -1217,7 +1360,11 @@ async def mobile_m5(
         .outerjoin(Shop, TaskItem.shop_id == Shop.id)
         .where(TaskItem.id == snap.task_id)
     )).first()
+    if not task_item:
+        raise APIError(404, "Task not found", "NOT_FOUND")
     ti, aircraft, wp, shop = task_item
+    if not _can_view_task_item(current_user, allowed_shop_ids, ti):
+        raise APIError(403, "Shop access denied", "SHOP_ACCESS_DENIED")
 
     supervisor = worker = None
     if ti.assigned_supervisor_id:

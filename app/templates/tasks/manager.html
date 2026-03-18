@@ -103,7 +103,7 @@
       <select id="f-airline" name="airline" class="inp h-8 text-xs" onchange="refreshManagerContent(true)">
         <option value="">All Airlines</option>
         <option value="SQ" {% if airline_filter == 'SQ' %}selected{% endif %}>SQ</option>
-        <option value="3RD" {% if airline_filter == '3RD' %}selected{% endif %}>3rd Parties</option>
+        <option value="THIRD_PARTIES" {% if airline_filter == 'THIRD_PARTIES' %}selected{% endif %}>3rd Parties</option>
       </select>
       <select id="f-rfo" name="rfo" class="inp h-8 text-xs" onchange="refreshManagerContent(true)">
         <option value="">All RFO</option>

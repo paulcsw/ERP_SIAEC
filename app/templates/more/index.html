@@ -61,10 +61,25 @@
               </svg>
             </a>
           </div>
-          {# Logout button #}
+          {# Logout button — POST + CSRF per SSOT §8.2 #}
           <div class="p-4">
-            <a href="/logout" class="btn-outline w-full h-12 text-base flex items-center justify-center" style="color:#b93a3a;border-color:#b93a3a;text-decoration:none">Log out</a>
+            <button type="button" class="btn-outline w-full h-12 text-base flex items-center justify-center"
+                    style="color:#b93a3a;border-color:#b93a3a"
+                    onclick="mobLogout(this)">Log out</button>
           </div>
+          <script>
+          async function mobLogout(btn) {
+            btn.disabled = true;
+            btn.textContent = 'Logging out...';
+            try {
+              await fetch('/logout', {
+                method: 'POST',
+                headers: {'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || ''},
+              });
+            } catch(_) {}
+            window.location.href = '/login';
+          }
+          </script>
         </div>
       </div>
     </div>

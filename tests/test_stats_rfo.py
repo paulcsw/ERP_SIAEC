@@ -117,6 +117,15 @@ async def _seed_snapshot(db_factory, *, task_id, meeting_date, status="IN_PROGRE
         return snap.id
 
 
+async def _grant_shop_access(db_factory, *, user_id: int, shop_id: int, access: str = "VIEW"):
+    from app.models.user_shop_access import UserShopAccess
+
+    async with db_factory() as s:
+        row = UserShopAccess(user_id=user_id, shop_id=shop_id, access=access, granted_by=1)
+        s.add(row)
+        await s.commit()
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  OT STATISTICS API
 # ═══════════════════════════════════════════════════════════════════════
@@ -606,6 +615,116 @@ async def test_mobile_m4_route(async_client, db):
     assert "Add Task" in resp.text
 
 
+async def test_task_entry_scopes_shop_visibility(worker_client, db):
+    """Data Entry SSR should not expose tasks outside worker domain."""
+    from sqlalchemy import select
+    from app.models.shop import Shop
+    from app.models.task import TaskItem
+
+    wp_id = await _seed_wp(db)
+    async with db() as s:
+        shop_visible = Shop(code="SMA", name="Shop A", created_at=NOW)
+        shop_hidden = Shop(code="SMB", name="Shop B", created_at=NOW)
+        s.add(shop_visible)
+        s.add(shop_hidden)
+        await s.flush()
+        visible_shop_id = shop_visible.id
+        hidden_shop_id = shop_hidden.id
+        await s.commit()
+
+    visible_task_id = await _seed_task(db, wp_id=wp_id, shop_id=visible_shop_id, worker_id=3)
+    hidden_task_id = await _seed_task(db, wp_id=wp_id, shop_id=hidden_shop_id, worker_id=4)
+    await _seed_snapshot(db, task_id=visible_task_id, meeting_date=date(2026, 3, 10), status="IN_PROGRESS")
+    await _seed_snapshot(db, task_id=hidden_task_id, meeting_date=date(2026, 3, 10), status="IN_PROGRESS")
+    await _grant_shop_access(db, user_id=3, shop_id=visible_shop_id, access="VIEW")
+
+    async with db() as s:
+        visible_task = (await s.execute(select(TaskItem).where(TaskItem.id == visible_task_id))).scalar_one()
+        hidden_task = (await s.execute(select(TaskItem).where(TaskItem.id == hidden_task_id))).scalar_one()
+        visible_task.task_text = "Visible entry task"
+        hidden_task.task_text = "Hidden entry task"
+        await s.commit()
+
+    resp = await worker_client.get("/tasks/entry?ac=9V-TST")
+    assert resp.status_code == 200
+    assert "Visible entry task" in resp.text
+    assert "Hidden entry task" not in resp.text
+
+
+async def test_mobile_m5_forbidden_outside_scope(worker_client, db):
+    from app.models.shop import Shop
+
+    wp_id = await _seed_wp(db)
+    async with db() as s:
+        hidden_shop = Shop(code="SMH", name="Hidden Shop", created_at=NOW)
+        s.add(hidden_shop)
+        await s.flush()
+        hidden_shop_id = hidden_shop.id
+        await s.commit()
+
+    task_id = await _seed_task(db, wp_id=wp_id, shop_id=hidden_shop_id, worker_id=4)
+    snap_id = await _seed_snapshot(db, task_id=task_id, meeting_date=date(2026, 3, 10), status="IN_PROGRESS")
+
+    resp = await worker_client.get(f"/tasks/entry/mobile/m5?snapshot_id={snap_id}&ac=9V-TST")
+    assert resp.status_code == 403
+    assert resp.json()["code"] == "SHOP_ACCESS_DENIED"
+
+
+async def test_mobile_m5_allows_assigned_worker_without_shop_row(worker_client, db):
+    from app.models.shop import Shop
+
+    wp_id = await _seed_wp(db)
+    async with db() as s:
+        shop = Shop(code="SMAW", name="Assigned Shop", created_at=NOW)
+        s.add(shop)
+        await s.flush()
+        shop_id = shop.id
+        await s.commit()
+
+    task_id = await _seed_task(db, wp_id=wp_id, shop_id=shop_id, worker_id=3)
+    snap_id = await _seed_snapshot(db, task_id=task_id, meeting_date=date(2026, 3, 10), status="IN_PROGRESS")
+
+    resp = await worker_client.get(f"/tasks/entry/mobile/m5?snapshot_id={snap_id}&ac=9V-TST")
+    assert resp.status_code == 200
+    assert "Test task" in resp.text
+
+
+async def test_mobile_badges_scope_to_visible_domain(db):
+    """Mobile badge counts should exclude tasks outside visible domain."""
+    from sqlalchemy import select
+    from app.models.shop import Shop
+    from app.models.task import TaskItem
+    from app.views.tasks import _compute_mob_badges
+
+    wp_id = await _seed_wp(db)
+    async with db() as s:
+        visible_shop = Shop(code="SBC1", name="Badge Shop 1", created_at=NOW)
+        hidden_shop = Shop(code="SBC2", name="Badge Shop 2", created_at=NOW)
+        s.add(visible_shop)
+        s.add(hidden_shop)
+        await s.flush()
+        visible_shop_id = visible_shop.id
+        hidden_shop_id = hidden_shop.id
+        await s.commit()
+
+    visible_task_id = await _seed_task(db, wp_id=wp_id, shop_id=visible_shop_id, worker_id=3)
+    hidden_task_id = await _seed_task(db, wp_id=wp_id, shop_id=hidden_shop_id, worker_id=4)
+    await _seed_snapshot(db, task_id=visible_task_id, meeting_date=date(2026, 3, 10), status="NOT_STARTED")
+    await _seed_snapshot(db, task_id=hidden_task_id, meeting_date=date(2026, 3, 10), status="NOT_STARTED")
+    await _grant_shop_access(db, user_id=3, shop_id=visible_shop_id, access="VIEW")
+
+    async with db() as s:
+        visible_task = (await s.execute(select(TaskItem).where(TaskItem.id == visible_task_id))).scalar_one()
+        hidden_task = (await s.execute(select(TaskItem).where(TaskItem.id == hidden_task_id))).scalar_one()
+        visible_task.distributed_at = NOW
+        hidden_task.distributed_at = NOW
+        await s.commit()
+
+    async with db() as s:
+        badges = await _compute_mob_badges(s, {"user_id": 3, "roles": ["WORKER"], "team": "Sheet Metal"})
+    assert badges["mob_badge_tasks"] == 1
+
+
 # ── Dashboard SSR tests ──────────────────────────────────────────────────
 
 async def test_dashboard_root_redirect(async_client, db):
@@ -677,3 +796,104 @@ async def test_task_manager_status_filter(async_client, db):
     """GET /tasks?status=COMPLETED returns 200."""
     resp = await async_client.get("/tasks?status=COMPLETED")
     assert resp.status_code == 200
+
+
+# ── Fix A: Dashboard RFO card navigation ──────────────────────────────────
+
+async def test_dashboard_rfo_links_use_id_param(rfo_env, async_client, db):
+    """Dashboard RFO cards link to /rfo?id=<wp_id> instead of /rfo/<rfo_no>."""
+    resp = await async_client.get("/dashboard")
+    assert resp.status_code == 200
+    body = resp.text
+    # Should NOT contain /rfo/RFO- pattern (old broken route)
+    import re
+    broken_links = re.findall(r'href="/rfo/[A-Z]', body)
+    assert broken_links == [], f"Found broken /rfo/<rfo_no> links: {broken_links}"
+    # Should contain /rfo?id= pattern (correct route)
+    assert "/rfo?id=" in body or "No active work packages" in body
+
+
+# ── Fix B: Mobile logout uses POST + CSRF ──────────────────────────────────
+
+async def test_more_logout_is_not_get_link(async_client, db):
+    """More tab logout is a JS button that POSTs, not a GET <a> link."""
+    resp = await async_client.get("/more")
+    assert resp.status_code == 200
+    body = resp.text
+    # Must NOT have a direct GET link to /logout
+    assert 'href="/logout"' not in body
+    # Must have the POST-based logout function
+    assert "mobLogout" in body
+    assert "POST" in body
+
+
+async def test_logout_post_works(async_client, db):
+    """POST /logout with CSRF clears session and redirects."""
+    resp = await async_client.post("/logout", headers=CSRF_HEADERS, follow_redirects=False)
+    assert resp.status_code == 302
+    assert "/login" in resp.headers.get("location", "")
+
+
+# ── Fix C: Mobile task tab disabled for workers without shop_access ────────
+
+async def test_mobile_task_tab_disabled_no_shop_access(worker_client, db):
+    """Worker without shop_access sees disabled Tasks tab on OT page."""
+    resp = await worker_client.get("/ot")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "pointer-events:none" in body or "aria-disabled" in body
+
+
+async def test_mobile_task_tab_enabled_with_shop_access(worker_client, db):
+    """Worker with VIEW shop_access sees active Tasks tab."""
+    from app.models.shop import Shop
+    from app.models.user_shop_access import UserShopAccess
+
+    async with db() as s:
+        shop = Shop(code="TST", name="Test Shop", created_at=NOW)
+        s.add(shop)
+        await s.flush()
+        access = UserShopAccess(
+            user_id=3, shop_id=shop.id, access="VIEW",
+            granted_by=1, granted_at=NOW,
+        )
+        s.add(access)
+        await s.commit()
+
+    resp = await worker_client.get("/ot")
+    assert resp.status_code == 200
+    body = resp.text
+    # Tasks tab should be active/clickable (no pointer-events:none on the tasks tab)
+    assert 'href="/tasks/entry"' in body
+
+
+# ── Fix E/F: Sidebar role gating for OT Stats and RFO Detail ──────────────
+
+async def test_sidebar_ot_stats_hidden_for_worker(worker_client, db):
+    """Worker should not see OT Dashboard link in sidebar."""
+    resp = await worker_client.get("/ot")
+    assert resp.status_code == 200
+    body = resp.text
+    assert 'href="/stats/ot"' not in body
+
+
+async def test_sidebar_rfo_hidden_for_worker(worker_client, db):
+    """Worker should not see RFO Detail link in sidebar."""
+    resp = await worker_client.get("/ot")
+    assert resp.status_code == 200
+    body = resp.text
+    assert 'href="/rfo"' not in body
+
+
+async def test_sidebar_ot_stats_visible_for_admin(async_client, db):
+    """Admin should see OT Dashboard link in sidebar."""
+    resp = await async_client.get("/dashboard")
+    assert resp.status_code == 200
+    assert 'href="/stats/ot"' in resp.text
+
+
+async def test_sidebar_rfo_visible_for_supervisor(sup_client, db):
+    """Supervisor should see RFO Detail link in sidebar."""
+    resp = await sup_client.get("/ot")
+    assert resp.status_code == 200
+    assert 'href="/rfo"' in resp.text

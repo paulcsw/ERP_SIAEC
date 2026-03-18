@@ -21,6 +21,7 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
+    employee_no: str | None = None
     name: str | None = None
     email: str | None = None
     team: str | None = None

@@ -1,0 +1,10 @@
+recursive-include app *.py *.html *.css *.js
+recursive-include alembic *.py *.mako
+include pyproject.toml requirements.txt alembic.ini
+exclude .env
+exclude .env.*
+prune tests
+prune docs
+prune venv
+prune .venv
+global-exclude __pycache__ *.py[cod] .pytest_cache/*

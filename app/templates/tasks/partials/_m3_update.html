@@ -94,11 +94,17 @@
       </div>
     </div>
   </div>
-  {# Fixed bottom buttons - Save & Next + Save #}
+  {# Fixed bottom buttons - Save & Next + Save (EDIT+ only per SSOT §9.4) #}
+  {% if can_edit is not defined or can_edit %}
   <div class="p-4 border-t border-surf-200 bg-white shrink-0 flex gap-3 mob-safe-bottom">
     <button type="button" id="mob-save-next-btn" class="btn-outline flex-1 h-12 text-base" onclick="mobSaveTask(true)">Save &amp; Next</button>
     <button type="button" id="mob-save-btn" class="btn-gold flex-1 h-12 text-base font-semibold" onclick="mobSaveTask(false)">Save</button>
   </div>
+  {% else %}
+  <div class="p-4 border-t border-surf-200 bg-white shrink-0 text-center mob-safe-bottom">
+    <span class="text-sm text-surf-400">Read-only — you have VIEW access only</span>
+  </div>
+  {% endif %}
   {# Hidden data #}
   <input type="hidden" id="mob-snapshot-id" value="{{ task.snapshot_id }}"/>
   <input type="hidden" id="mob-task-id" value="{{ task.task_id }}"/>

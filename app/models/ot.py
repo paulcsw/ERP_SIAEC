@@ -50,10 +50,10 @@ class OtRequest(Base):
         Unicode(20), nullable=False, server_default=text("'PENDING'")
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("GETUTCDATE()")
+        DateTime(timezone=True), nullable=False, server_default=text("(GETUTCDATE())")
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("GETUTCDATE()")
+        DateTime(timezone=True), nullable=False, server_default=text("(GETUTCDATE())")
     )
 
     __table_args__ = (
@@ -88,7 +88,7 @@ class OtApproval(Base):
     action: Mapped[str] = mapped_column(Unicode(20), nullable=False)
     comment: Mapped[str | None] = mapped_column(UnicodeText, nullable=True)
     acted_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=text("GETUTCDATE()")
+        DateTime(timezone=True), nullable=False, server_default=text("(GETUTCDATE())")
     )
 
     __table_args__ = (
@@ -98,3 +98,4 @@ class OtApproval(Base):
         Index("idx_ota_approver", "approver_id"),
         Index("idx_ota_stage", "stage"),
     )
+

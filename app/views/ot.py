@@ -9,6 +9,7 @@ from app.api.deps import get_current_user, get_db, require_role
 from app.models.ot import OtApproval, OtRequest
 from app.models.reference import WorkPackage
 from app.models.user import Role, User, user_roles
+from app.models.user_shop_access import UserShopAccess
 from app.services.ot_service import MONTHLY_LIMIT_MINUTES, _monthly_used_minutes
 from app.views import templates
 
@@ -153,6 +154,17 @@ async def _enrich_ot_list(db: AsyncSession, rows: list) -> list[dict]:
     return items
 
 
+async def _has_task_access(db: AsyncSession, user: dict) -> bool:
+    """Check if user has any shop_access row (or is ADMIN/SUPERVISOR)."""
+    roles = user.get("roles", [])
+    if "ADMIN" in roles or "SUPERVISOR" in roles:
+        return True
+    row = (await db.execute(
+        select(UserShopAccess.id).where(UserShopAccess.user_id == user["user_id"]).limit(1)
+    )).scalar_one_or_none()
+    return row is not None
+
+
 def _ctx(request, user, **kw):
     """Build base template context."""
     # Map active_page → page for sidebar highlighting
@@ -273,6 +285,8 @@ async def ot_list_page(
     wps = (await db.execute(select(WorkPackage))).scalars().all()
     rfo_options = [{"id": wp.id, "rfo_no": wp.rfo_no or f"WP-{wp.id}"} for wp in wps]
 
+    task_access = await _has_task_access(db, current_user)
+
     return templates.TemplateResponse("ot/list.html", _ctx(
         request, current_user,
         active_page="ot_list",
@@ -290,6 +304,7 @@ async def ot_list_page(
         is_sup_or_admin="SUPERVISOR" in roles or "ADMIN" in roles,
         rfo_options=rfo_options,
         today=today.isoformat(),
+        has_task_access=task_access,
     ))
 
 
