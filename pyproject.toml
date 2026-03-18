@@ -33,6 +33,7 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+cache_dir = ".tmp/pytest_cache"
 
 [build-system]
 requires = ["setuptools>=68.0"]

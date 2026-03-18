@@ -3,7 +3,7 @@
   {# Header #}
   <div class="p-4 bg-white border-b border-surf-200 shrink-0">
     <div class="flex items-center justify-between">
-      <button hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}"
+      <button hx-get="/tasks/entry/mobile/m2?ac={{ ac_reg }}&amp;meeting_date={{ meeting_date }}{% if search_filter %}&amp;search={{ search_filter | urlencode }}{% endif %}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}"
               hx-target="#mob-entry-stage"
               class="flex items-center gap-1 text-sm text-navy-600">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -16,7 +16,7 @@
           <button class="w-full text-left px-4 py-3 text-sm font-medium text-navy-900 hover:bg-surf-50 border-b border-surf-100"
                   onclick="this.parentElement.style.display='none';document.getElementById('mob-m4-modal').style.display='flex'">+ Add Task</button>
           <button class="w-full text-left px-4 py-3 text-sm font-medium text-navy-900 hover:bg-surf-50"
-                  hx-get="/tasks/entry/mobile/m5?snapshot_id={{ task.snapshot_id }}&amp;ac={{ ac_reg }}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}"
+                  hx-get="/tasks/entry/mobile/m5?snapshot_id={{ task.snapshot_id }}&amp;ac={{ ac_reg }}&amp;meeting_date={{ meeting_date }}{% if search_filter %}&amp;search={{ search_filter | urlencode }}{% endif %}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}"
                   hx-target="#mob-entry-stage"
                   onclick="this.parentElement.style.display='none'">View Task Detail</button>
         </div>
@@ -111,6 +111,8 @@
   <input type="hidden" id="mob-version" value="{{ task.version }}"/>
   <input type="hidden" id="mob-ac-reg" value="{{ ac_reg }}"/>
   <input type="hidden" id="mob-next-snapshot" value="{{ next_snapshot_id or '' }}"/>
+  <input type="hidden" id="mob-meeting-date" value="{{ meeting_date or '' }}"/>
+  <input type="hidden" id="mob-search-filter" value="{{ search_filter or '' }}"/>
   <input type="hidden" id="mob-status-filter" value="{{ status_filter or '' }}"/>
   <input type="hidden" id="mob-quick-filter" value="{{ quick_filter or '' }}"/>
   {# M4 Add Task modal #}
@@ -136,9 +138,13 @@ function mobLoadStage(url) {
 }
 
 function mobBuildFilterQuery() {
+  var meetingDate = (document.getElementById('mob-meeting-date') || {}).value || '';
+  var search = (document.getElementById('mob-search-filter') || {}).value || '';
   var status = (document.getElementById('mob-status-filter') || {}).value || '';
   var quick = (document.getElementById('mob-quick-filter') || {}).value || '';
   var parts = [];
+  if (meetingDate) parts.push('meeting_date=' + encodeURIComponent(meetingDate));
+  if (search) parts.push('search=' + encodeURIComponent(search));
   if (status) parts.push('status=' + encodeURIComponent(status));
   if (quick) parts.push('quick=' + encodeURIComponent(quick));
   return parts.length ? '&' + parts.join('&') : '';

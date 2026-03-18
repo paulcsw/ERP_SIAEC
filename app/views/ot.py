@@ -1,5 +1,6 @@
 """OT SSR views (Branch 04 commits 5-6)."""
 from datetime import date, datetime, timezone
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
@@ -10,13 +11,20 @@ from app.models.ot import OtApproval, OtRequest
 from app.models.reference import WorkPackage
 from app.models.user import Role, User, user_roles
 from app.models.user_shop_access import UserShopAccess
-from app.services.ot_service import MONTHLY_LIMIT_MINUTES, _monthly_used_minutes
+from app.services.ot_service import (
+    MONTHLY_LIMIT_MINUTES,
+    _monthly_used_minutes,
+    apply_ot_role_scope,
+    apply_ot_search_filter,
+    get_visible_ot_user_ids,
+    normalize_ot_search,
+)
 from app.views import templates
 
 router = APIRouter(tags=["ot-views"])
 
 
-# ── Helpers ──────────────────────────────────────────────────────────
+# ?? Helpers ??????????????????????????????????????????????????????????
 
 STATUS_BADGES = {
     "PENDING": ("badge-pending", "PENDING"),
@@ -167,7 +175,7 @@ async def _has_task_access(db: AsyncSession, user: dict) -> bool:
 
 def _ctx(request, user, **kw):
     """Build base template context."""
-    # Map active_page → page for sidebar highlighting
+    # Map active_page ??page for sidebar highlighting
     page = kw.get("active_page", "")
     return {
         "request": request,
@@ -184,7 +192,18 @@ def _ctx(request, user, **kw):
     }
 
 
-# ── Desktop: /ot/new — Submit form ──────────────────────────────────
+def _build_href(path: str, **params) -> str:
+    filtered = {
+        key: value
+        for key, value in params.items()
+        if value is not None and value != ""
+    }
+    if not filtered:
+        return path
+    return f"{path}?{urlencode(filtered)}"
+
+
+# ?? Desktop: /ot/new ??Submit form ??????????????????????????????????
 
 @router.get("/ot/new")
 async def ot_submit_page(
@@ -214,7 +233,7 @@ async def ot_submit_page(
     wps = (await db.execute(select(WorkPackage))).scalars().all()
     rfo_options = [{"id": wp.id, "rfo_no": wp.rfo_no or f"WP-{wp.id}"} for wp in wps]
 
-    return templates.TemplateResponse("ot/submit.html", _ctx(
+    return templates.TemplateResponse(request, "ot/submit.html", _ctx(
         request, current_user,
         active_page="ot_new",
         my_used_hours=round(my_used / 60, 1),
@@ -229,44 +248,66 @@ async def ot_submit_page(
     ))
 
 
-# ── Desktop: /ot — List + Mobile segment shell ──────────────────────
+# ?? Desktop: /ot ??List + Mobile segment shell ??????????????????????
 
 @router.get("/ot")
 async def ot_list_page(
     request: Request,
     status: str | None = Query(None),
+    search: str | None = Query(None),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     roles = current_user.get("roles", [])
-    q = select(OtRequest)
-    cq = select(func.count()).select_from(OtRequest)
+    search_filter = normalize_ot_search(search)
+    visible_user_ids = await get_visible_ot_user_ids(db, current_user)
+    q = (
+        select(OtRequest)
+        .join(User, OtRequest.user_id == User.id)
+        .outerjoin(WorkPackage, OtRequest.work_package_id == WorkPackage.id)
+    )
+    cq = (
+        select(func.count())
+        .select_from(OtRequest)
+        .join(User, OtRequest.user_id == User.id)
+        .outerjoin(WorkPackage, OtRequest.work_package_id == WorkPackage.id)
+    )
 
-    # Role scoping
-    if "ADMIN" not in roles:
-        if "SUPERVISOR" in roles:
-            team_uids = (await db.execute(
-                select(User.id).where(User.team == current_user.get("team"))
-            )).scalars().all()
-            q = q.where(OtRequest.user_id.in_(team_uids))
-            cq = cq.where(OtRequest.user_id.in_(team_uids))
-        else:
-            q = q.where(OtRequest.user_id == current_user["user_id"])
-            cq = cq.where(OtRequest.user_id == current_user["user_id"])
+    q = apply_ot_role_scope(q, visible_user_ids)
+    cq = apply_ot_role_scope(cq, visible_user_ids)
+    q = apply_ot_search_filter(q, search_filter)
+    cq = apply_ot_search_filter(cq, search_filter)
 
     if status:
         q = q.where(OtRequest.status == status)
         cq = cq.where(OtRequest.status == status)
+    if date_from:
+        q = q.where(OtRequest.date >= date_from)
+        cq = cq.where(OtRequest.date >= date_from)
+    if date_to:
+        q = q.where(OtRequest.date <= date_to)
+        cq = cq.where(OtRequest.date <= date_to)
 
     total = (await db.execute(cq)).scalar() or 0
     offset = (page - 1) * per_page
     rows = (await db.execute(
-        q.order_by(OtRequest.created_at.desc()).offset(offset).limit(per_page)
+        q.order_by(OtRequest.created_at.desc(), OtRequest.id.desc()).offset(offset).limit(per_page)
     )).scalars().all()
 
     items = await _enrich_ot_list(db, rows)
+    for item in items:
+        item["detail_href"] = _build_href(
+            f"/ot/{item['id']}",
+            status=status or None,
+            search=search_filter or None,
+            date_from=date_from.isoformat() if date_from else None,
+            date_to=date_to.isoformat() if date_to else None,
+            page=page if page > 1 else None,
+        )
     total_pages = max(1, (total + per_page - 1) // per_page)
 
     # Mobile data: monthly hours + pending/endorsed for O3
@@ -287,7 +328,7 @@ async def ot_list_page(
 
     task_access = await _has_task_access(db, current_user)
 
-    return templates.TemplateResponse("ot/list.html", _ctx(
+    return templates.TemplateResponse(request, "ot/list.html", _ctx(
         request, current_user,
         active_page="ot_list",
         items=items,
@@ -296,6 +337,9 @@ async def ot_list_page(
         per_page=per_page,
         total_pages=total_pages,
         status_filter=status or "",
+        search_filter=search_filter,
+        date_from_filter=date_from.isoformat() if date_from else "",
+        date_to_filter=date_to.isoformat() if date_to else "",
         my_used_hours=round(my_used / 60, 1),
         my_limit_hours=round(MONTHLY_LIMIT_MINUTES / 60, 1),
         my_used_pct=round(my_used / MONTHLY_LIMIT_MINUTES * 100, 1),
@@ -308,19 +352,38 @@ async def ot_list_page(
     ))
 
 
-# ── Desktop: /ot/{id} — Detail ──────────────────────────────────────
+# ?? Desktop: /ot/{id} ??Detail ??????????????????????????????????????
 
 @router.get("/ot/{ot_id}")
 async def ot_detail_page(
     request: Request,
     ot_id: int,
+    status: str | None = Query(None),
+    search: str | None = Query(None),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    page: int | None = Query(None, ge=1),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    search_filter = normalize_ot_search(search)
+    back_href = _build_href(
+        "/ot",
+        status=status or None,
+        search=search_filter or None,
+        date_from=date_from.isoformat() if date_from else None,
+        date_to=date_to.isoformat() if date_to else None,
+        page=page if page and page > 1 else None,
+    )
     ot = (await db.execute(select(OtRequest).where(OtRequest.id == ot_id))).scalar_one_or_none()
     if not ot:
-        return templates.TemplateResponse("ot/detail.html", _ctx(
-            request, current_user, active_page="ot_list", ot=None, error="OT request not found",
+        return templates.TemplateResponse(request, "ot/detail.html", _ctx(
+            request,
+            current_user,
+            active_page="ot_list",
+            ot=None,
+            error="OT request not found",
+            back_href=back_href,
         ), status_code=404)
 
     items = await _enrich_ot_list(db, [ot])
@@ -329,17 +392,18 @@ async def ot_detail_page(
     # Get user monthly hours
     used = await _monthly_used_minutes(db, ot.user_id, ot.date)
 
-    return templates.TemplateResponse("ot/detail.html", _ctx(
+    return templates.TemplateResponse(request, "ot/detail.html", _ctx(
         request, current_user,
         active_page="ot_list",
         ot=item,
+        back_href=back_href,
         used_hours=round(used / 60, 1),
         limit_hours=round(MONTHLY_LIMIT_MINUTES / 60, 1),
         used_pct=round(used / MONTHLY_LIMIT_MINUTES * 100, 1),
     ))
 
 
-# ── Desktop: /admin/ot-approve — ENDORSED queue ─────────────────────
+# ?? Desktop: /admin/ot-approve ??ENDORSED queue ?????????????????????
 
 @router.get("/admin/ot-approve")
 async def ot_approve_page(
@@ -367,7 +431,7 @@ async def ot_approve_page(
             else "#2e5a8a"
         )
 
-    return templates.TemplateResponse("ot/approve.html", _ctx(
+    return templates.TemplateResponse(request, "ot/approve.html", _ctx(
         request, current_user,
         active_page="ot_approve",
         items=items,
@@ -375,7 +439,7 @@ async def ot_approve_page(
     ))
 
 
-# ── Mobile HTMX: /ot/segment/{seg} ──────────────────────────────────
+# ?? Mobile HTMX: /ot/segment/{seg} ??????????????????????????????????
 
 @router.get("/ot/segment/{segment}")
 async def ot_segment(
@@ -401,7 +465,7 @@ async def ot_segment(
         wps = (await db.execute(select(WorkPackage))).scalars().all()
         rfo_options = [{"id": wp.id, "rfo_no": wp.rfo_no or f"WP-{wp.id}"} for wp in wps]
 
-        return templates.TemplateResponse("ot/partials/_o1_submit.html", {
+        return templates.TemplateResponse(request, "ot/partials/_o1_submit.html", {
             "request": request,
             "current_user": {"user_id": current_user["user_id"], "roles": roles,
                              "team": current_user.get("team"), "display_name": current_user.get("display_name", "")},
@@ -430,7 +494,7 @@ async def ot_segment(
         rows = (await db.execute(q.order_by(OtRequest.created_at.desc()).limit(50))).scalars().all()
         items = await _enrich_ot_list(db, rows)
 
-        return templates.TemplateResponse("ot/partials/_o2_list.html", {
+        return templates.TemplateResponse(request, "ot/partials/_o2_list.html", {
             "request": request,
             "current_user": {"user_id": current_user["user_id"], "roles": roles},
             "items": items,
@@ -484,7 +548,7 @@ async def ot_segment(
                     else "#2e5a8a"
                 )
 
-        return templates.TemplateResponse("ot/partials/_o3_approve.html", {
+        return templates.TemplateResponse(request, "ot/partials/_o3_approve.html", {
             "request": request,
             "current_user": {"user_id": current_user["user_id"], "roles": roles},
             "items": approve_items,
@@ -492,13 +556,13 @@ async def ot_segment(
         })
 
     # Unknown segment
-    return templates.TemplateResponse("ot/partials/_o1_submit.html", {
+    return templates.TemplateResponse(request, "ot/partials/_o1_submit.html", {
         "request": request,
         "current_user": {"user_id": current_user["user_id"], "roles": roles},
     })
 
 
-# ── Mobile HTMX: /ot/detail/{id} — O2 detail ───────────────────────
+# ?? Mobile HTMX: /ot/detail/{id} ??O2 detail ???????????????????????
 
 @router.get("/ot/detail/{ot_id}")
 async def ot_mobile_detail(
@@ -509,7 +573,7 @@ async def ot_mobile_detail(
 ):
     ot = (await db.execute(select(OtRequest).where(OtRequest.id == ot_id))).scalar_one_or_none()
     if not ot:
-        return templates.TemplateResponse("ot/partials/_o2_detail.html", {
+        return templates.TemplateResponse(request, "ot/partials/_o2_detail.html", {
             "request": request, "ot": None, "current_user": {"user_id": current_user["user_id"], "roles": current_user.get("roles", [])},
         })
     items = await _enrich_ot_list(db, [ot])
@@ -519,8 +583,9 @@ async def ot_mobile_detail(
     item["monthly_limit_hours"] = round(MONTHLY_LIMIT_MINUTES / 60, 1)
     item["monthly_pct"] = round(used / MONTHLY_LIMIT_MINUTES * 100, 1)
 
-    return templates.TemplateResponse("ot/partials/_o2_detail.html", {
+    return templates.TemplateResponse(request, "ot/partials/_o2_detail.html", {
         "request": request,
         "ot": item,
         "current_user": {"user_id": current_user["user_id"], "roles": current_user.get("roles", [])},
     })
+

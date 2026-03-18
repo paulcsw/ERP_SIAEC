@@ -21,6 +21,7 @@
 .status-btn.active-waiting{background:#fdf5e0;color:#a07d12;border-color:#d4a017}
 .status-btn.active-completed{background:#ecf7f0;color:#2d7a4f;border-color:#2d7a4f}
 .quick-update-card{background:#fff;border:1px solid #dee4ed;border-left:4px solid #c8850a;border-radius:10px}
+.entry-toolbar .inp,.entry-toolbar select{min-width:0}
 /* Modal-entry-task: mobile full-screen */
 @media(max-width:767px){
   #modal-entry-task .modal-entry-task-card{width:100%!important;height:100vh!important;max-height:100vh!important;border-radius:0!important;display:flex;flex-direction:column}
@@ -34,35 +35,61 @@
 
   {# ???? Left Panel: Aircraft List ???? #}
   <div class="w-[280px] shrink-0 border-r border-surf-200 bg-white flex flex-col h-full">
-    <div class="p-4 border-b border-surf-200">
-      <h2 class="text-base font-semibold text-navy-900">My Assigned Tasks</h2>
-      <p class="text-xs text-surf-400 mt-0.5">{{ shop_context or 'All Shops' }}</p>
-    </div>
+    <form class="p-4 space-y-3 border-b border-surf-200 entry-toolbar"
+          onsubmit="event.preventDefault(); refreshTaskEntry({ search: (this.elements.search.value || '').trim(), ac: '', edit: '' });">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <h2 class="text-base font-semibold text-navy-900">My Assigned Tasks</h2>
+          <p class="text-xs text-surf-400 mt-0.5">{{ shop_context or 'All Shops' }}</p>
+        </div>
+        <div class="w-32 shrink-0">
+          <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">Week</label>
+          <select name="meeting_date" class="inp w-full h-8 text-xs"
+                  onchange="refreshTaskEntry({ meeting_date: this.value, ac: '', edit: '' })">
+            {% if meeting_dates %}
+              {% for option in meeting_dates %}
+              <option value="{{ option }}" {% if meeting_date == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            {% else %}
+              <option value="{{ meeting_date or '' }}">{{ meeting_date or 'Current' }}</option>
+            {% endif %}
+          </select>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="relative flex-1 min-w-0">
+          <svg class="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-surf-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input name="search" class="inp w-full h-8 text-xs pl-8" placeholder="Search aircraft or task..." value="{{ search_filter }}"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault(); this.form.requestSubmit();}">
+        </div>
+        <button type="submit" class="btn-outline btn-sm h-8 px-3 text-xs">Search</button>
+      </div>
+    </form>
 
     {# Status filter chips — preserve quick_filter #}
     <div class="px-4 py-3 flex flex-wrap gap-1.5 border-b border-surf-100">
-      <button class="entry-chip {% if not status_filter %}active{% endif %}"
-              hx-get="/tasks/entry{% if quick_filter %}?quick={{ quick_filter }}{% endif %}" hx-target="#task-entry-content" hx-select="#task-entry-content > *" hx-swap="innerHTML" hx-push-url="true">All</button>
-      <button class="entry-chip {% if status_filter == 'NOT_STARTED' %}active{% endif %}"
-              hx-get="/tasks/entry?status=NOT_STARTED{% if quick_filter %}&quick={{ quick_filter }}{% endif %}" hx-target="#task-entry-content" hx-select="#task-entry-content > *" hx-swap="innerHTML" hx-push-url="true">Not Started</button>
-      <button class="entry-chip {% if status_filter == 'IN_PROGRESS' %}active{% endif %}"
-              hx-get="/tasks/entry?status=IN_PROGRESS{% if quick_filter %}&quick={{ quick_filter }}{% endif %}" hx-target="#task-entry-content" hx-select="#task-entry-content > *" hx-swap="innerHTML" hx-push-url="true">In Progress</button>
-      <button class="entry-chip {% if status_filter == 'WAITING' %}active{% endif %}"
-              hx-get="/tasks/entry?status=WAITING{% if quick_filter %}&quick={{ quick_filter }}{% endif %}" hx-target="#task-entry-content" hx-select="#task-entry-content > *" hx-swap="innerHTML" hx-push-url="true">Waiting</button>
-      <button class="entry-chip {% if status_filter == 'COMPLETED' %}active{% endif %}"
-              hx-get="/tasks/entry?status=COMPLETED{% if quick_filter %}&quick={{ quick_filter }}{% endif %}" hx-target="#task-entry-content" hx-select="#task-entry-content > *" hx-swap="innerHTML" hx-push-url="true">Completed</button>
+      <button type="button" class="entry-chip {% if not status_filter %}active{% endif %}"
+              onclick="refreshTaskEntry({ status: '', ac: '', edit: '' })">All</button>
+      <button type="button" class="entry-chip {% if status_filter == 'NOT_STARTED' %}active{% endif %}"
+              onclick="refreshTaskEntry({ status: 'NOT_STARTED', ac: '', edit: '' })">Not Started</button>
+      <button type="button" class="entry-chip {% if status_filter == 'IN_PROGRESS' %}active{% endif %}"
+              onclick="refreshTaskEntry({ status: 'IN_PROGRESS', ac: '', edit: '' })">In Progress</button>
+      <button type="button" class="entry-chip {% if status_filter == 'WAITING' %}active{% endif %}"
+              onclick="refreshTaskEntry({ status: 'WAITING', ac: '', edit: '' })">Waiting</button>
+      <button type="button" class="entry-chip {% if status_filter == 'COMPLETED' %}active{% endif %}"
+              onclick="refreshTaskEntry({ status: 'COMPLETED', ac: '', edit: '' })">Completed</button>
     </div>
 
     {# Quick filter chips — preserve status_filter #}
     <div class="px-4 py-2 flex gap-1.5 border-b border-surf-100">
-      <button class="entry-chip {% if quick_filter == 'issue' %}active{% endif %}"
-              hx-get="/tasks/entry?{% if quick_filter != 'issue' %}quick=issue{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" hx-target="#task-entry-content" hx-select="#task-entry-content > *" hx-swap="innerHTML" hx-push-url="true">
+      <button type="button" class="entry-qchip {% if quick_filter == 'issue' %}on{% endif %}"
+              onclick="refreshTaskEntry({ quick: '{% if quick_filter != 'issue' %}issue{% endif %}', ac: '', edit: '' })">
         <svg class="w-3 h-3 inline -mt-0.5 mr-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92z" clip-rule="evenodd"/></svg>
         Issue
       </button>
-      <button class="entry-chip {% if quick_filter == 'new' %}active{% endif %}"
-              hx-get="/tasks/entry?{% if quick_filter != 'new' %}quick=new{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" hx-target="#task-entry-content" hx-select="#task-entry-content > *" hx-swap="innerHTML" hx-push-url="true">
-        <svg class="w-3 h-3 inline -mt-0.5 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      <button type="button" class="entry-qchip {% if quick_filter == 'new' %}on{% endif %}"
+              onclick="refreshTaskEntry({ quick: '{% if quick_filter != 'new' %}new{% endif %}', ac: '', edit: '' })">
+        <svg class="w-3 h-3 inline -mt-0.5 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
         New
       </button>
     </div>
@@ -72,8 +99,7 @@
       {% if ac_groups %}
       {% for ac in ac_groups %}
       <div class="ac-card {% if selected_ac == ac.ac_reg %}selected{% endif %}"
-           hx-get="/tasks/entry?ac={{ ac.ac_reg }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if quick_filter %}&quick={{ quick_filter }}{% endif %}"
-           hx-target="#task-entry-content" hx-select="#task-entry-content > *" hx-swap="innerHTML" hx-push-url="true">
+           onclick="refreshTaskEntry({ ac: '{{ ac.ac_reg }}', edit: '' }, { resetEdit: false })">
         <div class="flex items-center justify-between">
           <div>
             <div class="text-sm font-semibold text-navy-900">{{ ac.ac_reg }}</div>
@@ -109,12 +135,9 @@
     <div class="px-5 py-3 border-b border-surf-200 bg-white flex items-center justify-between">
       <div>
         <h3 class="text-lg font-semibold text-navy-900">{{ selected_ac }}</h3>
-        <p class="text-xs text-surf-400">{{ selected_rfo or 'All RFOs' }} &middot; {{ tasks | length if tasks else 0 }} tasks</p>
+        <p class="text-xs text-surf-400">{{ selected_rfo or 'All RFOs' }} &middot; {{ meeting_date or 'Current Week' }} &middot; {{ tasks | length if tasks else 0 }} tasks</p>
       </div>
-      <button class="btn-primary btn-sm" onclick="showModal('modal-entry-task')">
-        <svg class="w-4 h-4 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-        Add Task
-      </button>
+      <button class="btn-primary btn-sm" onclick="showModal('modal-entry-task')">Add Task</button>
     </div>
     {% endif %}
 
@@ -126,8 +149,7 @@
         <div class="task-card {% if editing_task_id == task.task_id %}editing{% endif %}"
              id="task-card-{{ task.task_id }}"
              data-task-id="{{ task.task_id }}"
-             hx-get="/tasks/entry?ac={{ selected_ac }}&edit={{ task.task_id }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if quick_filter %}&quick={{ quick_filter }}{% endif %}"
-             hx-target="#task-entry-content" hx-select="#task-entry-content > *" hx-swap="innerHTML" hx-push-url="true">
+             onclick="refreshTaskEntry({ ac: '{{ selected_ac }}', edit: '{{ task.task_id }}' }, { resetEdit: false })">
           <div class="flex items-start justify-between gap-3">
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 mb-1">
@@ -255,7 +277,7 @@
       <div class="text-center py-16 text-surf-400">
         <svg class="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
         <p class="text-sm">No tasks found for {{ selected_ac }}.</p>
-        <button class="btn-primary btn-sm mt-3" onclick="showModal('modal-entry-task')">Add First Task</button>
+        <button class="btn-primary btn-sm mt-3" onclick="showModal('modal-entry-task')">Add Task</button>
       </div>
       {% else %}
       <div class="text-center py-16 text-surf-400">
@@ -289,7 +311,7 @@
         {% if selected_ac_id %}
         <input type="hidden" name="aircraft_id" value="{{ selected_ac_id }}">
         {% endif %}
-        <input type="hidden" name="meeting_date" value="{{ selected_meeting_date or '' }}">
+        <input type="hidden" name="meeting_date" value="{{ meeting_date or selected_meeting_date or '' }}">
         <input type="hidden" name="shop_id" value="{{ selected_shop_id or '' }}">
         <input type="hidden" name="work_package_id" value="{{ selected_work_package_id or '' }}">
         <div class="space-y-3">
@@ -424,15 +446,18 @@ async function runTaskEntryAction(actionFn) {
   }
 }
 
-function refreshTaskEntry(options = {}) {
+function refreshTaskEntry(overrides = {}, options = {}) {
   if (typeof htmx === 'undefined') return;
   const params = new URLSearchParams(window.location.search || '');
-  if (Object.prototype.hasOwnProperty.call(options, 'edit')) {
-    if (options.edit === null || options.edit === undefined || options.edit === '') {
-      params.delete('edit');
-    } else {
-      params.set('edit', String(options.edit));
+  Object.entries(overrides).forEach(([key, value]) => {
+    if (value === null || value === undefined || value === '') {
+      params.delete(key);
+      return;
     }
+    params.set(key, String(value));
+  });
+  if (options.resetEdit !== false && !Object.prototype.hasOwnProperty.call(overrides, 'edit')) {
+    params.delete('edit');
   }
   const query = params.toString() ? '?' + params.toString() : '';
   htmx.ajax('GET', '/tasks/entry' + query, {

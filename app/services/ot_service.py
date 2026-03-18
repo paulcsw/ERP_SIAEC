@@ -5,6 +5,7 @@ from sqlalchemy import and_, extract, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ot import OtApproval, OtRequest
+from app.models.reference import WorkPackage
 from app.models.user import User
 from app.schemas.common import APIError
 from app.services.audit_service import write_audit
@@ -14,6 +15,51 @@ MONTHLY_LIMIT_MINUTES = 4320  # 72 hours
 VALID_REASON_CODES = {
     "BACKLOG", "AOG", "SCHEDULE_PRESSURE", "MANPOWER_SHORTAGE", "OTHER"
 }
+
+
+def normalize_ot_search(value: str | None) -> str:
+    """Normalize the free-text OT search query."""
+    return (value or "").strip()
+
+
+async def get_visible_ot_user_ids(db: AsyncSession, user: dict) -> list[int] | None:
+    """Return OT-visible user ids for non-admin roles, or None for full admin scope."""
+    roles = user.get("roles", [])
+    if "ADMIN" in roles:
+        return None
+    if "SUPERVISOR" in roles:
+        return (
+            await db.execute(select(User.id).where(User.team == user.get("team")))
+        ).scalars().all()
+    return [user["user_id"]]
+
+
+def apply_ot_role_scope(base_q, visible_user_ids: list[int] | None):
+    """Restrict an OT query to the caller's visible users."""
+    if visible_user_ids is None:
+        return base_q
+    if not visible_user_ids:
+        return base_q.where(OtRequest.id == -1)
+    return base_q.where(OtRequest.user_id.in_(visible_user_ids))
+
+
+def apply_ot_search_filter(base_q, search: str | None):
+    """Apply free-text OT search against id, worker, reason, and RFO."""
+    normalized = normalize_ot_search(search)
+    if not normalized:
+        return base_q
+
+    term = f"%{normalized}%"
+    predicates = [
+        User.name.ilike(term),
+        User.employee_no.ilike(term),
+        OtRequest.reason_code.ilike(term),
+        OtRequest.reason_text.ilike(term),
+        WorkPackage.rfo_no.ilike(term),
+    ]
+    if normalized.isdigit():
+        predicates.append(OtRequest.id == int(normalized))
+    return base_q.where(or_(*predicates))
 
 
 def compute_minutes(start: time, end: time) -> int:

@@ -129,6 +129,84 @@ def _can_view_task_item(user: dict, allowed_shop_ids: set[int] | None, task: Tas
     return False
 
 
+def _normalize_entry_search(value: str | None) -> str:
+    return (value or "").strip()
+
+
+async def _get_entry_meeting_dates(
+    db: AsyncSession,
+    visibility_clause,
+) -> list[str]:
+    q = (
+        select(TaskSnapshot.meeting_date)
+        .select_from(TaskSnapshot)
+        .join(TaskItem, TaskSnapshot.task_id == TaskItem.id)
+        .where(
+            TaskItem.is_active == True,
+            TaskSnapshot.is_deleted == False,
+        )
+        .distinct()
+        .order_by(TaskSnapshot.meeting_date.desc())
+    )
+    if visibility_clause is not None:
+        q = q.where(visibility_clause)
+    rows = (await db.execute(q)).scalars().all()
+    return [row.isoformat() for row in rows if row]
+
+
+def _resolve_entry_meeting_date(
+    requested_meeting_date: str | None,
+    configured_meeting_date: str | None,
+    available_dates: list[str],
+) -> str:
+    requested = (requested_meeting_date or "").strip()
+    configured = (configured_meeting_date or "").strip()
+    if requested:
+        return requested
+    if configured and configured in available_dates:
+        return configured
+    if available_dates:
+        return available_dates[0]
+    return configured
+
+
+def _apply_entry_filters(
+    base_q,
+    *,
+    visibility_clause,
+    meeting_date: str | None = None,
+    status: str | None = None,
+    search: str | None = None,
+    quick: str | None = None,
+    aircraft_reg: str | None = None,
+):
+    base_q = base_q.where(TaskItem.is_active == True, TaskSnapshot.is_deleted == False)
+    if visibility_clause is not None:
+        base_q = base_q.where(visibility_clause)
+    if meeting_date:
+        base_q = base_q.where(TaskSnapshot.meeting_date == meeting_date)
+    if status:
+        base_q = base_q.where(TaskSnapshot.status == status)
+    if aircraft_reg:
+        base_q = base_q.where(Aircraft.ac_reg == aircraft_reg)
+    if search:
+        term = f"%{search}%"
+        base_q = base_q.where(
+            or_(
+                Aircraft.ac_reg.ilike(term),
+                TaskItem.task_text.ilike(term),
+            )
+        )
+    if quick == "issue":
+        base_q = base_q.where(TaskSnapshot.has_issue == True)
+    elif quick == "new":
+        base_q = base_q.where(
+            TaskItem.distributed_at.isnot(None),
+            TaskSnapshot.supervisor_updated_at.is_(None),
+        )
+    return base_q
+
+
 def _normalize_airline_filter(value: str | None) -> str:
     if not value:
         return ""
@@ -491,7 +569,7 @@ async def task_manager_page(
         .order_by(WorkPackage.rfo_no)
     )).all()
 
-    return templates.TemplateResponse("tasks/manager.html", _ctx(
+    return templates.TemplateResponse(request, "tasks/manager.html", _ctx(
         request, current_user,
         page="tasks",
         can_manage_tasks=is_admin,
@@ -564,7 +642,7 @@ async def task_manager_detail_partial(
 
     row = (await db.execute(q)).first()
     if not row:
-        return templates.TemplateResponse(
+        return templates.TemplateResponse(request, 
             "tasks/partials/_manager_detail_body.html",
             {"request": request, "detail": None},
         )
@@ -691,7 +769,7 @@ async def task_manager_detail_partial(
         "audit_logs": audit_logs,
     }
 
-    return templates.TemplateResponse(
+    return templates.TemplateResponse(request, 
         "tasks/partials/_manager_detail_body.html",
         {"request": request, "detail": detail},
     )
@@ -700,6 +778,8 @@ async def task_manager_detail_partial(
 async def task_entry_page(
     request: Request,
     ac: str | None = Query(None),
+    meeting_date: str | None = Query(None),
+    search: str | None = Query(None),
     status: str | None = Query(None),
     quick: str | None = Query(None),
     edit: int | None = Query(None),
@@ -714,6 +794,13 @@ async def task_entry_page(
     has_task_access = max_access is not None
     can_edit = max_access in ("EDIT", "MANAGE")
     visibility_clause = _entry_visibility_clause(current_user, allowed_shop_ids)
+    search_filter = _normalize_entry_search(search)
+    available_meeting_dates = await _get_entry_meeting_dates(db, visibility_clause)
+    effective_meeting_date = _resolve_entry_meeting_date(
+        meeting_date,
+        configs.get("meeting_current_date"),
+        available_meeting_dates,
+    )
 
     workers = await _get_workers(db)
 
@@ -725,12 +812,15 @@ async def task_entry_page(
         )
         .join(TaskItem, TaskItem.aircraft_id == Aircraft.id)
         .join(TaskSnapshot, TaskSnapshot.task_id == TaskItem.id)
-        .where(TaskItem.is_active == True, TaskSnapshot.is_deleted == False)
     )
-    if visibility_clause is not None:
-        ac_q = ac_q.where(visibility_clause)
-    if status:
-        ac_q = ac_q.where(TaskSnapshot.status == status)
+    ac_q = _apply_entry_filters(
+        ac_q,
+        visibility_clause=visibility_clause,
+        meeting_date=effective_meeting_date,
+        status=status,
+        search=search_filter,
+        quick=quick,
+    )
 
     ac_q = ac_q.group_by(Aircraft.ac_reg).order_by(Aircraft.ac_reg)
     ac_rows = (await db.execute(ac_q)).all()
@@ -751,6 +841,18 @@ async def task_entry_page(
                 TaskSnapshot.supervisor_updated_at.is_(None),
             )
         )
+        if effective_meeting_date:
+            new_q = new_q.where(TaskSnapshot.meeting_date == effective_meeting_date)
+        if status:
+            new_q = new_q.where(TaskSnapshot.status == status)
+        if search_filter:
+            term = f"%{search_filter}%"
+            new_q = new_q.where(
+                or_(
+                    Aircraft.ac_reg.ilike(term),
+                    TaskItem.task_text.ilike(term),
+                )
+            )
         if visibility_clause is not None:
             new_q = new_q.where(visibility_clause)
         new_count = (await db.execute(new_q)).scalar() or 0
@@ -769,6 +871,18 @@ async def task_entry_page(
                 TaskSnapshot.supervisor_updated_at < threshold_dt,
             )
         )
+        if effective_meeting_date:
+            needs_q = needs_q.where(TaskSnapshot.meeting_date == effective_meeting_date)
+        if status:
+            needs_q = needs_q.where(TaskSnapshot.status == status)
+        if search_filter:
+            term = f"%{search_filter}%"
+            needs_q = needs_q.where(
+                or_(
+                    Aircraft.ac_reg.ilike(term),
+                    TaskItem.task_text.ilike(term),
+                )
+            )
         if visibility_clause is not None:
             needs_q = needs_q.where(visibility_clause)
         needs_count = (await db.execute(needs_q)).scalar() or 0
@@ -779,23 +893,6 @@ async def task_entry_page(
             "has_new": new_count > 0,
             "needs_update": needs_count > 0,
         })
-
-    # If quick filter, narrow down
-    if quick == "issue":
-        ac_regs_with_issue = set()
-        issue_q = (
-            select(Aircraft.ac_reg)
-            .join(TaskItem, TaskItem.aircraft_id == Aircraft.id)
-            .join(TaskSnapshot, TaskSnapshot.task_id == TaskItem.id)
-            .where(TaskItem.is_active == True, TaskSnapshot.is_deleted == False, TaskSnapshot.has_issue == True)
-            .distinct()
-        )
-        if visibility_clause is not None:
-            issue_q = issue_q.where(visibility_clause)
-        ac_regs_with_issue = set(r[0] for r in (await db.execute(issue_q)).all())
-        ac_groups = [g for g in ac_groups if g["ac_reg"] in ac_regs_with_issue]
-    elif quick == "new":
-        ac_groups = [g for g in ac_groups if g["has_new"]]
 
     # Load tasks for selected aircraft
     tasks = []
@@ -813,16 +910,16 @@ async def task_entry_page(
             .join(Aircraft, TaskItem.aircraft_id == Aircraft.id)
             .outerjoin(WorkPackage, TaskItem.work_package_id == WorkPackage.id)
             .outerjoin(User, TaskItem.assigned_worker_id == User.id)
-            .where(
-                Aircraft.ac_reg == ac,
-                TaskItem.is_active == True,
-                TaskSnapshot.is_deleted == False,
-            )
         )
-        if visibility_clause is not None:
-            task_q = task_q.where(visibility_clause)
-        if status:
-            task_q = task_q.where(TaskSnapshot.status == status)
+        task_q = _apply_entry_filters(
+            task_q,
+            visibility_clause=visibility_clause,
+            meeting_date=effective_meeting_date,
+            status=status,
+            search=search_filter,
+            quick=quick,
+            aircraft_reg=ac,
+        )
 
         task_q = task_q.order_by(TaskItem.id)
         task_rows = (await db.execute(task_q)).all()
@@ -870,9 +967,12 @@ async def task_entry_page(
     # Mobile badge counts
     badges = await _compute_mob_badges(db, current_user)
 
-    return templates.TemplateResponse("tasks/entry.html", _ctx(
+    return templates.TemplateResponse(request, "tasks/entry.html", _ctx(
         request, current_user,
         page="tasks_entry",
+        meeting_date=effective_meeting_date,
+        meeting_dates=available_meeting_dates,
+        search_filter=search_filter,
         status_filter=status or "",
         quick_filter=quick or "",
         selected_ac=ac or "",
@@ -913,7 +1013,7 @@ async def task_detail_page(
     result = (await db.execute(task_q)).first()
 
     if not result:
-        return templates.TemplateResponse("tasks/detail.html", _ctx(
+        return templates.TemplateResponse(request, "tasks/detail.html", _ctx(
             request, current_user, page="tasks", task=None, snapshots=[], audit_logs=[],
         ), status_code=404)
 
@@ -1001,7 +1101,7 @@ async def task_detail_page(
         for log, user in audit_rows
     ]
 
-    return templates.TemplateResponse("tasks/detail.html", _ctx(
+    return templates.TemplateResponse(request, "tasks/detail.html", _ctx(
         request, current_user,
         page="tasks",
         task=task_data,
@@ -1021,7 +1121,7 @@ async def settings_page(
     configs = await _get_config_map(db)
     shops = await _get_shops(db)
 
-    return templates.TemplateResponse("admin/settings.html", _ctx(
+    return templates.TemplateResponse(request, "admin/settings.html", _ctx(
         request, current_user,
         page="settings",
         configs=configs,
@@ -1034,6 +1134,8 @@ async def settings_page(
 @router.get("/tasks/entry/mobile/m1")
 async def mobile_m1(
     request: Request,
+    meeting_date: str | None = Query(None),
+    search: str | None = Query(None),
     status: str | None = Query(None),
     quick: str | None = Query(None),
     current_user: dict = Depends(get_current_user),
@@ -1044,17 +1146,27 @@ async def mobile_m1(
     threshold_dt = datetime.now(timezone.utc) - timedelta(hours=threshold_hours)
     allowed_shop_ids = await _get_allowed_shop_ids(db, current_user)
     visibility_clause = _entry_visibility_clause(current_user, allowed_shop_ids)
+    search_filter = _normalize_entry_search(search)
+    available_meeting_dates = await _get_entry_meeting_dates(db, visibility_clause)
+    effective_meeting_date = _resolve_entry_meeting_date(
+        meeting_date,
+        configs.get("meeting_current_date"),
+        available_meeting_dates,
+    )
 
     ac_q = (
         select(Aircraft.ac_reg, func.count(TaskSnapshot.id).label("task_count"))
         .join(TaskItem, TaskItem.aircraft_id == Aircraft.id)
         .join(TaskSnapshot, TaskSnapshot.task_id == TaskItem.id)
-        .where(TaskItem.is_active == True, TaskSnapshot.is_deleted == False)
     )
-    if visibility_clause is not None:
-        ac_q = ac_q.where(visibility_clause)
-    if status:
-        ac_q = ac_q.where(TaskSnapshot.status == status)
+    ac_q = _apply_entry_filters(
+        ac_q,
+        visibility_clause=visibility_clause,
+        meeting_date=effective_meeting_date,
+        status=status,
+        search=search_filter,
+        quick=quick,
+    )
     ac_q = ac_q.group_by(Aircraft.ac_reg).order_by(Aircraft.ac_reg)
     ac_rows = (await db.execute(ac_q)).all()
 
@@ -1087,6 +1199,26 @@ async def mobile_m1(
                 TaskSnapshot.supervisor_updated_at < threshold_dt,
             )
         )
+        if effective_meeting_date:
+            new_q = new_q.where(TaskSnapshot.meeting_date == effective_meeting_date)
+            needs_q = needs_q.where(TaskSnapshot.meeting_date == effective_meeting_date)
+        if status:
+            new_q = new_q.where(TaskSnapshot.status == status)
+            needs_q = needs_q.where(TaskSnapshot.status == status)
+        if search_filter:
+            term = f"%{search_filter}%"
+            new_q = new_q.where(
+                or_(
+                    Aircraft.ac_reg.ilike(term),
+                    TaskItem.task_text.ilike(term),
+                )
+            )
+            needs_q = needs_q.where(
+                or_(
+                    Aircraft.ac_reg.ilike(term),
+                    TaskItem.task_text.ilike(term),
+                )
+            )
         if visibility_clause is not None:
             new_q = new_q.where(visibility_clause)
             needs_q = needs_q.where(visibility_clause)
@@ -1100,28 +1232,12 @@ async def mobile_m1(
             "needs_update_count": needs_count,
         })
 
-    if quick == "issue":
-        issue_q = (
-            select(Aircraft.ac_reg)
-            .join(TaskItem, TaskItem.aircraft_id == Aircraft.id)
-            .join(TaskSnapshot, TaskSnapshot.task_id == TaskItem.id)
-            .where(
-                TaskItem.is_active == True,
-                TaskSnapshot.is_deleted == False,
-                TaskSnapshot.has_issue == True,
-            )
-            .distinct()
-        )
-        if visibility_clause is not None:
-            issue_q = issue_q.where(visibility_clause)
-        issue_regs = set(r[0] for r in (await db.execute(issue_q)).all())
-        ac_groups = [g for g in ac_groups if g["ac_reg"] in issue_regs]
-    elif quick == "new":
-        ac_groups = [g for g in ac_groups if g["has_new"]]
-
-    return templates.TemplateResponse("tasks/partials/_m1_aircraft.html", {
+    return templates.TemplateResponse(request, "tasks/partials/_m1_aircraft.html", {
         "request": request,
         "ac_groups": ac_groups,
+        "meeting_date": effective_meeting_date,
+        "meeting_dates": available_meeting_dates,
+        "search_filter": search_filter,
         "status_filter": status or "",
         "quick_filter": quick or "",
         "shop_context": current_user.get("team", "All Shops"),
@@ -1135,6 +1251,8 @@ async def mobile_m1(
 async def mobile_m2(
     request: Request,
     ac: str = Query(...),
+    meeting_date: str | None = Query(None),
+    search: str | None = Query(None),
     status: str | None = Query(None),
     quick: str | None = Query(None),
     current_user: dict = Depends(get_current_user),
@@ -1146,6 +1264,13 @@ async def mobile_m2(
     allowed_shop_ids = await _get_allowed_shop_ids(db, current_user)
     visibility_clause = _entry_visibility_clause(current_user, allowed_shop_ids)
     workers = await _get_workers(db)
+    search_filter = _normalize_entry_search(search)
+    available_meeting_dates = await _get_entry_meeting_dates(db, visibility_clause)
+    effective_meeting_date = _resolve_entry_meeting_date(
+        meeting_date,
+        configs.get("meeting_current_date"),
+        available_meeting_dates,
+    )
 
     task_q = (
         select(TaskSnapshot, TaskItem, Aircraft, WorkPackage, User)
@@ -1153,12 +1278,16 @@ async def mobile_m2(
         .join(Aircraft, TaskItem.aircraft_id == Aircraft.id)
         .outerjoin(WorkPackage, TaskItem.work_package_id == WorkPackage.id)
         .outerjoin(User, TaskItem.assigned_worker_id == User.id)
-        .where(Aircraft.ac_reg == ac, TaskItem.is_active == True, TaskSnapshot.is_deleted == False)
     )
-    if visibility_clause is not None:
-        task_q = task_q.where(visibility_clause)
-    if status:
-        task_q = task_q.where(TaskSnapshot.status == status)
+    task_q = _apply_entry_filters(
+        task_q,
+        visibility_clause=visibility_clause,
+        meeting_date=effective_meeting_date,
+        status=status,
+        search=search_filter,
+        quick=quick,
+        aircraft_reg=ac,
+    )
     task_q = task_q.order_by(TaskItem.id)
     task_rows = (await db.execute(task_q)).all()
 
@@ -1184,11 +1313,6 @@ async def mobile_m2(
         if wp and wp.rfo_no:
             rfo_no = wp.rfo_no
 
-        if quick == "issue" and not snap.has_issue:
-            continue
-        if quick == "new" and not is_new:
-            continue
-
         last_upd = ""
         if snap.supervisor_updated_at:
             delta = datetime.now(timezone.utc) - snap.supervisor_updated_at.replace(tzinfo=timezone.utc) if snap.supervisor_updated_at.tzinfo is None else datetime.now(timezone.utc) - snap.supervisor_updated_at
@@ -1207,17 +1331,19 @@ async def mobile_m2(
         })
         total_mh += float(snap.mh_incurred_hours)
 
-    return templates.TemplateResponse("tasks/partials/_m2_tasks.html", {
+    return templates.TemplateResponse(request, "tasks/partials/_m2_tasks.html", {
         "request": request,
         "ac_reg": ac,
         "rfo_no": rfo_no,
         "tasks_summary": f"{len(tasks)} tasks - {total_mh:.1f} MH",
         "tasks": tasks,
+        "meeting_date": effective_meeting_date,
+        "meeting_dates": available_meeting_dates,
+        "search_filter": search_filter,
         "status_filter": status or "",
         "quick_filter": quick or "",
         "selected_ac_id": selected_ac_id,
         "workers": workers,
-        "meeting_date": selected_meeting_date.isoformat() if selected_meeting_date else date.today().isoformat(),
         "shop_id": selected_shop_id or "",
         "work_package_id": selected_work_package_id or "",
     })
@@ -1230,6 +1356,8 @@ async def mobile_m3(
     request: Request,
     snapshot_id: int = Query(...),
     ac: str = Query(""),
+    meeting_date: str | None = Query(None),
+    search: str | None = Query(None),
     status: str | None = Query(None),
     quick: str | None = Query(None),
     current_user: dict = Depends(get_current_user),
@@ -1240,11 +1368,15 @@ async def mobile_m3(
     can_edit = max_access in ("EDIT", "MANAGE")
     visibility_clause = _entry_visibility_clause(current_user, allowed_shop_ids)
     workers = await _get_workers(db)
+    search_filter = _normalize_entry_search(search)
 
     snap = (await db.execute(select(TaskSnapshot).where(TaskSnapshot.id == snapshot_id))).scalar_one_or_none()
     if not snap:
-        return templates.TemplateResponse("tasks/partials/_m2_tasks.html", {
+        return templates.TemplateResponse(request, "tasks/partials/_m2_tasks.html", {
             "request": request, "ac_reg": ac, "tasks": [],
+            "meeting_date": meeting_date or "",
+            "meeting_dates": [],
+            "search_filter": search_filter,
             "status_filter": status or "",
             "quick_filter": quick or "",
             "workers": workers,
@@ -1256,21 +1388,23 @@ async def mobile_m3(
     worker = None
     if task_item.assigned_worker_id:
         worker = (await db.execute(select(User).where(User.id == task_item.assigned_worker_id))).scalar_one_or_none()
+    effective_meeting_date = meeting_date or (snap.meeting_date.isoformat() if snap.meeting_date else "")
 
     # Determine next snapshot for Save & Next
     next_q = (
         select(TaskSnapshot)
         .join(TaskItem, TaskSnapshot.task_id == TaskItem.id)
         .join(Aircraft, TaskItem.aircraft_id == Aircraft.id)
-        .where(
-            Aircraft.ac_reg == ac,
-            TaskItem.is_active == True,
-            TaskSnapshot.is_deleted == False,
-            TaskSnapshot.id > snapshot_id,
-        )
     )
-    if visibility_clause is not None:
-        next_q = next_q.where(visibility_clause)
+    next_q = _apply_entry_filters(
+        next_q,
+        visibility_clause=visibility_clause,
+        meeting_date=effective_meeting_date,
+        status=status,
+        search=search_filter,
+        quick=quick,
+        aircraft_reg=ac,
+    ).where(TaskSnapshot.id > snapshot_id)
     next_snap = (await db.execute(next_q.order_by(TaskSnapshot.id).limit(1))).scalar_one_or_none()
 
     last_sync = ""
@@ -1289,16 +1423,17 @@ async def mobile_m3(
         "last_sync": last_sync,
     }
 
-    return templates.TemplateResponse("tasks/partials/_m3_update.html", {
+    return templates.TemplateResponse(request, "tasks/partials/_m3_update.html", {
         "request": request,
         "task": task_data,
         "workers": workers,
         "ac_reg": ac,
+        "meeting_date": effective_meeting_date,
+        "search_filter": search_filter,
         "status_filter": status or "",
         "quick_filter": quick or "",
         "next_snapshot_id": next_snap.id if next_snap else None,
         "selected_ac_id": task_item.aircraft_id,
-        "meeting_date": snap.meeting_date.isoformat() if snap.meeting_date else "",
         "shop_id": task_item.shop_id or "",
         "work_package_id": task_item.work_package_id or "",
         "can_edit": can_edit,
@@ -1312,6 +1447,7 @@ async def mobile_m4(
     request: Request,
     ac_id: int | None = Query(None),
     meeting_date: str | None = Query(None),
+    search: str | None = Query(None),
     shop_id: int | None = Query(None),
     work_package_id: int | None = Query(None),
     status: str | None = Query(None),
@@ -1320,11 +1456,12 @@ async def mobile_m4(
     db: AsyncSession = Depends(get_db),
 ):
     workers = await _get_workers(db)
-    return templates.TemplateResponse("tasks/partials/_m4_add_task.html", {
+    return templates.TemplateResponse(request, "tasks/partials/_m4_add_task.html", {
         "request": request,
         "workers": workers,
         "selected_ac_id": ac_id,
         "meeting_date": meeting_date or "",
+        "search_filter": _normalize_entry_search(search),
         "shop_id": shop_id or "",
         "work_package_id": work_package_id or "",
         "status_filter": status or "",
@@ -1339,6 +1476,8 @@ async def mobile_m5(
     request: Request,
     snapshot_id: int = Query(...),
     ac: str = Query(""),
+    meeting_date: str | None = Query(None),
+    search: str | None = Query(None),
     status: str | None = Query(None),
     quick: str | None = Query(None),
     current_user: dict = Depends(get_current_user),
@@ -1347,7 +1486,7 @@ async def mobile_m5(
     allowed_shop_ids = await _get_allowed_shop_ids(db, current_user)
     snap = (await db.execute(select(TaskSnapshot).where(TaskSnapshot.id == snapshot_id))).scalar_one_or_none()
     if not snap:
-        return templates.TemplateResponse("tasks/partials/_m5_detail.html", {
+        return templates.TemplateResponse(request, "tasks/partials/_m5_detail.html", {
             "request": request, "task": {}, "snapshots": [], "audit_logs": [], "ac_reg": ac,
             "status_filter": status or "",
             "quick_filter": quick or "",
@@ -1417,12 +1556,15 @@ async def mobile_m5(
         "created_at": log.created_at.strftime("%b %d, %H:%M") if log.created_at else None,
     } for log, user in audit_rows]
 
-    return templates.TemplateResponse("tasks/partials/_m5_detail.html", {
+    return templates.TemplateResponse(request, "tasks/partials/_m5_detail.html", {
         "request": request,
         "task": task_data,
         "snapshots": snapshots,
         "audit_logs": audit_logs,
         "ac_reg": ac,
+        "meeting_date": meeting_date or (snap.meeting_date.isoformat() if snap.meeting_date else ""),
+        "search_filter": _normalize_entry_search(search),
         "status_filter": status or "",
         "quick_filter": quick or "",
     })
+

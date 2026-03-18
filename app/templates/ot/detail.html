@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% block title %}OT Detail - CIS ERP{% endblock %}
-{% block breadcrumb %}<a href="/ot" class="text-surf-400 hover:text-navy-700">OT Requests</a> <span class="text-surf-300 mx-1">/</span> {% if ot %}OT-{{ '%03d' % ot.id }}{% else %}Not Found{% endif %}{% endblock %}
+{% block breadcrumb %}<a href="{{ back_href or '/ot' }}" class="text-surf-400 hover:text-navy-700">OT Requests</a> <span class="text-surf-300 mx-1">/</span> {% if ot %}OT-{{ '%03d' % ot.id }}{% else %}Not Found{% endif %}{% endblock %}
 
 {% block content %}
 <div id="ot-content" class="p-4 lg:p-5 flex flex-col h-full w-full overflow-y-auto">
   {% if not ot %}
   <div class="card p-8 text-center">
     <div class="text-surf-400 text-lg mb-2">OT request not found</div>
-    <a href="/ot" class="btn-outline"
-       hx-get="/ot" hx-target="#ot-content" hx-select="#ot-content > *" hx-swap="innerHTML" hx-push-url="true">Back to OT List</a>
+    <a href="{{ back_href or '/ot' }}" class="btn-outline"
+       hx-get="{{ back_href or '/ot' }}" hx-target="#ot-content" hx-select="#ot-content > *" hx-swap="innerHTML" hx-push-url="true">Back to OT List</a>
   </div>
   {% else %}
   <div class="flex items-center justify-between mb-3">

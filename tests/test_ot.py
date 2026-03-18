@@ -362,3 +362,64 @@ async def test_csv_export_worker_forbidden(worker_client, db):
     """WORKER cannot export CSV."""
     resp = await worker_client.get("/api/ot/export/csv")
     assert resp.status_code == 403
+
+
+async def test_csv_export_search_filters_results(async_client, db):
+    """CSV export should honor the free-text search filter used by the OT list."""
+    first = await async_client.post(
+        "/api/ot",
+        json={**OT_BASE, "reason_code": "OTHER", "reason_text": "Hydraulic support"},
+        headers=CSRF_HEADERS,
+    )
+    assert first.status_code == 200
+    second = await async_client.post(
+        "/api/ot",
+        json={
+            **OT_BASE,
+            "date": (date.fromisoformat(TOMORROW) + timedelta(days=1)).isoformat(),
+            "reason_code": "OTHER",
+            "reason_text": "Cabin repaint",
+        },
+        headers=CSRF_HEADERS,
+    )
+    assert second.status_code == 200
+
+    resp = await async_client.get("/api/ot/export/csv?search=Hydraulic")
+    assert resp.status_code == 200
+    text = resp.text
+    assert "Hydraulic support" in text
+    assert "Cabin repaint" not in text
+
+
+async def test_csv_export_date_range_filters_results(async_client, db):
+    """CSV export should honor the OT list date range filters."""
+    first_day = (TODAY + timedelta(days=1)).isoformat()
+    second_day = (TODAY + timedelta(days=6)).isoformat()
+    first = await async_client.post(
+        "/api/ot",
+        json={
+            **OT_BASE,
+            "date": first_day,
+            "reason_code": "OTHER",
+            "reason_text": "First range entry",
+        },
+        headers=CSRF_HEADERS,
+    )
+    assert first.status_code == 200
+    second = await async_client.post(
+        "/api/ot",
+        json={
+            **OT_BASE,
+            "date": second_day,
+            "reason_code": "OTHER",
+            "reason_text": "Second range entry",
+        },
+        headers=CSRF_HEADERS,
+    )
+    assert second.status_code == 200
+
+    resp = await async_client.get(f"/api/ot/export/csv?date_from={first_day}&date_to={first_day}")
+    assert resp.status_code == 200
+    text = resp.text
+    assert "First range entry" in text
+    assert "Second range entry" not in text

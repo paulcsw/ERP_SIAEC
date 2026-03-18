@@ -10,6 +10,7 @@ from starlette.responses import StreamingResponse
 
 from app.api.deps import get_current_user, get_db, require_role
 from app.models.ot import OtApproval, OtRequest
+from app.models.reference import WorkPackage
 from app.models.user import User
 from app.schemas.common import APIError, PaginatedResponse, pagination_params
 from app.schemas.ot import (
@@ -20,7 +21,14 @@ from app.schemas.ot import (
     OtSubmit,
 )
 from app.services.audit_service import write_audit
-from app.services.ot_service import submit_bulk, submit_single
+from app.services.ot_service import (
+    apply_ot_role_scope,
+    apply_ot_search_filter,
+    get_visible_ot_user_ids,
+    normalize_ot_search,
+    submit_bulk,
+    submit_single,
+)
 
 router = APIRouter(prefix="/api/ot", tags=["ot"])
 
@@ -144,6 +152,7 @@ async def export_ot_csv(
     date_from: date | None = Query(None),
     date_to: date | None = Query(None),
     status: str | None = Query(None),
+    search: str | None = Query(None),
     user_id: int | None = Query(None),
     shop_id: int | None = Query(None),
     current_user: dict = Depends(get_current_user),
@@ -153,16 +162,15 @@ async def export_ot_csv(
     if not ("SUPERVISOR" in roles or "ADMIN" in roles):
         raise APIError(403, "SUPERVISOR+ required for CSV export", "FORBIDDEN")
 
-    q = select(OtRequest)
-
-    # Role scoping
-    if "ADMIN" not in roles:
-        team_user_ids = (
-            await db.execute(
-                select(User.id).where(User.team == current_user.get("team"))
-            )
-        ).scalars().all()
-        q = q.where(OtRequest.user_id.in_(team_user_ids))
+    search_filter = normalize_ot_search(search)
+    visible_user_ids = await get_visible_ot_user_ids(db, current_user)
+    q = (
+        select(OtRequest)
+        .join(User, OtRequest.user_id == User.id)
+        .outerjoin(WorkPackage, OtRequest.work_package_id == WorkPackage.id)
+    )
+    q = apply_ot_role_scope(q, visible_user_ids)
+    q = apply_ot_search_filter(q, search_filter)
 
     if status:
         q = q.where(OtRequest.status == status)

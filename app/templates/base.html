@@ -209,7 +209,7 @@ body{font-family:'Outfit',system-ui,sans-serif;background:#f5f7fa;color:#1a2332;
 html[data-font-size="large"] #mobile-app{font-size:18px}
 html[data-font-size="xlarge"] #mobile-app{font-size:20px}
 </style>
-{% block head %}{% endblock %}
+<template id="page-head-template">{% block head %}{% endblock %}</template>
 </head>
 <body hx-headers='js:{"X-CSRFToken": document.cookie.match(/csrftoken=([^;]+)/)?.[1] || ""}'>
 
@@ -327,18 +327,31 @@ html[data-font-size="xlarge"] #mobile-app{font-size:20px}
 
 {# ===== DESKTOP MAIN ===== #}
 <div class="main-wrap" id="main-wrap">
+  {{ self.head() }}
   <header class="h-12 bg-white border-b border-surf-200 flex items-center px-4 lg:px-5 gap-3 shrink-0">
     <div class="text-sm flex items-center gap-1.5">
       <span class="text-navy-700 font-medium">{% block breadcrumb %}{% endblock %}</span>
     </div>
     <div class="flex-1"></div>
-    <div class="relative">
-      <input type="text" class="inp text-sm py-1.5 pl-8 pr-3 w-52" placeholder="Search..." style="font-size:13px">
-      <svg class="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-surf-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-    </div>
-    <button class="relative p-1.5 rounded-lg hover:bg-surf-50 transition-colors">
-      <svg class="w-5 h-5 text-surf-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-    </button>
+    <form action="/search"
+          method="get"
+          class="relative"
+          role="search"
+          hx-get="/search"
+          hx-target="#main-wrap"
+          hx-select="#main-wrap > *"
+          hx-swap="innerHTML"
+          hx-push-url="true">
+      <label class="sr-only" for="desktop-global-search">Global search</label>
+      <input id="desktop-global-search"
+             name="q"
+             type="text"
+             value="{{ header_search_query or '' }}"
+             class="inp text-sm py-1.5 pl-8 pr-3 w-52"
+             placeholder="Search..."
+             style="font-size:13px">
+      <svg class="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-surf-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+    </form>
     <div class="flex items-center gap-2 text-xs text-surf-400">
       <span>{{ current_user.display_name }}</span>
       <span class="badge badge-pending text-[10px]">{{ current_user.roles | join(', ') }}</span>
@@ -347,6 +360,7 @@ html[data-font-size="xlarge"] #mobile-app{font-size:20px}
   <div class="flex-1 flex flex-col min-h-0 overflow-auto">
     {% block content %}{% endblock %}
   </div>
+  {{ self.scripts() }}
 </div>
 
 {# ===== MOBILE APP ===== #}
@@ -525,6 +539,6 @@ if (!window.__cisBaseNavBound) {
   window.__cisBaseNavBound = true;
 }
 </script>
-{% block scripts %}{% endblock %}
+<template id="page-scripts-template">{% block scripts %}{% endblock %}</template>
 </body>
 </html>

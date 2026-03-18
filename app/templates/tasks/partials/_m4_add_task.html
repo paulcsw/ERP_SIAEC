@@ -9,6 +9,7 @@
   <div class="modal-body space-y-4">
     <input type="hidden" id="m4-aircraft-id" value="{{ selected_ac_id or '' }}"/>
     <input type="hidden" id="m4-meeting-date" value="{{ meeting_date or '' }}"/>
+    <input type="hidden" id="m4-search-filter" value="{{ search_filter or '' }}"/>
     <input type="hidden" id="m4-shop-id" value="{{ shop_id or '' }}"/>
     <input type="hidden" id="m4-wp-id" value="{{ work_package_id or '' }}"/>
     <input type="hidden" id="m4-status-filter" value="{{ status_filter or '' }}"/>
@@ -191,9 +192,13 @@ async function mobCreateTask() {
     document.getElementById('m4-worker').value = '';
 
     var ac = document.getElementById('mob-ac-reg') ? document.getElementById('mob-ac-reg').value : '';
+    var meetingDateFilter = (document.getElementById('m4-meeting-date') || {}).value || '';
+    var searchFilter = (document.getElementById('m4-search-filter') || {}).value || '';
     var statusFilter = (document.getElementById('m4-status-filter') || {}).value || '';
     var quickFilter = (document.getElementById('m4-quick-filter') || {}).value || '';
     var filterParts = [];
+    if (meetingDateFilter) filterParts.push('meeting_date=' + encodeURIComponent(meetingDateFilter));
+    if (searchFilter) filterParts.push('search=' + encodeURIComponent(searchFilter));
     if (statusFilter) filterParts.push('status=' + encodeURIComponent(statusFilter));
     if (quickFilter) filterParts.push('quick=' + encodeURIComponent(quickFilter));
     var filterQuery = filterParts.length ? '&' + filterParts.join('&') : '';
@@ -204,7 +209,7 @@ async function mobCreateTask() {
         htmx.ajax('GET', '/tasks/entry/mobile/m2?ac=' + ac + filterQuery, { target: '#mob-entry-stage', swap: 'innerHTML' });
       }
     } else if (typeof htmx !== 'undefined') {
-      htmx.ajax('GET', '/tasks/entry/mobile/m1', { target: '#mob-entry-stage', swap: 'innerHTML' });
+      htmx.ajax('GET', '/tasks/entry/mobile/m1' + (filterParts.length ? '?' + filterParts.join('&') : ''), { target: '#mob-entry-stage', swap: 'innerHTML' });
     }
   } catch (err) {
     showToast('Error', (err && err.message) || 'Failed to create task', 'red');

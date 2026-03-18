@@ -1,65 +1,87 @@
 {# M1: Aircraft List - mobile #}
 <div id="mob-m1" class="flex flex-col h-full bg-white">
-  <div class="p-4 space-y-3 border-b border-surf-100 shrink-0">
-    <div class="flex items-center justify-between">
-      <div>
+  <form class="p-4 space-y-3 border-b border-surf-100 shrink-0"
+        onsubmit="event.preventDefault(); return mobSubmitEntryFilters(this);">
+    <input type="hidden" name="status" value="{{ status_filter or '' }}">
+    <input type="hidden" name="quick" value="{{ quick_filter or '' }}">
+    <div class="flex items-center justify-between gap-3">
+      <div class="min-w-0">
         <h1 class="text-lg font-bold text-navy-900">My Assigned Tasks</h1>
         <div class="text-sm text-surf-400 mt-0.5">{{ shop_context or 'All Shops' }}</div>
       </div>
-      <select class="inp h-8 text-xs w-28" hx-get="/tasks/entry" hx-target="#mob-entry-stage" hx-push-url="true"
-              name="meeting_date">
-        <option>{{ meeting_date or 'Current' }}</option>
+      <select class="inp h-8 text-xs w-32 shrink-0"
+              name="meeting_date"
+              onchange="this.form.requestSubmit()">
+        {% if meeting_dates %}
+          {% for option in meeting_dates %}
+          <option value="{{ option }}" {% if meeting_date == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        {% else %}
+          <option value="{{ meeting_date or '' }}">{{ meeting_date or 'Current' }}</option>
+        {% endif %}
       </select>
     </div>
-    <input class="inp w-full h-10 text-sm pl-10" placeholder="Search aircraft or task..."
-      style="background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22 fill=%22%2394a3b8%22 viewBox=%220 0 24 24%22><path d=%22M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z%22 stroke=%22%2394a3b8%22 stroke-width=%222%22 fill=%22none%22/></svg>');background-repeat:no-repeat;background-position:12px center;background-size:16px"/>
-    {# Status filter chips #}
+    <input name="search"
+           class="inp w-full h-10 text-sm pl-10"
+           value="{{ search_filter }}"
+           placeholder="Search aircraft or task..."
+           onkeydown="if(event.key==='Enter'){event.preventDefault(); this.form.requestSubmit();}"
+           style="background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2216%22 height=%2216%22 fill=%22%2394a3b8%22 viewBox=%220 0 24 24%22><path d=%22M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z%22 stroke=%22%2394a3b8%22 stroke-width=%222%22 fill=%22none%22/></svg>');background-repeat:no-repeat;background-position:12px center;background-size:16px"/>
     <div class="flex flex-wrap gap-1.5">
-      <button class="entry-chip {% if not status_filter %}active{% endif %}"
-              hx-get="/tasks/entry/mobile/m1" hx-target="#mob-entry-stage">All</button>
-      <button class="entry-chip {% if status_filter == 'NOT_STARTED' %}active{% endif %}"
-              hx-get="/tasks/entry/mobile/m1?status=NOT_STARTED" hx-target="#mob-entry-stage">Not Started</button>
-      <button class="entry-chip {% if status_filter == 'IN_PROGRESS' %}active{% endif %}"
-              hx-get="/tasks/entry/mobile/m1?status=IN_PROGRESS" hx-target="#mob-entry-stage">In Progress</button>
-      <button class="entry-chip {% if status_filter == 'WAITING' %}active{% endif %}"
-              hx-get="/tasks/entry/mobile/m1?status=WAITING" hx-target="#mob-entry-stage">Waiting</button>
-      <button class="entry-chip {% if status_filter == 'COMPLETED' %}active{% endif %}"
-              hx-get="/tasks/entry/mobile/m1?status=COMPLETED" hx-target="#mob-entry-stage">Completed</button>
+      <button type="button" class="entry-chip {% if not status_filter %}active{% endif %}"
+              hx-get="/tasks/entry/mobile/m1?meeting_date={{ meeting_date }}{% if search_filter %}&amp;search={{ search_filter | urlencode }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}"
+              hx-target="#mob-entry-stage"
+              hx-push-url="/tasks/entry?meeting_date={{ meeting_date }}{% if search_filter %}&amp;search={{ search_filter | urlencode }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}">All</button>
+      <button type="button" class="entry-chip {% if status_filter == 'NOT_STARTED' %}active{% endif %}"
+              hx-get="/tasks/entry/mobile/m1?meeting_date={{ meeting_date }}&amp;status=NOT_STARTED{% if search_filter %}&amp;search={{ search_filter | urlencode }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}"
+              hx-target="#mob-entry-stage"
+              hx-push-url="/tasks/entry?meeting_date={{ meeting_date }}&amp;status=NOT_STARTED{% if search_filter %}&amp;search={{ search_filter | urlencode }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}">Not Started</button>
+      <button type="button" class="entry-chip {% if status_filter == 'IN_PROGRESS' %}active{% endif %}"
+              hx-get="/tasks/entry/mobile/m1?meeting_date={{ meeting_date }}&amp;status=IN_PROGRESS{% if search_filter %}&amp;search={{ search_filter | urlencode }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}"
+              hx-target="#mob-entry-stage"
+              hx-push-url="/tasks/entry?meeting_date={{ meeting_date }}&amp;status=IN_PROGRESS{% if search_filter %}&amp;search={{ search_filter | urlencode }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}">In Progress</button>
+      <button type="button" class="entry-chip {% if status_filter == 'WAITING' %}active{% endif %}"
+              hx-get="/tasks/entry/mobile/m1?meeting_date={{ meeting_date }}&amp;status=WAITING{% if search_filter %}&amp;search={{ search_filter | urlencode }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}"
+              hx-target="#mob-entry-stage"
+              hx-push-url="/tasks/entry?meeting_date={{ meeting_date }}&amp;status=WAITING{% if search_filter %}&amp;search={{ search_filter | urlencode }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}">Waiting</button>
+      <button type="button" class="entry-chip {% if status_filter == 'COMPLETED' %}active{% endif %}"
+              hx-get="/tasks/entry/mobile/m1?meeting_date={{ meeting_date }}&amp;status=COMPLETED{% if search_filter %}&amp;search={{ search_filter | urlencode }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}"
+              hx-target="#mob-entry-stage"
+              hx-push-url="/tasks/entry?meeting_date={{ meeting_date }}&amp;status=COMPLETED{% if search_filter %}&amp;search={{ search_filter | urlencode }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}">Completed</button>
     </div>
-    {# Quick chips #}
     <div class="flex gap-1.5">
-      <button class="entry-qchip {% if quick_filter == 'issue' %}on{% endif %}"
-              hx-get="/tasks/entry/mobile/m1?quick=issue" hx-target="#mob-entry-stage">Issue</button>
-      <button class="entry-qchip {% if quick_filter == 'new' %}on{% endif %}"
-              hx-get="/tasks/entry/mobile/m1?quick=new" hx-target="#mob-entry-stage">New</button>
+      <button type="button" class="entry-qchip {% if quick_filter == 'issue' %}on{% endif %}"
+              hx-get="/tasks/entry/mobile/m1?meeting_date={{ meeting_date }}{% if search_filter %}&amp;search={{ search_filter | urlencode }}{% endif %}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if quick_filter != 'issue' %}&amp;quick=issue{% endif %}"
+              hx-target="#mob-entry-stage"
+              hx-push-url="/tasks/entry?meeting_date={{ meeting_date }}{% if search_filter %}&amp;search={{ search_filter | urlencode }}{% endif %}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if quick_filter != 'issue' %}&amp;quick=issue{% endif %}">
+        Issue
+      </button>
+      <button type="button" class="entry-qchip {% if quick_filter == 'new' %}on{% endif %}"
+              hx-get="/tasks/entry/mobile/m1?meeting_date={{ meeting_date }}{% if search_filter %}&amp;search={{ search_filter | urlencode }}{% endif %}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if quick_filter != 'new' %}&amp;quick=new{% endif %}"
+              hx-target="#mob-entry-stage"
+              hx-push-url="/tasks/entry?meeting_date={{ meeting_date }}{% if search_filter %}&amp;search={{ search_filter | urlencode }}{% endif %}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if quick_filter != 'new' %}&amp;quick=new{% endif %}">
+        <svg class="w-3 h-3 inline -mt-0.5 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+        New
+      </button>
     </div>
-  </div>
+  </form>
   <div class="flex-1 overflow-y-auto">
     <div class="divide-y divide-surf-100">
       {% for ac in ac_groups %}
       <div class="px-4 py-3 cursor-pointer hover:bg-surf-50 active:bg-surf-100"
-           hx-get="/tasks/entry/mobile/m2?ac={{ ac.ac_reg }}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}"
-           hx-target="#mob-entry-stage" hx-push-url="/tasks/entry?ac={{ ac.ac_reg }}">
+           hx-get="/tasks/entry/mobile/m2?ac={{ ac.ac_reg }}&amp;meeting_date={{ meeting_date }}{% if search_filter %}&amp;search={{ search_filter | urlencode }}{% endif %}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}"
+           hx-target="#mob-entry-stage"
+           hx-push-url="/tasks/entry?ac={{ ac.ac_reg }}&amp;meeting_date={{ meeting_date }}{% if search_filter %}&amp;search={{ search_filter | urlencode }}{% endif %}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}">
         <div class="flex items-center justify-between">
           <span class="font-mono text-base font-bold text-navy-900">{{ ac.ac_reg }}</span>
           <div class="flex items-center gap-1.5">
             {% if ac.has_new %}
             <span class="badge-new">NEW</span>
             {% endif %}
-            {% if ac.airline %}
-            <span class="text-xs text-surf-400 bg-surf-100 px-2 py-0.5 rounded">{{ ac.airline }}</span>
-            {% endif %}
           </div>
         </div>
-        {% if ac.ac_info %}
-        <div class="text-sm text-surf-400 mt-1">{{ ac.ac_info }}</div>
-        {% endif %}
-        {% if ac.rfo_no %}
-        <div class="text-sm text-navy-600 font-mono mt-0.5">{{ ac.rfo_no }}</div>
-        {% endif %}
         <div class="flex items-center gap-3 mt-1">
-          <span class="text-sm font-medium text-navy-700">{{ ac.task_count }} task{{ 's' if ac.task_count != 1 }}</span>
-          {% if ac.total_mh %}<span class="text-sm text-surf-400">{{ ac.total_mh }} MH</span>{% endif %}
+          <span class="text-sm font-medium text-navy-700">{{ ac.task_count }} task{{ 's' if ac.task_count != 1 else '' }}</span>
           {% if ac.needs_update_count %}
           <span class="text-xs font-medium" style="color:#a07d12">{{ ac.needs_update_count }} needs update</span>
           {% endif %}
@@ -78,3 +100,24 @@
     {% if total_new %}&middot; <span style="color:#b93a3a" class="font-medium">{{ total_new }} new</span>{% endif %}
   </div>
 </div>
+<script>
+function mobSubmitEntryFilters(form) {
+  if (typeof htmx === 'undefined') return false;
+  var fd = new FormData(form);
+  var params = new URLSearchParams();
+  ['meeting_date', 'search', 'status', 'quick'].forEach(function (key) {
+    var raw = fd.get(key);
+    var value = typeof raw === 'string' ? raw.trim() : '';
+    if (value) params.set(key, value);
+  });
+  var query = params.toString() ? '?' + params.toString() : '';
+  htmx.ajax('GET', '/tasks/entry/mobile/m1' + query, {
+    target: '#mob-entry-stage',
+    swap: 'innerHTML'
+  });
+  if (window.history && typeof window.history.pushState === 'function') {
+    window.history.pushState({}, '', '/tasks/entry' + query);
+  }
+  return false;
+}
+</script>

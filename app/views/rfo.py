@@ -319,7 +319,7 @@ async def rfo_index(
                 "weeks": burndown_weeks,
             }
 
-    return templates.TemplateResponse("rfo/detail.html", _ctx(
+    return templates.TemplateResponse(request, "rfo/detail.html", _ctx(
         request, current_user,
         rfo_options=rfo_options,
         selected=selected,
@@ -330,3 +330,4 @@ async def rfo_index(
         workers_data=workers_data,
         burndown_data=burndown_data,
     ))
+
