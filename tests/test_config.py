@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 
+from app.config import Settings
 from app.models.system_config import SystemConfig
 from tests.conftest import CSRF_HEADERS
 
@@ -89,3 +90,13 @@ async def test_get_config_unknown_key(async_client, db):
     resp = await async_client.get("/api/config/unknown_key")
     assert resp.status_code == 404
     assert resp.json()["code"] == "NOT_FOUND"
+
+
+def test_settings_accepts_release_as_non_debug():
+    cfg = Settings(_env_file=None, DEBUG="release")
+    assert cfg.DEBUG is False
+
+
+def test_settings_accepts_development_as_debug():
+    cfg = Settings(_env_file=None, DEBUG="development")
+    assert cfg.DEBUG is True

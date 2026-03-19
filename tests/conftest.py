@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 
 import pytest
 import pytest_asyncio
-from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from itsdangerous import TimestampSigner
 from sqlalchemy import BigInteger, event as sa_event, select
@@ -48,20 +47,23 @@ _ADMIN_SESSION = {
 
 # ── Sync fixtures (test_auth.py, no DB needed) ─────────────────────
 
-@pytest.fixture()
-def client():
-    """Unauthenticated test client."""
+@pytest_asyncio.fixture
+async def client():
+    """Unauthenticated async client without DB override."""
     reset_rate_limits()
-    return TestClient(app, raise_server_exceptions=False)
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
 
 
-@pytest.fixture()
-def auth_client():
-    """Authenticated test client (ADMIN) with session + CSRF token."""
+@pytest_asyncio.fixture
+async def auth_client():
+    """Authenticated ADMIN async client without DB override."""
     reset_rate_limits()
-    c = TestClient(app, raise_server_exceptions=False)
-    c.cookies.set("session", _make_session_cookie(_ADMIN_SESSION))
-    return c
+    transport = ASGITransport(app=app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        c.cookies.set("session", _make_session_cookie(_ADMIN_SESSION))
+        yield c
 
 
 # ── Async DB engine (SQLite in-memory for tests) ───────────────────

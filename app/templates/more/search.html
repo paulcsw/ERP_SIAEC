@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Search - CIS ERP{% endblock %}
+{% block breadcrumb %}Search{% endblock %}
+
+{% block content %}
+<div class="p-4 lg:p-5 flex flex-col h-full w-full overflow-y-auto">
+  <div class="w-full max-w-5xl mx-auto space-y-4">
+    <div class="card p-4">
+      <div class="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 class="text-lg font-semibold text-navy-900">Global Search</h1>
+          <p class="text-xs text-surf-400 mt-1">Search across tasks, overtime requests, and RFO records from one place.</p>
+        </div>
+        <form method="get"
+              action="/search"
+              class="w-full sm:w-auto sm:min-w-[320px]"
+              hx-get="/search"
+              hx-target="#main-wrap"
+              hx-select="#main-wrap > *"
+              hx-swap="innerHTML"
+              hx-push-url="true">
+          <label class="sr-only" for="global-search-page-input">Search</label>
+          <div class="relative">
+            <input id="global-search-page-input"
+                   name="q"
+                   type="text"
+                   class="inp h-10 w-full pl-9 pr-3 text-sm"
+                   placeholder="Search aircraft, task text, employee no, RFO..."
+                   value="{{ query }}">
+            <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-surf-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {% if not query %}
+    <div class="card p-6">
+      <div class="text-sm font-medium text-navy-900">Enter a keyword to start</div>
+      <p class="text-xs text-surf-400 mt-2">Examples: aircraft reg, task text, employee number, OT id, or RFO number.</p>
+    </div>
+    {% elif not has_any_results %}
+    <div class="card p-6">
+      <div class="text-sm font-medium text-navy-900">No matches found for "{{ query }}"</div>
+      <p class="text-xs text-surf-400 mt-2">Try a broader keyword or search by aircraft registration, worker name, or RFO number.</p>
+    </div>
+    {% endif %}
+
+    {% if query %}
+    {% for section in search_sections %}
+    <section class="card overflow-hidden">
+      <div class="px-4 py-3 border-b border-surf-100 flex items-start justify-between gap-3">
+        <div>
+          <h2 class="text-sm font-semibold text-navy-900">{{ section.title }}</h2>
+          {% if section.description %}
+          <p class="text-[11px] text-surf-400 mt-0.5">{{ section.description }}</p>
+          {% endif %}
+        </div>
+        {% if section.list_href %}
+        <a href="{{ section.list_href }}"
+           class="text-xs text-st-blue font-medium whitespace-nowrap hover:underline"
+           hx-get="{{ section.list_href }}"
+           hx-target="#main-wrap"
+           hx-select="#main-wrap > *"
+           hx-swap="innerHTML"
+           hx-push-url="true">{{ section.link_label or 'Open' }}</a>
+        {% endif %}
+      </div>
+      {% if section.results %}
+      <div class="divide-y divide-surf-100">
+        {% for item in section.results %}
+        <a href="{{ item.href }}" class="block px-4 py-3 hover:bg-surf-50 transition-colors" style="text-decoration:none">
+          <div class="text-[11px] uppercase tracking-wide text-surf-400 font-medium">{{ item.eyebrow }}</div>
+          <div class="text-sm font-medium text-navy-900 mt-0.5">{{ item.title }}</div>
+          <div class="text-xs text-surf-500 mt-1">{{ item.meta }}</div>
+          {% if item.summary %}
+          <div class="text-xs text-surf-400 mt-1.5">{{ item.summary }}</div>
+          {% endif %}
+        </a>
+        {% endfor %}
+      </div>
+      {% elif query %}
+      <div class="px-4 py-6 text-xs text-surf-400">No matches in this section.</div>
+      {% endif %}
+      {% if section.has_more %}
+      <div class="px-4 py-2.5 border-t border-surf-100 bg-surf-50 text-[11px] text-surf-400">Showing the first 8 matches.</div>
+      {% endif %}
+    </section>
+    {% endfor %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block mobile_content %}
+<div class="mob-page active" id="mob-search">
+  <div class="flex flex-col h-full">
+    <div class="p-4 bg-white border-b border-surf-200 shrink-0">
+      <div class="text-lg font-bold text-navy-900">Search</div>
+      <form method="get" action="/search" class="mt-3">
+        <div class="relative">
+          <input name="q"
+                 type="text"
+                 class="inp w-full h-10 pl-9 pr-3 text-sm"
+                 placeholder="Search..."
+                 value="{{ query }}">
+          <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-surf-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        </div>
+      </form>
+    </div>
+
+    <div class="flex-1 overflow-y-auto p-4 space-y-3">
+      {% if not query %}
+      <div class="card p-4 text-xs text-surf-400">Enter a keyword to search tasks, OT requests, and RFO records.</div>
+      {% elif not has_any_results %}
+      <div class="card p-4 text-xs text-surf-400">No matches found for "{{ query }}".</div>
+      {% endif %}
+
+      {% if query %}
+      {% for section in search_sections %}
+      <section class="card overflow-hidden">
+        <div class="px-4 py-3 border-b border-surf-100">
+          <div class="text-sm font-semibold text-navy-900">{{ section.title }}</div>
+        </div>
+        {% if section.results %}
+        <div class="divide-y divide-surf-100">
+          {% for item in section.results %}
+          <a href="{{ item.href }}" class="block px-4 py-3 active:bg-surf-50" style="text-decoration:none">
+            <div class="text-[11px] uppercase tracking-wide text-surf-400 font-medium">{{ item.eyebrow }}</div>
+            <div class="text-sm font-medium text-navy-900 mt-0.5">{{ item.title }}</div>
+            <div class="text-xs text-surf-500 mt-1">{{ item.meta }}</div>
+            {% if item.summary %}
+            <div class="text-xs text-surf-400 mt-1.5">{{ item.summary }}</div>
+            {% endif %}
+          </a>
+          {% endfor %}
+        </div>
+        {% elif query %}
+        <div class="px-4 py-4 text-xs text-surf-400">No matches in this section.</div>
+        {% endif %}
+      </section>
+      {% endfor %}
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

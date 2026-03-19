@@ -241,8 +241,8 @@ function renderSnapWeek() {
     advName + ' to ' + prevDay + ' \u00b7 Data entry open for this period';
 }
 
-// Init on load
-document.addEventListener('DOMContentLoaded', renderSnapWeek);
+// Init on load / HTMX swap
+renderSnapWeek();
 
 /* ── CSRF helper ─────────────────────────────────────────── */
 function csrfToken() {

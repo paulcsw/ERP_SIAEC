@@ -126,6 +126,14 @@ async def _grant_shop_access(db_factory, *, user_id: int, shop_id: int, access: 
         await s.commit()
 
 
+async def _seed_config_value(db_factory, *, key: str, value: str):
+    from app.models.system_config import SystemConfig
+
+    async with db_factory() as s:
+        s.add(SystemConfig(key=key, value=value, updated_by=1))
+        await s.commit()
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  OT STATISTICS API
 # ═══════════════════════════════════════════════════════════════════════
@@ -796,6 +804,395 @@ async def test_task_manager_status_filter(async_client, db):
     """GET /tasks?status=COMPLETED returns 200."""
     resp = await async_client.get("/tasks?status=COMPLETED")
     assert resp.status_code == 200
+
+
+async def test_task_manager_shell_assets_render_inside_main_wrap(async_client, db):
+    """Task Manager page-specific assets must render inside #main-wrap for HTMX sidebar swaps."""
+    resp = await async_client.get("/tasks")
+    assert resp.status_code == 200
+    body = resp.text
+    main_wrap = body.split('<div class="main-wrap" id="main-wrap">', 1)[1].split('<div id="mobile-app"', 1)[0]
+    assert ".split-detail{background:#fff" in main_wrap
+    assert "function selectTaskRow" in main_wrap
+    assert 'id="split-detail" class="split-detail w-full sm:w-[380px] overflow-y-auto"' in body
+    assert 'id="split-backdrop" class="split-backdrop"' in body
+
+
+async def test_task_entry_defaults_meeting_date_from_config(async_client, db):
+    """Data Entry should default to configured meeting_current_date when visible rows exist."""
+    from app.models.reference import WorkPackage
+    from sqlalchemy import select
+
+    await _seed_config_value(db, key="meeting_current_date", value="2026-03-03")
+    wp_id = await _seed_wp(db)
+    shop_id = await _seed_shop(db)
+
+    async with db() as s:
+        wp = (await s.execute(select(WorkPackage).where(WorkPackage.id == wp_id))).scalar_one()
+        ac_id = wp.aircraft_id
+
+    task_old = await _seed_task(db, wp_id=wp_id, shop_id=shop_id, ac_id=ac_id)
+    task_new = await _seed_task(db, wp_id=wp_id, shop_id=shop_id, ac_id=ac_id)
+    async with db() as s:
+        from app.models.task import TaskItem
+        old_row = (await s.execute(select(TaskItem).where(TaskItem.id == task_old))).scalar_one()
+        new_row = (await s.execute(select(TaskItem).where(TaskItem.id == task_new))).scalar_one()
+        old_row.task_text = "Configured week task"
+        new_row.task_text = "Later week task"
+        await s.commit()
+
+    await _seed_snapshot(db, task_id=task_old, meeting_date=date(2026, 3, 3), status="IN_PROGRESS")
+    await _seed_snapshot(db, task_id=task_new, meeting_date=date(2026, 3, 10), status="IN_PROGRESS")
+
+    resp = await async_client.get("/tasks/entry?ac=9V-TST")
+    assert resp.status_code == 200
+    body = resp.text
+    assert '<option value="2026-03-03" selected>' in body
+    assert "Configured week task" in body
+    assert "Later week task" not in body
+
+
+async def test_task_entry_falls_back_to_latest_visible_meeting_date(async_client, db):
+    """Data Entry should fall back to the latest visible snapshot week if config has no visible rows."""
+    from app.models.reference import WorkPackage
+    from sqlalchemy import select
+
+    await _seed_config_value(db, key="meeting_current_date", value="2026-03-17")
+    wp_id = await _seed_wp(db)
+    shop_id = await _seed_shop(db)
+
+    async with db() as s:
+        wp = (await s.execute(select(WorkPackage).where(WorkPackage.id == wp_id))).scalar_one()
+        ac_id = wp.aircraft_id
+
+    task_old = await _seed_task(db, wp_id=wp_id, shop_id=shop_id, ac_id=ac_id)
+    task_new = await _seed_task(db, wp_id=wp_id, shop_id=shop_id, ac_id=ac_id)
+    async with db() as s:
+        from app.models.task import TaskItem
+        old_row = (await s.execute(select(TaskItem).where(TaskItem.id == task_old))).scalar_one()
+        new_row = (await s.execute(select(TaskItem).where(TaskItem.id == task_new))).scalar_one()
+        old_row.task_text = "Older visible week task"
+        new_row.task_text = "Latest visible week task"
+        await s.commit()
+
+    await _seed_snapshot(db, task_id=task_old, meeting_date=date(2026, 3, 3), status="IN_PROGRESS")
+    await _seed_snapshot(db, task_id=task_new, meeting_date=date(2026, 3, 10), status="IN_PROGRESS")
+
+    resp = await async_client.get("/tasks/entry?ac=9V-TST")
+    assert resp.status_code == 200
+    body = resp.text
+    assert '<option value="2026-03-10" selected>' in body
+    assert "Latest visible week task" in body
+    assert "Older visible week task" not in body
+
+
+async def test_task_entry_search_filters_by_aircraft_reg_and_task_text(async_client, db):
+    """Data Entry search should match both aircraft registration and task text."""
+    from app.models.reference import Aircraft, WorkPackage
+    from app.models.task import TaskItem
+    from sqlalchemy import select
+
+    shop_id = await _seed_shop(db)
+
+    async with db() as s:
+        ac1 = Aircraft(ac_reg="9V-AAA", airline="Test Air", created_at=NOW)
+        ac2 = Aircraft(ac_reg="9V-BBB", airline="Test Air", created_at=NOW)
+        s.add_all([ac1, ac2])
+        await s.flush()
+        wp1 = WorkPackage(
+            aircraft_id=ac1.id, rfo_no="RFO-AAA", title="WP AAA",
+            start_date=date(2026, 3, 1), end_date=date(2026, 3, 31), created_at=NOW,
+        )
+        wp2 = WorkPackage(
+            aircraft_id=ac2.id, rfo_no="RFO-BBB", title="WP BBB",
+            start_date=date(2026, 3, 1), end_date=date(2026, 3, 31), created_at=NOW,
+        )
+        s.add_all([wp1, wp2])
+        await s.flush()
+        task1 = TaskItem(
+            aircraft_id=ac1.id, shop_id=shop_id, work_package_id=wp1.id,
+            planned_mh=10, task_text="Alpha torque check", is_active=True,
+            created_by=1, created_at=NOW,
+        )
+        task2 = TaskItem(
+            aircraft_id=ac2.id, shop_id=shop_id, work_package_id=wp2.id,
+            planned_mh=10, task_text="Zulu inspection", is_active=True,
+            created_by=1, created_at=NOW,
+        )
+        s.add_all([task1, task2])
+        await s.flush()
+        task1_id = task1.id
+        task2_id = task2.id
+        await s.commit()
+
+    await _seed_snapshot(db, task_id=task1_id, meeting_date=date(2026, 3, 10), status="IN_PROGRESS")
+    await _seed_snapshot(db, task_id=task2_id, meeting_date=date(2026, 3, 10), status="IN_PROGRESS")
+
+    reg_resp = await async_client.get("/tasks/entry?search=9V-BBB")
+    assert reg_resp.status_code == 200
+    assert "9V-BBB" in reg_resp.text
+    assert "9V-AAA" not in reg_resp.text
+
+    text_resp = await async_client.get("/tasks/entry?search=Alpha")
+    assert text_resp.status_code == 200
+    assert "9V-AAA" in text_resp.text
+    assert "9V-BBB" not in text_resp.text
+
+
+async def test_task_entry_mobile_partials_preserve_state_and_new_filter_icon(async_client, db):
+    """Mobile Data Entry partials should preserve filter params and render the bell-style New filter."""
+    wp_id = await _seed_wp(db)
+    shop_id = await _seed_shop(db)
+    task_id = await _seed_task(db, wp_id=wp_id, shop_id=shop_id)
+    snap_id = await _seed_snapshot(db, task_id=task_id, meeting_date=date(2026, 3, 10), status="IN_PROGRESS")
+
+    m1 = await async_client.get("/tasks/entry/mobile/m1?meeting_date=2026-03-10&search=Test&status=IN_PROGRESS&quick=new")
+    assert m1.status_code == 200
+    assert 'hx-push-url="/tasks/entry?meeting_date=2026-03-10' in m1.text
+    assert "search=Test" in m1.text
+    assert "quick=new" in m1.text
+    assert 'M15 17h5l-1.405-1.405A2.032' in m1.text
+    assert 'hx-push-url="true"' not in m1.text
+    assert "mobSubmitEntryFilters" in m1.text
+
+    m3 = await async_client.get(
+        f"/tasks/entry/mobile/m3?snapshot_id={snap_id}&ac=9V-TST&meeting_date=2026-03-10&search=Test&status=IN_PROGRESS&quick=new"
+    )
+    assert m3.status_code == 200
+    assert 'id="mob-meeting-date" value="2026-03-10"' in m3.text
+    assert 'id="mob-search-filter" value="Test"' in m3.text
+    assert "search=Test" in m3.text
+    assert "quick=new" in m3.text
+
+
+async def test_desktop_new_filter_uses_bell_icon(async_client, db):
+    """Desktop Data Entry New quick filter should use the bell icon semantics."""
+    wp_id = await _seed_wp(db)
+    shop_id = await _seed_shop(db)
+    task_id = await _seed_task(db, wp_id=wp_id, shop_id=shop_id)
+    await _seed_snapshot(db, task_id=task_id, meeting_date=date(2026, 3, 10), status="IN_PROGRESS")
+
+    resp = await async_client.get("/tasks/entry?ac=9V-TST")
+    assert resp.status_code == 200
+    assert 'M15 17h5l-1.405-1.405A2.032' in resp.text
+    assert "New" in resp.text
+
+
+async def test_shared_top_bar_notification_bell_removed(async_client, db):
+    """Shared desktop header should not render the inert notification bell."""
+    resp = await async_client.get("/dashboard")
+    assert resp.status_code == 200
+    assert 'M15 17h5l-1.405-1.405A2.032' not in resp.text
+
+
+async def test_shared_header_search_form_targets_global_search(async_client, db):
+    """Shared desktop header search should submit to the global search page."""
+    resp = await async_client.get("/dashboard")
+    assert resp.status_code == 200
+    body = resp.text
+    assert 'action="/search"' in body
+    assert 'method="get"' in body
+    assert 'id="desktop-global-search"' in body
+    assert 'name="q"' in body
+    assert 'hx-get="/search"' in body
+    assert 'hx-target="#main-wrap"' in body
+    assert 'hx-select="#main-wrap > *"' in body
+    assert 'hx-push-url="true"' in body
+
+
+async def test_global_search_page_aggregates_task_ot_and_rfo_results(async_client, db):
+    """Global search should aggregate matches across task, OT, and RFO domains."""
+    from sqlalchemy import select
+
+    from app.models.ot import OtRequest
+    from app.models.reference import WorkPackage
+    from app.models.task import TaskItem
+
+    wp_id = await _seed_wp(db)
+    shop_id = await _seed_shop(db)
+    task_id = await _seed_task(db, wp_id=wp_id, shop_id=shop_id, worker_id=3)
+    await _seed_snapshot(db, task_id=task_id, meeting_date=date(2026, 3, 10), status="IN_PROGRESS")
+    ot_id = await _seed_ot(
+        db,
+        user_id=1,
+        wp_id=wp_id,
+        dt="2026-03-10",
+        reason="OTHER",
+        status="PENDING",
+        minutes=120,
+    )
+
+    async with db() as s:
+        wp = (await s.execute(select(WorkPackage).where(WorkPackage.id == wp_id))).scalar_one()
+        task = (await s.execute(select(TaskItem).where(TaskItem.id == task_id))).scalar_one()
+        ot = (await s.execute(select(OtRequest).where(OtRequest.id == ot_id))).scalar_one()
+        wp.rfo_no = "RFO-HYD"
+        wp.title = "Hydraulic Package"
+        task.task_text = "Hydraulic leak check"
+        ot.reason_text = "Hydraulic support coverage"
+        await s.commit()
+
+    resp = await async_client.get("/search?q=Hydraulic")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "Global Search" in body
+    assert "Task Results" in body
+    assert "OT Results" in body
+    assert "RFO Results" in body
+    assert "Hydraulic leak check" in body
+    assert "Hydraulic support coverage" in body
+    assert "RFO-HYD" in body
+    assert f'href="/ot/{ot_id}"' in body
+    assert 'href="/ot?search=Hydraulic"' in body
+    assert f'href="/rfo?id={wp_id}"' in body
+    assert "/tasks/entry?ac=9V-TST" in body
+
+
+async def test_global_search_worker_scope_and_role_visibility(worker_client, db):
+    """Worker global search should respect task and OT scope and omit RFO results."""
+    from sqlalchemy import select
+
+    from app.models.ot import OtRequest
+    from app.models.reference import WorkPackage
+    from app.models.shop import Shop
+    from app.models.task import TaskItem
+
+    wp_id = await _seed_wp(db)
+    async with db() as s:
+        visible_shop = Shop(code="SCH1", name="Scope Visible", created_at=NOW)
+        hidden_shop = Shop(code="SCH2", name="Scope Hidden", created_at=NOW)
+        s.add_all([visible_shop, hidden_shop])
+        await s.flush()
+        visible_shop_id = visible_shop.id
+        hidden_shop_id = hidden_shop.id
+        wp = (await s.execute(select(WorkPackage).where(WorkPackage.id == wp_id))).scalar_one()
+        wp.rfo_no = "RFO-SCOPE"
+        wp.title = "Scope Package"
+        await s.commit()
+
+    visible_task_id = await _seed_task(db, wp_id=wp_id, shop_id=visible_shop_id, worker_id=3)
+    hidden_task_id = await _seed_task(db, wp_id=wp_id, shop_id=hidden_shop_id, worker_id=4)
+    await _seed_snapshot(db, task_id=visible_task_id, meeting_date=date(2026, 3, 10), status="IN_PROGRESS")
+    await _seed_snapshot(db, task_id=hidden_task_id, meeting_date=date(2026, 3, 10), status="IN_PROGRESS")
+    own_ot_id = await _seed_ot(
+        db,
+        user_id=3,
+        wp_id=wp_id,
+        dt="2026-03-10",
+        reason="OTHER",
+        status="PENDING",
+        minutes=60,
+    )
+    hidden_ot_id = await _seed_ot(
+        db,
+        user_id=4,
+        wp_id=wp_id,
+        dt="2026-03-10",
+        reason="OTHER",
+        status="PENDING",
+        minutes=60,
+    )
+
+    async with db() as s:
+        visible_task = (await s.execute(select(TaskItem).where(TaskItem.id == visible_task_id))).scalar_one()
+        hidden_task = (await s.execute(select(TaskItem).where(TaskItem.id == hidden_task_id))).scalar_one()
+        own_ot = (await s.execute(select(OtRequest).where(OtRequest.id == own_ot_id))).scalar_one()
+        hidden_ot = (await s.execute(select(OtRequest).where(OtRequest.id == hidden_ot_id))).scalar_one()
+        visible_task.task_text = "Visible scope task"
+        hidden_task.task_text = "Hidden scope task"
+        own_ot.reason_text = "Visible scope OT"
+        hidden_ot.reason_text = "Hidden scope OT"
+        await s.commit()
+
+    resp = await worker_client.get("/search?q=scope")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "Task Results" in body
+    assert "OT Results" in body
+    assert "Visible scope task" in body
+    assert "Hidden scope task" not in body
+    assert "Visible scope OT" in body
+    assert "Hidden scope OT" not in body
+    assert "RFO Results" not in body
+
+
+async def test_ot_list_search_filters_and_detail_links_preserve_state(async_client, db):
+    """OT list should filter by search/date text and carry list state into detail links."""
+    from sqlalchemy import select
+
+    from app.models.ot import OtRequest
+    from app.models.reference import WorkPackage
+
+    wp_id = await _seed_wp(db)
+    first_ot_id = await _seed_ot(
+        db,
+        user_id=1,
+        wp_id=wp_id,
+        dt="2026-03-10",
+        reason="OTHER",
+        status="PENDING",
+        minutes=60,
+    )
+    second_ot_id = await _seed_ot(
+        db,
+        user_id=1,
+        wp_id=wp_id,
+        dt="2026-03-15",
+        reason="OTHER",
+        status="PENDING",
+        minutes=60,
+    )
+
+    async with db() as s:
+        wp = (await s.execute(select(WorkPackage).where(WorkPackage.id == wp_id))).scalar_one()
+        first_ot = (await s.execute(select(OtRequest).where(OtRequest.id == first_ot_id))).scalar_one()
+        second_ot = (await s.execute(select(OtRequest).where(OtRequest.id == second_ot_id))).scalar_one()
+        wp.rfo_no = "RFO-OTSEARCH"
+        first_ot.reason_text = "Hydraulic support"
+        second_ot.reason_text = "Cabin repaint"
+        await s.commit()
+
+    resp = await async_client.get("/ot?search=Hydraulic&status=PENDING&date_from=2026-03-09&date_to=2026-03-12")
+    assert resp.status_code == 200
+    body = resp.text
+    assert 'id="ot-search"' in body
+    assert 'value="Hydraulic"' in body
+    assert 'id="ot-date-from"' in body
+    assert 'value="2026-03-09"' in body
+    assert 'id="ot-date-to"' in body
+    assert 'value="2026-03-12"' in body
+    assert f"OT-{first_ot_id:03d}" in body
+    assert f"OT-{second_ot_id:03d}" not in body
+    assert f'hx-get="/ot/{first_ot_id}?status=PENDING&amp;search=Hydraulic&amp;date_from=2026-03-09&amp;date_to=2026-03-12"' in body
+    assert 'search=Hydraulic' in body
+
+
+async def test_ot_detail_back_link_preserves_list_state(async_client, db):
+    """OT detail breadcrumb and back link should preserve OT list filters."""
+    ot_id = await _seed_ot(
+        db,
+        user_id=1,
+        dt="2026-03-10",
+        reason="OTHER",
+        status="PENDING",
+        minutes=60,
+    )
+
+    resp = await async_client.get(f"/ot/{ot_id}?status=PENDING&search=Hydraulic&date_from=2026-03-09&date_to=2026-03-12&page=3")
+    assert resp.status_code == 200
+    body = resp.text
+    assert 'href="/ot?status=PENDING&amp;search=Hydraulic&amp;date_from=2026-03-09&amp;date_to=2026-03-12&amp;page=3"' in body
+
+
+async def test_ot_new_page_contains_mobile_responsive_submit_layout(async_client, db):
+    """OT submit page should include the responsive mobile layout guards."""
+    resp = await async_client.get("/ot")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "mob-ot-time-grid" in body
+    assert "#ot-o1{overflow-x:hidden}" in body
+    assert "max-width:100%" in body
+    assert "@media(max-width:380px)" in body
 
 
 # ── Fix A: Dashboard RFO card navigation ──────────────────────────────────

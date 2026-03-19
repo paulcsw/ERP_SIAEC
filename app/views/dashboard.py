@@ -1,4 +1,4 @@
-"""Dashboard SSR view â€” landing page with KPIs, OT Quota, RFO Progress, Pipeline."""
+"""Dashboard SSR view ??landing page with KPIs, OT Quota, RFO Progress, Pipeline."""
 from datetime import date
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -94,7 +94,7 @@ async def dashboard_page(
             )
         ).scalars().all()
 
-    # â”€â”€ KPI 1: Active Tasks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ?€?€ KPI 1: Active Tasks ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
     active_tasks_q = (
         select(func.count())
         .select_from(TaskSnapshot)
@@ -109,7 +109,7 @@ async def dashboard_page(
         active_tasks_q = active_tasks_q.where(TaskItem.shop_id == selected_shop_id)
     active_tasks = (await db.execute(active_tasks_q)).scalar() or 0
 
-    # â”€â”€ KPI 2-3: OT Pending / Endorsed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ?€?€ KPI 2-3: OT Pending / Endorsed ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
     ot_pending_q = select(func.count()).select_from(OtRequest).where(OtRequest.status == "PENDING")
     ot_endorsed_q = select(func.count()).select_from(OtRequest).where(OtRequest.status == "ENDORSED")
     if user_scope_ids is not None:
@@ -122,7 +122,7 @@ async def dashboard_page(
     ot_pending = (await db.execute(ot_pending_q)).scalar() or 0
     ot_endorsed = (await db.execute(ot_endorsed_q)).scalar() or 0
 
-    # â”€â”€ KPI 4: Critical Issues â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ?€?€ KPI 4: Critical Issues ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
     critical_issues_q = (
         select(func.count())
         .select_from(TaskSnapshot)
@@ -137,7 +137,7 @@ async def dashboard_page(
         critical_issues_q = critical_issues_q.where(TaskItem.shop_id == selected_shop_id)
     critical_issues = (await db.execute(critical_issues_q)).scalar() or 0
 
-    # â”€â”€ KPI 5: Total MH (latest snapshots) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ?€?€ KPI 5: Total MH (latest snapshots) ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
     total_mh_q = (
         select(func.coalesce(func.sum(TaskSnapshot.mh_incurred_hours), 0))
         .join(TaskItem, TaskSnapshot.task_id == TaskItem.id)
@@ -151,7 +151,7 @@ async def dashboard_page(
     total_mh_raw = (await db.execute(total_mh_q)).scalar() or 0
     total_mh = round(float(total_mh_raw), 1)
 
-    # â”€â”€ Monthly OT Quota (per user) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ?€?€ Monthly OT Quota (per user) ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
     if is_admin:
         if selected_shop_code:
             user_rows = (await db.execute(
@@ -203,7 +203,7 @@ async def dashboard_page(
     else:
         avg_hours = 0
 
-    # â”€â”€ RFO Progress (per work package) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ?€?€ RFO Progress (per work package) ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
     wp_q = (
         select(WorkPackage, Aircraft)
         .join(Aircraft, WorkPackage.aircraft_id == Aircraft.id)
@@ -320,7 +320,7 @@ async def dashboard_page(
 
     rfo_overall_pct = round(grand_total_mh / grand_planned_mh * 100) if grand_planned_mh else 0
 
-    # â”€â”€ OT Approval Pipeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ?€?€ OT Approval Pipeline ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
     ot_month_q = select(OtRequest).where(
         OtRequest.date >= first, OtRequest.date <= last
     )
@@ -360,7 +360,7 @@ async def dashboard_page(
         if turnarounds:
             avg_turnaround = round(sum(turnarounds) / len(turnarounds), 1)
 
-    # â”€â”€ Recent Activity (last 5 audit logs) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ?€?€ Recent Activity (last 5 audit logs) ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
     recent_logs = (await db.execute(
         select(AuditLog, User)
         .outerjoin(User, AuditLog.actor_id == User.id)
@@ -378,7 +378,7 @@ async def dashboard_page(
         for log, user in recent_logs
     ]
 
-    return templates.TemplateResponse("dashboard.html", _ctx(
+    return templates.TemplateResponse(request, "dashboard.html", _ctx(
         request, current_user,
         month_label=month_label,
         dashboard_scope_label=dashboard_scope_label,

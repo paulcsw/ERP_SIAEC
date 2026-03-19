@@ -4,12 +4,33 @@
 
 {% block content %}
 <div id="ot-content" class="p-4 lg:p-5 flex flex-col h-full w-full">
-  <div class="flex items-center justify-between mb-3 shrink-0">
+  <div class="flex items-center justify-between gap-3 mb-3 shrink-0 flex-wrap">
     <div>
       <h1 class="text-lg font-semibold text-navy-900">OT Requests</h1>
       <p class="text-xs text-surf-400">All overtime requests with 2-stage approval status</p>
     </div>
-    <div class="flex gap-2">
+    <div class="flex items-center gap-2 flex-wrap">
+      <form class="flex items-center gap-2 flex-wrap" onsubmit="event.preventDefault(); refreshOtList(true)">
+        <div class="relative">
+          <input id="ot-search"
+                 name="search"
+                 class="inp h-8 text-xs pl-8 pr-3 w-64"
+                 placeholder="Search OT id, worker, reason, RFO..."
+                 value="{{ search_filter }}">
+          <svg class="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-surf-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        </div>
+        <button type="submit" class="btn-outline btn-sm h-8 px-3 text-xs">Search</button>
+      </form>
+      <input id="ot-date-from"
+             type="date"
+             class="inp h-8 text-xs"
+             value="{{ date_from_filter }}"
+             onchange="refreshOtList(true)">
+      <input id="ot-date-to"
+             type="date"
+             class="inp h-8 text-xs"
+             value="{{ date_to_filter }}"
+             onchange="refreshOtList(true)">
       <select id="status-filter" class="inp h-8 text-xs" onchange="refreshOtList(true)">
         <option value="" {% if not status_filter %}selected{% endif %}>All Status</option>
         <option value="PENDING" {% if status_filter == 'PENDING' %}selected{% endif %}>PENDING</option>
@@ -41,7 +62,7 @@
         <tbody>
           {% for ot in items %}
           <tr class="cursor-pointer"
-              hx-get="/ot/{{ ot.id }}"
+              hx-get="{{ ot.detail_href }}"
               hx-target="#ot-content"
               hx-select="#ot-content > *"
               hx-swap="innerHTML"
@@ -127,8 +148,14 @@ function refreshOtList(resetPage, pageOverride) {
   if (typeof htmx === 'undefined') return;
 
   const status = document.getElementById('status-filter')?.value || '';
+  const search = (document.getElementById('ot-search')?.value || '').trim();
+  const dateFrom = document.getElementById('ot-date-from')?.value || '';
+  const dateTo = document.getElementById('ot-date-to')?.value || '';
   const params = new URLSearchParams();
   if (status) params.set('status', status);
+  if (search) params.set('search', search);
+  if (dateFrom) params.set('date_from', dateFrom);
+  if (dateTo) params.set('date_to', dateTo);
   if (resetPage) params.set('page', '1');
 
   const currentPage = new URLSearchParams(window.location.search).get('page');
@@ -158,8 +185,14 @@ function downloadOtCsv(url) {
 
 function exportOtCsv(button) {
   const status = document.getElementById('status-filter')?.value || '';
+  const search = (document.getElementById('ot-search')?.value || '').trim();
+  const dateFrom = document.getElementById('ot-date-from')?.value || '';
+  const dateTo = document.getElementById('ot-date-to')?.value || '';
   const params = new URLSearchParams();
   if (status) params.set('status', status);
+  if (search) params.set('search', search);
+  if (dateFrom) params.set('date_from', dateFrom);
+  if (dateTo) params.set('date_to', dateTo);
   const url = '/api/ot/export/csv' + (params.toString() ? ('?' + params.toString()) : '');
   downloadOtCsv(url);
 

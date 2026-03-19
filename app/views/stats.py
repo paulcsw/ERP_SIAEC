@@ -16,7 +16,7 @@ router = APIRouter(tags=["stats-views"])
 
 LIMIT_HOURS = round(MONTHLY_LIMIT_MINUTES / 60, 1)
 
-# Hex colors for weekly bars (light â†’ dark navy), last week uses gold
+# Hex colors for weekly bars (light ??dark navy), last week uses gold
 _WEEK_HEX = ["#d5dde8", "#aebdd2", "#5a7ba3", "#2e5a8a", "#1e3a5f"]
 _WEEK_GOLD = "#c8850a"
 
@@ -74,7 +74,7 @@ async def ot_stats_page(
     )).scalars().all()
     teams = sorted(t for t in team_rows if t)
 
-    # â”€â”€ OT query (filtered by role & team) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ?€?€ OT query (filtered by role & team) ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
     q = select(OtRequest).where(OtRequest.date >= first, OtRequest.date <= last)
     if "ADMIN" not in roles:
         uids = await _team_user_ids(db, current_user.get("team"))
@@ -114,7 +114,7 @@ async def ot_stats_page(
         "avg_turnaround": avg_turnaround,
     }
 
-    # â”€â”€ Individual Monthly Usage (top 6) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ?€?€ Individual Monthly Usage (top 6) ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
     user_q = select(User).where(User.is_active == True)  # noqa: E712
     if "ADMIN" not in roles:
         user_q = user_q.where(User.team == current_user.get("team"))
@@ -170,7 +170,7 @@ async def ot_stats_page(
         "at_limit": at_limit_count, "above_warning": above_warning_count,
     }
 
-    # â”€â”€ Approval Pipeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ?€?€ Approval Pipeline ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
     pipeline = {
         "submitted": sum(1 for _ in rows),
         "endorsed": sum(1 for r in rows if r.status == "ENDORSED"),
@@ -180,7 +180,7 @@ async def ot_stats_page(
     pipe_max = max(pipeline["submitted"], 1)
     pipeline["conversion"] = round(pipeline["approved"] / pipeline["submitted"] * 100) if pipeline["submitted"] else 0
 
-    # â”€â”€ By Reason â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ?€?€ By Reason ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
     by_reason: dict[str, int] = {}
     for r in rows:
         if r.status in COUNTABLE_STATUSES:
@@ -201,7 +201,7 @@ async def ot_stats_page(
     leading_reason = reason_bars[0]["code"].replace("_", " ").title() if reason_bars else None
     leading_reason_pct = round(reason_bars[0]["pct"]) if reason_bars else 0
 
-    # â”€â”€ Weekly Trend â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ?€?€ Weekly Trend ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
     weekly: list[dict] = []
     ws = first
     wk = 1
@@ -249,7 +249,7 @@ async def ot_stats_page(
         "trend_color": trend_color,
     }
 
-    return templates.TemplateResponse("stats/ot_dashboard.html", _ctx(
+    return templates.TemplateResponse(request, "stats/ot_dashboard.html", _ctx(
         request, current_user,
         month_label=month_label,
         month_display=month_display,

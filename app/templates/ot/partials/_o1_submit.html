@@ -1,4 +1,17 @@
 {# O1: Mobile OT Submit #}
+<style>
+#ot-o1{overflow-x:hidden}
+#ot-o1 .mob-ot-field,
+#ot-o1 .mob-ot-field .inp,
+#ot-o1 .mob-ot-field select,
+#ot-o1 .mob-ot-field textarea{min-width:0;max-width:100%}
+#ot-o1 .mob-ot-time-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+#ot-o1 #mob-limit-warn{flex-wrap:wrap}
+#ot-o1 #mob-limit-warn > div{min-width:0;flex:1 1 220px}
+@media(max-width:380px){
+  #ot-o1 .mob-ot-time-grid{grid-template-columns:minmax(0,1fr)}
+}
+</style>
 <div class="p-4 space-y-4" id="ot-o1">
   {# Monthly usage card #}
   <div class="card p-4">
@@ -12,16 +25,16 @@
 
   <form id="mob-ot-form">
     <div class="space-y-4">
-      <div>
+      <div class="mob-ot-field">
         <div class="mob-label">Date</div>
         <input type="date" name="date" value="{{ today }}" class="inp w-full h-12 text-base"/>
       </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div>
+      <div class="grid gap-3 mob-ot-time-grid">
+        <div class="mob-ot-field">
           <div class="mob-label">Start</div>
           <input type="time" name="start_time" value="17:30" class="inp w-full h-12 text-base" id="mob-start"/>
         </div>
-        <div>
+        <div class="mob-ot-field">
           <div class="mob-label">End</div>
           <input type="time" name="end_time" value="20:00" class="inp w-full h-12 text-base" id="mob-end"/>
         </div>
