@@ -167,4 +167,3 @@ async def admin_shop_access_page(
         users=[{"id": u.id, "name": u.name, "employee_no": u.employee_no} for u in users],
         shops=[{"id": s.id, "code": s.code, "name": s.name} for s in shops],
     ))
-

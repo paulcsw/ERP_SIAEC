@@ -330,4 +330,3 @@ async def rfo_index(
         workers_data=workers_data,
         burndown_data=burndown_data,
     ))
-

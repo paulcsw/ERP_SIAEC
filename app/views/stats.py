@@ -270,4 +270,3 @@ async def ot_stats_page(
         weekly_footer=weekly_footer,
         is_sup_or_admin=is_sup_or_admin,
     ))
-

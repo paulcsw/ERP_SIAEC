@@ -407,4 +407,3 @@ async def dashboard_page(
         avg_turnaround=avg_turnaround,
         recent_activity=recent_activity,
     ))
-

@@ -642,7 +642,7 @@ async def task_manager_detail_partial(
 
     row = (await db.execute(q)).first()
     if not row:
-        return templates.TemplateResponse(request, 
+        return templates.TemplateResponse(request,
             "tasks/partials/_manager_detail_body.html",
             {"request": request, "detail": None},
         )
@@ -769,7 +769,7 @@ async def task_manager_detail_partial(
         "audit_logs": audit_logs,
     }
 
-    return templates.TemplateResponse(request, 
+    return templates.TemplateResponse(request,
         "tasks/partials/_manager_detail_body.html",
         {"request": request, "detail": detail},
     )
@@ -1567,4 +1567,3 @@ async def mobile_m5(
         "status_filter": status or "",
         "quick_filter": quick or "",
     })
-
