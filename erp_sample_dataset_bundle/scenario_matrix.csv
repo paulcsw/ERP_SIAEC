@@ -1,0 +1,17 @@
+feature,dataset,entity,record_id,where_to_look,note
+Task NEW badge,02_full_demo_ui_clean,task_snapshot,17,"Shop STRUCT, task_id 211 / 214 / 303 / 405 / 506",supervisor_updated_at 비어 있음
+Task NEEDS UPDATE badge,02_full_demo_ui_clean,task_snapshot,7,task_id 201 / 204 / 305 / 402 / 503,72h 초과 stale update
+Blocked task / blocker list,02_full_demo_ui_clean,task_snapshot,7,"RFO-260301, task_id 201",WAITING + has_issue + critical_issue
+Unassigned worker,02_full_demo_ui_clean,task_item,216,task_id 216 / 309 / 603,assigned_worker_id 비어 있음
+Soft-deleted snapshot,02_full_demo_ui_clean,task_snapshot,15,task_id 209 / 408,inactive + soft-deleted
+Healthy RFO,02_full_demo_ui_clean,work_package,2,RFO-260302,대부분 완료/안정 상태
+Blocked RFO,02_full_demo_ui_clean,work_package,1,RFO-260301,"blocker, OT, 대기 task 존재"
+Empty RFO state,02_full_demo_ui_clean,work_package,9,RFO-260309,작업 거의 없거나 비어 있는 상태
+OT pending queue,02_full_demo_ui_clean,ot_request,2,PENDING rows,O1 대기함 시연
+OT endorsed queue,02_full_demo_ui_clean,ot_request,3,ENDORSED rows,O2 승인대기 시연
+OT fully approved,02_full_demo_ui_clean,ot_request,1,APPROVED rows,2단계 승인 완료 시연
+OT rejected at stage 1,02_full_demo_ui_clean,ot_request,11,REJECTED / ENDORSE reject,Supervisor reject
+OT rejected at stage 2,02_full_demo_ui_clean,ot_request,9,REJECTED / APPROVE reject,Admin reject
+OT cancelled,02_full_demo_ui_clean,ot_request,6,CANCELLED rows,신청자 취소 시나리오
+72h OT limit near-threshold,02_full_demo_ui_clean,user,15,user_id 15 / March usage,4200분 = 70.0h
+History-rich burndown/trend,03_full_demo_history_rich,task_snapshots,1,다중 meeting_date snapshot,"RFO burndown, cycle time, OT weekly trend에 적합"

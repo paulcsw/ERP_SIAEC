@@ -1,0 +1,338 @@
+id,actor_id,entity_type,entity_id,action,before_json,after_json,created_at
+1,16,shop,1,CREATE,,"{""code"": ""DEVCELL"", ""name"": ""Development Demo Cell""}",2026-02-17T09:27:53+00:00
+2,16,shop,2,CREATE,,"{""code"": ""STRUCT"", ""name"": ""Structures Shop""}",2026-02-17T09:27:53+00:00
+3,16,shop,3,CREATE,,"{""code"": ""AVN"", ""name"": ""Avionics Shop""}",2026-02-17T09:27:53+00:00
+4,16,shop,4,CREATE,,"{""code"": ""CAB"", ""name"": ""Cabin Shop""}",2026-02-17T09:27:53+00:00
+5,16,shop,5,CREATE,,"{""code"": ""ENG"", ""name"": ""Engine Shop""}",2026-02-17T09:27:53+00:00
+6,16,shop,6,CREATE,,"{""code"": ""QA"", ""name"": ""Quality Assurance""}",2026-02-17T09:27:53+00:00
+7,16,user,1,CREATE,,"{""employee_no"": ""DEV001"", ""name"": ""Dev Seed Operator"", ""team"": ""DEV""}",2026-02-18T09:27:53+00:00
+8,16,user,2,CREATE,,"{""employee_no"": ""DEV002"", ""name"": ""Adrian Koh"", ""team"": ""DEV""}",2026-02-18T09:27:53+00:00
+9,16,user,3,CREATE,,"{""employee_no"": ""DEV003"", ""name"": ""Siti Rahman"", ""team"": ""DEV""}",2026-02-18T09:27:53+00:00
+10,16,user,4,CREATE,,"{""employee_no"": ""DEV004"", ""name"": ""Marcus Lee"", ""team"": ""DEV""}",2026-02-18T09:27:53+00:00
+11,16,user,5,CREATE,,"{""employee_no"": ""DEV005"", ""name"": ""Hanna Park"", ""team"": ""DEV""}",2026-02-18T09:27:53+00:00
+12,16,user,6,CREATE,,"{""employee_no"": ""STR006"", ""name"": ""Eun Seo"", ""team"": ""Structures""}",2026-02-18T09:27:53+00:00
+13,16,user,7,CREATE,,"{""employee_no"": ""STR007"", ""name"": ""Amir Rahman"", ""team"": ""Structures""}",2026-02-18T09:27:53+00:00
+14,16,user,8,CREATE,,"{""employee_no"": ""STR008"", ""name"": ""Vanessa Koh"", ""team"": ""Structures""}",2026-02-18T09:27:53+00:00
+15,16,user,9,CREATE,,"{""employee_no"": ""AVN009"", ""name"": ""Jia Hao"", ""team"": ""Avionics""}",2026-02-18T09:27:53+00:00
+16,16,user,10,CREATE,,"{""employee_no"": ""AVN010"", ""name"": ""Nur Aisyah"", ""team"": ""Avionics""}",2026-02-18T09:27:53+00:00
+17,16,user,11,CREATE,,"{""employee_no"": ""AVN011"", ""name"": ""Dinesh Pillai"", ""team"": ""Avionics""}",2026-02-18T09:27:53+00:00
+18,16,user,12,CREATE,,"{""employee_no"": ""CAB012"", ""name"": ""Mei Lin"", ""team"": ""Cabin""}",2026-02-18T09:27:53+00:00
+19,16,user,13,CREATE,,"{""employee_no"": ""CAB013"", ""name"": ""Sarah Ng"", ""team"": ""Cabin""}",2026-02-18T09:27:53+00:00
+20,16,user,14,CREATE,,"{""employee_no"": ""ENG014"", ""name"": ""Tom Becker"", ""team"": ""Engine""}",2026-02-18T09:27:53+00:00
+21,16,user,15,CREATE,,"{""employee_no"": ""ENG015"", ""name"": ""Prakash Iyer"", ""team"": ""Engine""}",2026-02-18T09:27:53+00:00
+22,16,user,16,CREATE,,"{""employee_no"": ""ADM016"", ""name"": ""Olivia Hart"", ""team"": ""Planning""}",2026-02-18T09:27:53+00:00
+23,16,user,17,CREATE,,"{""employee_no"": ""ADM017"", ""name"": ""Isaac Wong"", ""team"": ""QA""}",2026-02-18T09:27:53+00:00
+24,16,user,18,CREATE,,"{""employee_no"": ""TMP018"", ""name"": ""Rahul Sen"", ""team"": ""Temporary""}",2026-02-18T09:27:53+00:00
+25,16,user,19,CREATE,,"{""employee_no"": ""STR019"", ""name"": ""Grace Lee"", ""team"": ""Structures""}",2026-02-18T09:27:53+00:00
+26,16,user,20,CREATE,,"{""employee_no"": ""STR020"", ""name"": ""Ben Chua"", ""team"": ""Structures""}",2026-02-18T09:27:53+00:00
+27,16,user_shop_access,1,GRANT,,"{""user_id"": 1, ""shop_id"": 1, ""access"": ""VIEW""}",2026-02-26T09:27:53+00:00
+28,16,user_shop_access,2,GRANT,,"{""user_id"": 1, ""shop_id"": 2, ""access"": ""MANAGE""}",2026-02-26T09:27:53+00:00
+29,16,user_shop_access,3,GRANT,,"{""user_id"": 1, ""shop_id"": 3, ""access"": ""EDIT""}",2026-02-26T09:27:53+00:00
+30,16,user_shop_access,4,GRANT,,"{""user_id"": 2, ""shop_id"": 1, ""access"": ""MANAGE""}",2026-02-26T09:27:53+00:00
+31,16,user_shop_access,5,GRANT,,"{""user_id"": 3, ""shop_id"": 1, ""access"": ""EDIT""}",2026-02-26T09:27:53+00:00
+32,16,user_shop_access,6,GRANT,,"{""user_id"": 4, ""shop_id"": 1, ""access"": ""VIEW""}",2026-02-26T09:27:53+00:00
+33,16,user_shop_access,7,GRANT,,"{""user_id"": 6, ""shop_id"": 2, ""access"": ""MANAGE""}",2026-02-26T09:27:53+00:00
+34,16,user_shop_access,8,GRANT,,"{""user_id"": 7, ""shop_id"": 2, ""access"": ""EDIT""}",2026-02-26T09:27:53+00:00
+35,16,user_shop_access,9,GRANT,,"{""user_id"": 8, ""shop_id"": 2, ""access"": ""VIEW""}",2026-02-26T09:27:53+00:00
+36,16,user_shop_access,10,GRANT,,"{""user_id"": 9, ""shop_id"": 3, ""access"": ""MANAGE""}",2026-02-26T09:27:53+00:00
+37,16,user_shop_access,11,GRANT,,"{""user_id"": 10, ""shop_id"": 3, ""access"": ""EDIT""}",2026-02-26T09:27:53+00:00
+38,16,user_shop_access,12,GRANT,,"{""user_id"": 11, ""shop_id"": 3, ""access"": ""VIEW""}",2026-02-26T09:27:53+00:00
+39,16,user_shop_access,13,GRANT,,"{""user_id"": 12, ""shop_id"": 4, ""access"": ""MANAGE""}",2026-02-26T09:27:53+00:00
+40,16,user_shop_access,14,GRANT,,"{""user_id"": 13, ""shop_id"": 4, ""access"": ""EDIT""}",2026-02-26T09:27:53+00:00
+41,16,user_shop_access,15,GRANT,,"{""user_id"": 14, ""shop_id"": 5, ""access"": ""MANAGE""}",2026-02-26T09:27:53+00:00
+42,16,user_shop_access,16,GRANT,,"{""user_id"": 15, ""shop_id"": 5, ""access"": ""EDIT""}",2026-02-26T09:27:53+00:00
+43,16,user_shop_access,17,GRANT,,"{""user_id"": 19, ""shop_id"": 2, ""access"": ""VIEW""}",2026-02-26T09:27:53+00:00
+44,16,user_shop_access,18,GRANT,,"{""user_id"": 20, ""shop_id"": 2, ""access"": ""EDIT""}",2026-02-26T09:27:53+00:00
+45,16,system_config,1,UPDATE,,"{""key"": ""meeting_current_date"", ""value"": ""2026-03-16""}",2026-03-18T03:27:53+00:00
+46,16,system_config,2,UPDATE,,"{""key"": ""needs_update_threshold_hours"", ""value"": ""72""}",2026-03-18T03:27:53+00:00
+47,16,system_config,3,UPDATE,,"{""key"": ""teams_enabled"", ""value"": ""true""}",2026-03-18T03:27:53+00:00
+48,16,system_config,4,UPDATE,,"{""key"": ""snapshot_advance_day"", ""value"": ""Sunday""}",2026-03-18T03:27:53+00:00
+49,16,system_config,5,UPDATE,,"{""key"": ""snapshot_advance_time"", ""value"": ""18:00""}",2026-03-18T03:27:53+00:00
+50,16,system_config,6,UPDATE,,"{""key"": ""auto_advance_week"", ""value"": ""true""}",2026-03-18T03:27:53+00:00
+51,16,system_config,7,UPDATE,,"{""key"": ""notify_critical"", ""value"": ""true""}",2026-03-18T03:27:53+00:00
+52,16,system_config,8,UPDATE,,"{""key"": ""notify_teams"", ""value"": ""false""}",2026-03-18T03:27:53+00:00
+53,16,system_config,9,UPDATE,,"{""key"": ""notify_outlook"", ""value"": ""false""}",2026-03-18T03:27:53+00:00
+54,16,system_config,10,UPDATE,,"{""key"": ""notify_recipients"", ""value"": ""planning@demo.local;qa@demo.local""}",2026-03-18T03:27:53+00:00
+55,16,system_config,11,UPDATE,,"{""key"": ""critical_recipients"", ""value"": ""chief.engineer@demo.local""}",2026-03-18T03:27:53+00:00
+56,16,system_config,12,UPDATE,,"{""key"": ""notify_template"", ""value"": ""default""}",2026-03-18T03:27:53+00:00
+57,16,system_config,13,UPDATE,,"{""key"": ""outlook_subject"", ""value"": ""[ERP] Critical task notification""}",2026-03-18T03:27:53+00:00
+58,16,system_config,14,UPDATE,,"{""key"": ""outlook_body"", ""value"": ""This is a demo placeholder body.""}",2026-03-18T03:27:53+00:00
+59,16,system_config,15,UPDATE,,"{""key"": ""outlook_recipients"", ""value"": ""ops.control@demo.local""}",2026-03-18T03:27:53+00:00
+60,16,aircraft,1,CREATE,,"{""ac_reg"": ""9V-SKA"", ""status"": ""ACTIVE""}",2026-02-16T09:27:53+00:00
+61,16,aircraft,2,CREATE,,"{""ac_reg"": ""9V-SKB"", ""status"": ""ACTIVE""}",2026-02-16T09:27:53+00:00
+62,16,aircraft,3,CREATE,,"{""ac_reg"": ""9V-SKC"", ""status"": ""ACTIVE""}",2026-02-16T09:27:53+00:00
+63,16,aircraft,4,CREATE,,"{""ac_reg"": ""A6-EQH"", ""status"": ""ACTIVE""}",2026-02-16T09:27:53+00:00
+64,16,aircraft,5,CREATE,,"{""ac_reg"": ""B-LDH"", ""status"": ""ACTIVE""}",2026-02-16T09:27:53+00:00
+65,16,aircraft,6,CREATE,,"{""ac_reg"": ""9M-MTA"", ""status"": ""ON_HOLD""}",2026-02-16T09:27:53+00:00
+66,16,aircraft,7,CREATE,,"{""ac_reg"": ""N123MX"", ""status"": ""COMPLETED""}",2026-02-16T09:27:53+00:00
+67,16,aircraft,8,CREATE,,"{""ac_reg"": ""9V-SKD"", ""status"": ""CANCELLED""}",2026-02-16T09:27:53+00:00
+68,16,work_package,1,CREATE,,"{""rfo_no"": ""RFO-260301"", ""title"": ""SQ A350 Heavy Check C01""}",2026-02-16T09:27:53+00:00
+69,16,work_package,2,CREATE,,"{""rfo_no"": ""RFO-260302"", ""title"": ""SQ A350 Cabin Retrofit""}",2026-02-16T09:27:53+00:00
+70,16,work_package,3,CREATE,,"{""rfo_no"": ""RFO-260303"", ""title"": ""SQ 787 Avionics Upgrade""}",2026-02-16T09:27:53+00:00
+71,16,work_package,4,CREATE,,"{""rfo_no"": ""RFO-260304"", ""title"": ""EK 777 Phase Check""}",2026-02-16T09:27:53+00:00
+72,16,work_package,5,CREATE,,"{""rfo_no"": ""RFO-260305"", ""title"": ""CX Cabin Refresh""}",2026-02-16T09:27:53+00:00
+73,16,work_package,6,CREATE,,"{""rfo_no"": ""RFO-260306"", ""title"": ""MH Engine Preservation""}",2026-02-16T09:27:53+00:00
+74,16,work_package,7,CREATE,,"{""rfo_no"": ""RFO-260307"", ""title"": ""Corrosion Repair Package""}",2026-02-16T09:27:53+00:00
+75,16,work_package,8,CREATE,,"{""rfo_no"": ""RFO-260308"", ""title"": ""Galley Modification Campaign""}",2026-02-16T09:27:53+00:00
+76,16,work_package,9,CREATE,,"{""rfo_no"": ""RFO-260309"", ""title"": ""Seat Track Repair""}",2026-02-16T09:27:53+00:00
+77,16,shop_stream,1,CREATE,,"{""work_package_id"": 1, ""shop_code"": ""STRUCT""}",2026-02-16T09:27:53+00:00
+78,16,shop_stream,2,CREATE,,"{""work_package_id"": 1, ""shop_code"": ""AVN""}",2026-02-16T09:27:53+00:00
+79,16,shop_stream,3,CREATE,,"{""work_package_id"": 1, ""shop_code"": ""CAB""}",2026-02-16T09:27:53+00:00
+80,16,shop_stream,4,CREATE,,"{""work_package_id"": 1, ""shop_code"": ""QA""}",2026-02-16T09:27:53+00:00
+81,16,shop_stream,5,CREATE,,"{""work_package_id"": 2, ""shop_code"": ""CAB""}",2026-02-16T09:27:53+00:00
+82,16,shop_stream,6,CREATE,,"{""work_package_id"": 2, ""shop_code"": ""AVN""}",2026-02-16T09:27:53+00:00
+83,16,shop_stream,7,CREATE,,"{""work_package_id"": 2, ""shop_code"": ""QA""}",2026-02-16T09:27:53+00:00
+84,16,shop_stream,8,CREATE,,"{""work_package_id"": 3, ""shop_code"": ""AVN""}",2026-02-16T09:27:53+00:00
+85,16,shop_stream,9,CREATE,,"{""work_package_id"": 3, ""shop_code"": ""QA""}",2026-02-16T09:27:53+00:00
+86,16,shop_stream,10,CREATE,,"{""work_package_id"": 4, ""shop_code"": ""STRUCT""}",2026-02-16T09:27:53+00:00
+87,16,shop_stream,11,CREATE,,"{""work_package_id"": 4, ""shop_code"": ""ENG""}",2026-02-16T09:27:53+00:00
+88,16,shop_stream,12,CREATE,,"{""work_package_id"": 4, ""shop_code"": ""QA""}",2026-02-16T09:27:53+00:00
+89,16,shop_stream,13,CREATE,,"{""work_package_id"": 5, ""shop_code"": ""CAB""}",2026-02-16T09:27:53+00:00
+90,16,shop_stream,14,CREATE,,"{""work_package_id"": 5, ""shop_code"": ""QA""}",2026-02-16T09:27:53+00:00
+91,16,shop_stream,15,CREATE,,"{""work_package_id"": 6, ""shop_code"": ""ENG""}",2026-02-16T09:27:53+00:00
+92,16,shop_stream,16,CREATE,,"{""work_package_id"": 6, ""shop_code"": ""QA""}",2026-02-16T09:27:53+00:00
+93,16,shop_stream,17,CREATE,,"{""work_package_id"": 7, ""shop_code"": ""STRUCT""}",2026-02-16T09:27:53+00:00
+94,16,shop_stream,18,CREATE,,"{""work_package_id"": 7, ""shop_code"": ""QA""}",2026-02-16T09:27:53+00:00
+95,16,shop_stream,19,CREATE,,"{""work_package_id"": 8, ""shop_code"": ""CAB""}",2026-02-16T09:27:53+00:00
+96,16,shop_stream,20,CREATE,,"{""work_package_id"": 8, ""shop_code"": ""QA""}",2026-02-16T09:27:53+00:00
+97,16,shop_stream,21,CREATE,,"{""work_package_id"": 9, ""shop_code"": ""STRUCT""}",2026-02-16T09:27:53+00:00
+98,16,shop_stream,22,CREATE,,"{""work_package_id"": 9, ""shop_code"": ""CAB""}",2026-02-16T09:27:53+00:00
+99,2,task_item,101,CREATE,,"{""shop_id"": 1, ""aircraft_id"": 1, ""task_text"": ""Validate imported task template for A350 C01""}",2026-02-19T09:27:53+00:00
+100,2,task_item,102,CREATE,,"{""shop_id"": 1, ""aircraft_id"": 2, ""task_text"": ""Cross-check manpower plan against latest meeting notes""}",2026-02-20T09:27:53+00:00
+101,2,task_item,103,CREATE,,"{""shop_id"": 1, ""aircraft_id"": 3, ""task_text"": ""Prepare avionics kit issue tracker handover""}",2026-02-21T09:27:53+00:00
+102,2,task_item,104,CREATE,,"{""shop_id"": 1, ""aircraft_id"": 1, ""task_text"": ""Review heavy-check open points with structures""}",2026-02-22T09:27:53+00:00
+103,2,task_item,105,CREATE,,"{""shop_id"": 1, ""aircraft_id"": 4, ""task_text"": ""Reconcile material ETA against phase-check plan""}",2026-02-16T09:27:53+00:00
+104,2,task_item,106,CREATE,,"{""shop_id"": 1, ""aircraft_id"": 5, ""task_text"": ""Verify cabin retrofit drawing package""}",2026-02-17T09:27:53+00:00
+105,16,task_item,201,CREATE,,"{""shop_id"": 2, ""aircraft_id"": 1, ""task_text"": ""Open LH wing root panel and inspect corrosion""}",2026-02-21T09:27:53+00:00
+106,16,task_item,202,CREATE,,"{""shop_id"": 2, ""aircraft_id"": 1, ""task_text"": ""Blend out frame 47 doubler damage""}",2026-02-22T09:27:53+00:00
+107,16,task_item,203,CREATE,,"{""shop_id"": 2, ""aircraft_id"": 1, ""task_text"": ""Install replacement cargo liner supports""}",2026-02-16T09:27:53+00:00
+108,16,task_item,204,CREATE,,"{""shop_id"": 2, ""aircraft_id"": 4, ""task_text"": ""Inspect seat track attachment at row 32""}",2026-02-17T09:27:53+00:00
+109,16,task_item,205,CREATE,,"{""shop_id"": 2, ""aircraft_id"": 4, ""task_text"": ""Repair floor beam light corrosion""}",2026-02-18T09:27:53+00:00
+110,16,task_item,206,CREATE,,"{""shop_id"": 2, ""aircraft_id"": 4, ""task_text"": ""Rework aft door surround shim pack""}",2026-02-19T09:27:53+00:00
+111,16,task_item,207,CREATE,,"{""shop_id"": 2, ""aircraft_id"": 4, ""task_text"": ""Replace damaged monument rail brackets""}",2026-02-20T09:27:53+00:00
+112,16,task_item,208,CREATE,,"{""shop_id"": 2, ""aircraft_id"": 1, ""task_text"": ""Close NDT findings on lower fuselage skin""}",2026-02-21T09:27:53+00:00
+113,16,task_item,209,CREATE,,"{""shop_id"": 2, ""aircraft_id"": 7, ""task_text"": ""Finalize corrosion repair paperwork""}",2026-02-22T09:27:53+00:00
+114,16,task_item,210,CREATE,,"{""shop_id"": 2, ""aircraft_id"": 2, ""task_text"": ""General structural snag triage""}",2026-02-16T09:27:53+00:00
+115,16,task_item,211,CREATE,,"{""shop_id"": 2, ""aircraft_id"": 1, ""task_text"": ""Rivet replacement at panel 533AL""}",2026-02-17T09:27:53+00:00
+116,16,task_item,212,CREATE,,"{""shop_id"": 2, ""aircraft_id"": 4, ""task_text"": ""Sealant rework at cargo bay cutout""}",2026-02-18T09:27:53+00:00
+117,16,task_item,213,CREATE,,"{""shop_id"": 2, ""aircraft_id"": 4, ""task_text"": ""Seat rail alignment check""}",2026-02-19T09:27:53+00:00
+118,16,task_item,214,CREATE,,"{""shop_id"": 2, ""aircraft_id"": 1, ""task_text"": ""Install access panel fastener kit""}",2026-02-20T09:27:53+00:00
+119,16,task_item,215,CREATE,,"{""shop_id"": 2, ""aircraft_id"": 4, ""task_text"": ""Inspect antenna doubler edges""}",2026-02-21T09:27:53+00:00
+120,16,task_item,216,CREATE,,"{""shop_id"": 2, ""aircraft_id"": 4, ""task_text"": ""Prepare engineering deviation record""}",2026-02-22T09:27:53+00:00
+121,16,task_item,217,CREATE,,"{""shop_id"": 2, ""aircraft_id"": 1, ""task_text"": ""Replace worn fasteners at frame 62""}",2026-02-16T09:27:53+00:00
+122,16,task_item,218,CREATE,,"{""shop_id"": 2, ""aircraft_id"": 1, ""task_text"": ""Inspect crown skin for lightning strike marks""}",2026-02-17T09:27:53+00:00
+123,16,task_item,219,CREATE,,"{""shop_id"": 2, ""aircraft_id"": 4, ""task_text"": ""Trim and fit replacement trim panel supports""}",2026-02-18T09:27:53+00:00
+124,16,task_item,220,CREATE,,"{""shop_id"": 2, ""aircraft_id"": 4, ""task_text"": ""Re-torque seat track splice bolts""}",2026-02-19T09:27:53+00:00
+125,16,task_item,221,CREATE,,"{""shop_id"": 2, ""aircraft_id"": 2, ""task_text"": ""Review third-party structural defect list""}",2026-02-20T09:27:53+00:00
+126,16,task_item,301,CREATE,,"{""shop_id"": 3, ""aircraft_id"": 1, ""task_text"": ""Update ELT wiring harness routing""}",2026-02-16T09:27:53+00:00
+127,16,task_item,302,CREATE,,"{""shop_id"": 3, ""aircraft_id"": 1, ""task_text"": ""Functional test SATCOM LRU after removal""}",2026-02-17T09:27:53+00:00
+128,16,task_item,303,CREATE,,"{""shop_id"": 3, ""aircraft_id"": 2, ""task_text"": ""Install cabin IFE control unit patch""}",2026-02-18T09:27:53+00:00
+129,16,task_item,304,CREATE,,"{""shop_id"": 3, ""aircraft_id"": 3, ""task_text"": ""Replace ADC cooling fan assembly""}",2026-02-19T09:27:53+00:00
+130,16,task_item,305,CREATE,,"{""shop_id"": 3, ""aircraft_id"": 3, ""task_text"": ""Troubleshoot intermittent autopilot disconnect""}",2026-02-20T09:27:53+00:00
+131,16,task_item,306,CREATE,,"{""shop_id"": 3, ""aircraft_id"": 3, ""task_text"": ""Software load for communication management unit""}",2026-02-21T09:27:53+00:00
+132,16,task_item,307,CREATE,,"{""shop_id"": 3, ""aircraft_id"": 2, ""task_text"": ""Terminate new PSU loom at zone 410""}",2026-02-22T09:27:53+00:00
+133,16,task_item,308,CREATE,,"{""shop_id"": 3, ""aircraft_id"": 1, ""task_text"": ""Bonding resistance check for VHF antenna feed""}",2026-02-16T09:27:53+00:00
+134,16,task_item,309,CREATE,,"{""shop_id"": 3, ""aircraft_id"": 3, ""task_text"": ""General avionics defect backlog cleanup""}",2026-02-17T09:27:53+00:00
+135,16,task_item,310,CREATE,,"{""shop_id"": 3, ""aircraft_id"": 3, ""task_text"": ""Close open MEL-related wiring findings""}",2026-02-18T09:27:53+00:00
+136,16,task_item,401,CREATE,,"{""shop_id"": 4, ""aircraft_id"": 1, ""task_text"": ""Replace sidewall panel set in business cabin""}",2026-02-18T09:27:53+00:00
+137,16,task_item,402,CREATE,,"{""shop_id"": 4, ""aircraft_id"": 2, ""task_text"": ""Install premium economy seat harness kit""}",2026-02-19T09:27:53+00:00
+138,16,task_item,403,CREATE,,"{""shop_id"": 4, ""aircraft_id"": 2, ""task_text"": ""Fit new galley monument latches""}",2026-02-20T09:27:53+00:00
+139,16,task_item,404,CREATE,,"{""shop_id"": 4, ""aircraft_id"": 5, ""task_text"": ""Refresh overhead bin dampers""}",2026-02-21T09:27:53+00:00
+140,16,task_item,405,CREATE,,"{""shop_id"": 4, ""aircraft_id"": 5, ""task_text"": ""Cabin carpet section replacement at zone 230""}",2026-02-22T09:27:53+00:00
+141,16,task_item,406,CREATE,,"{""shop_id"": 4, ""aircraft_id"": 1, ""task_text"": ""Lavatory door roller replacement""}",2026-02-16T09:27:53+00:00
+142,16,task_item,407,CREATE,,"{""shop_id"": 4, ""aircraft_id"": 2, ""task_text"": ""IFE screen bezel replacement row 18-24""}",2026-02-17T09:27:53+00:00
+143,16,task_item,408,CREATE,,"{""shop_id"": 4, ""aircraft_id"": 5, ""task_text"": ""Cabin cosmetic snag walkdown""}",2026-02-18T09:27:53+00:00
+144,16,task_item,501,CREATE,,"{""shop_id"": 5, ""aircraft_id"": 4, ""task_text"": ""Borescope prep and access panel removal""}",2026-02-20T09:27:53+00:00
+145,16,task_item,502,CREATE,,"{""shop_id"": 5, ""aircraft_id"": 4, ""task_text"": ""Replace fan cowl latch assemblies""}",2026-02-21T09:27:53+00:00
+146,16,task_item,503,CREATE,,"{""shop_id"": 5, ""aircraft_id"": 6, ""task_text"": ""Engine preservation desiccant renewal""}",2026-02-22T09:27:53+00:00
+147,16,task_item,504,CREATE,,"{""shop_id"": 5, ""aircraft_id"": 6, ""task_text"": ""Oil servicing and leak check standby""}",2026-02-16T09:27:53+00:00
+148,16,task_item,505,CREATE,,"{""shop_id"": 5, ""aircraft_id"": 4, ""task_text"": ""Re-route ignition lead clamp at nacelle""}",2026-02-17T09:27:53+00:00
+149,16,task_item,506,CREATE,,"{""shop_id"": 5, ""aircraft_id"": 6, ""task_text"": ""General engine tooling readiness check""}",2026-02-18T09:27:53+00:00
+150,16,task_item,601,CREATE,,"{""shop_id"": 6, ""aircraft_id"": 1, ""task_text"": ""QA witness for structural blend-out closeout""}",2026-02-22T09:27:53+00:00
+151,16,task_item,602,CREATE,,"{""shop_id"": 6, ""aircraft_id"": 3, ""task_text"": ""QA verify avionics software load record""}",2026-02-16T09:27:53+00:00
+152,16,task_item,603,CREATE,,"{""shop_id"": 6, ""aircraft_id"": 4, ""task_text"": ""QA release after engine ground run""}",2026-02-17T09:27:53+00:00
+153,16,task_item,604,CREATE,,"{""shop_id"": 6, ""aircraft_id"": 5, ""task_text"": ""QA sign-off cabin monument installation""}",2026-02-18T09:27:53+00:00
+154,2,task_snapshot,1,UPDATE,,"{""task_id"": 101, ""status"": ""COMPLETED"", ""mh_incurred_hours"": ""4.00""}",2026-03-17T09:27:53+00:00
+155,4,task_snapshot,2,UPDATE,,"{""task_id"": 102, ""status"": ""IN_PROGRESS"", ""mh_incurred_hours"": ""2.70""}",2026-03-17T09:27:53+00:00
+156,16,task_snapshot,3,UPDATE,,"{""task_id"": 103, ""status"": ""NOT_STARTED"", ""mh_incurred_hours"": ""0.00""}",2026-03-17T23:27:53+00:00
+157,2,task_snapshot,4,UPDATE,,"{""task_id"": 104, ""status"": ""WAITING"", ""mh_incurred_hours"": ""1.80""}",2026-03-17T09:27:53+00:00
+158,2,task_snapshot,5,UPDATE,,"{""task_id"": 105, ""status"": ""NOT_STARTED"", ""mh_incurred_hours"": ""0.00""}",2026-03-17T09:27:53+00:00
+159,16,task_snapshot,6,UPDATE,,"{""task_id"": 106, ""status"": ""COMPLETED"", ""mh_incurred_hours"": ""4.30""}",2026-03-17T09:27:53+00:00
+160,6,task_snapshot,7,UPDATE,,"{""task_id"": 201, ""status"": ""WAITING"", ""mh_incurred_hours"": ""16.80""}",2026-03-17T09:27:53+00:00
+161,6,task_snapshot,8,UPDATE,,"{""task_id"": 202, ""status"": ""COMPLETED"", ""mh_incurred_hours"": ""16.00""}",2026-03-17T09:27:53+00:00
+162,19,task_snapshot,9,UPDATE,,"{""task_id"": 203, ""status"": ""IN_PROGRESS"", ""mh_incurred_hours"": ""6.30""}",2026-03-17T09:27:53+00:00
+163,7,task_snapshot,10,UPDATE,,"{""task_id"": 204, ""status"": ""IN_PROGRESS"", ""mh_incurred_hours"": ""6.30""}",2026-03-17T09:27:53+00:00
+164,6,task_snapshot,11,UPDATE,,"{""task_id"": 205, ""status"": ""WAITING"", ""mh_incurred_hours"": ""7.20""}",2026-03-17T09:27:53+00:00
+165,6,task_snapshot,12,UPDATE,,"{""task_id"": 206, ""status"": ""COMPLETED"", ""mh_incurred_hours"": ""10.00""}",2026-03-17T09:27:53+00:00
+166,7,task_snapshot,13,UPDATE,,"{""task_id"": 207, ""status"": ""IN_PROGRESS"", ""mh_incurred_hours"": ""4.00""}",2026-03-17T09:27:53+00:00
+167,6,task_snapshot,14,UPDATE,,"{""task_id"": 208, ""status"": ""COMPLETED"", ""mh_incurred_hours"": ""22.00""}",2026-03-17T09:27:53+00:00
+168,6,task_snapshot,15,UPDATE,,"{""task_id"": 209, ""status"": ""COMPLETED"", ""mh_incurred_hours"": ""7.00""}",2026-03-17T09:27:53+00:00
+169,6,task_snapshot,16,UPDATE,,"{""task_id"": 210, ""status"": ""IN_PROGRESS"", ""mh_incurred_hours"": ""1.20""}",2026-03-17T09:27:53+00:00
+170,16,task_snapshot,17,UPDATE,,"{""task_id"": 211, ""status"": ""NOT_STARTED"", ""mh_incurred_hours"": ""0.00""}",2026-03-17T23:27:53+00:00
+171,6,task_snapshot,18,UPDATE,,"{""task_id"": 212, ""status"": ""NOT_STARTED"", ""mh_incurred_hours"": ""0.00""}",2026-03-17T09:27:53+00:00
+172,19,task_snapshot,19,UPDATE,,"{""task_id"": 213, ""status"": ""IN_PROGRESS"", ""mh_incurred_hours"": ""5.90""}",2026-03-17T09:27:53+00:00
+173,16,task_snapshot,20,UPDATE,,"{""task_id"": 214, ""status"": ""NOT_STARTED"", ""mh_incurred_hours"": ""0.00""}",2026-03-17T23:27:53+00:00
+174,6,task_snapshot,21,UPDATE,,"{""task_id"": 215, ""status"": ""COMPLETED"", ""mh_incurred_hours"": ""7.50""}",2026-03-17T09:27:53+00:00
+175,6,task_snapshot,22,UPDATE,,"{""task_id"": 216, ""status"": ""IN_PROGRESS"", ""mh_incurred_hours"": ""1.10""}",2026-03-17T09:27:53+00:00
+176,8,task_snapshot,23,UPDATE,,"{""task_id"": 217, ""status"": ""IN_PROGRESS"", ""mh_incurred_hours"": ""5.20""}",2026-03-17T09:27:53+00:00
+177,6,task_snapshot,24,UPDATE,,"{""task_id"": 218, ""status"": ""NOT_STARTED"", ""mh_incurred_hours"": ""0.00""}",2026-03-17T09:27:53+00:00
+178,6,task_snapshot,25,UPDATE,,"{""task_id"": 219, ""status"": ""COMPLETED"", ""mh_incurred_hours"": ""9.50""}",2026-03-17T09:27:53+00:00
+179,6,task_snapshot,26,UPDATE,,"{""task_id"": 220, ""status"": ""WAITING"", ""mh_incurred_hours"": ""5.10""}",2026-03-17T09:27:53+00:00
+180,16,task_snapshot,27,UPDATE,,"{""task_id"": 221, ""status"": ""NOT_STARTED"", ""mh_incurred_hours"": ""0.00""}",2026-03-17T23:27:53+00:00
+181,9,task_snapshot,28,UPDATE,,"{""task_id"": 301, ""status"": ""COMPLETED"", ""mh_incurred_hours"": ""10.00""}",2026-03-17T09:27:53+00:00
+182,11,task_snapshot,29,UPDATE,,"{""task_id"": 302, ""status"": ""IN_PROGRESS"", ""mh_incurred_hours"": ""4.00""}",2026-03-17T09:27:53+00:00
+183,16,task_snapshot,30,UPDATE,,"{""task_id"": 303, ""status"": ""NOT_STARTED"", ""mh_incurred_hours"": ""0.00""}",2026-03-17T23:27:53+00:00
+184,9,task_snapshot,31,UPDATE,,"{""task_id"": 304, ""status"": ""COMPLETED"", ""mh_incurred_hours"": ""14.00""}",2026-03-17T09:27:53+00:00
+185,9,task_snapshot,32,UPDATE,,"{""task_id"": 305, ""status"": ""WAITING"", ""mh_incurred_hours"": ""10.80""}",2026-03-17T09:27:53+00:00
+186,10,task_snapshot,33,UPDATE,,"{""task_id"": 306, ""status"": ""IN_PROGRESS"", ""mh_incurred_hours"": ""3.80""}",2026-03-17T09:27:53+00:00
+187,9,task_snapshot,34,UPDATE,,"{""task_id"": 307, ""status"": ""COMPLETED"", ""mh_incurred_hours"": ""8.00""}",2026-03-17T09:27:53+00:00
+188,10,task_snapshot,35,UPDATE,,"{""task_id"": 308, ""status"": ""IN_PROGRESS"", ""mh_incurred_hours"": ""2.90""}",2026-03-17T09:27:53+00:00
+189,9,task_snapshot,36,UPDATE,,"{""task_id"": 309, ""status"": ""IN_PROGRESS"", ""mh_incurred_hours"": ""1.00""}",2026-03-17T09:27:53+00:00
+190,9,task_snapshot,37,UPDATE,,"{""task_id"": 310, ""status"": ""NOT_STARTED"", ""mh_incurred_hours"": ""0.00""}",2026-03-17T09:27:53+00:00
+191,13,task_snapshot,38,UPDATE,,"{""task_id"": 401, ""status"": ""IN_PROGRESS"", ""mh_incurred_hours"": ""5.40""}",2026-03-17T09:27:53+00:00
+192,13,task_snapshot,39,UPDATE,,"{""task_id"": 402, ""status"": ""IN_PROGRESS"", ""mh_incurred_hours"": ""5.60""}",2026-03-17T09:27:53+00:00
+193,12,task_snapshot,40,UPDATE,,"{""task_id"": 403, ""status"": ""COMPLETED"", ""mh_incurred_hours"": ""9.00""}",2026-03-17T09:27:53+00:00
+194,12,task_snapshot,41,UPDATE,,"{""task_id"": 404, ""status"": ""WAITING"", ""mh_incurred_hours"": ""8.40""}",2026-03-17T09:27:53+00:00
+195,16,task_snapshot,42,UPDATE,,"{""task_id"": 405, ""status"": ""NOT_STARTED"", ""mh_incurred_hours"": ""0.00""}",2026-03-17T23:27:53+00:00
+196,12,task_snapshot,43,UPDATE,,"{""task_id"": 406, ""status"": ""COMPLETED"", ""mh_incurred_hours"": ""6.00""}",2026-03-17T09:27:53+00:00
+197,12,task_snapshot,44,UPDATE,,"{""task_id"": 407, ""status"": ""NOT_STARTED"", ""mh_incurred_hours"": ""0.00""}",2026-03-17T09:27:53+00:00
+198,12,task_snapshot,45,UPDATE,,"{""task_id"": 408, ""status"": ""COMPLETED"", ""mh_incurred_hours"": ""5.00""}",2026-03-17T09:27:53+00:00
+199,14,task_snapshot,46,UPDATE,,"{""task_id"": 501, ""status"": ""COMPLETED"", ""mh_incurred_hours"": ""11.00""}",2026-03-17T09:27:53+00:00
+200,15,task_snapshot,47,UPDATE,,"{""task_id"": 502, ""status"": ""IN_PROGRESS"", ""mh_incurred_hours"": ""3.60""}",2026-03-17T09:27:53+00:00
+201,14,task_snapshot,48,UPDATE,,"{""task_id"": 503, ""status"": ""WAITING"", ""mh_incurred_hours"": ""6.00""}",2026-03-17T09:27:53+00:00
+202,14,task_snapshot,49,UPDATE,,"{""task_id"": 504, ""status"": ""NOT_STARTED"", ""mh_incurred_hours"": ""0.00""}",2026-03-17T09:27:53+00:00
+203,14,task_snapshot,50,UPDATE,,"{""task_id"": 505, ""status"": ""COMPLETED"", ""mh_incurred_hours"": ""9.00""}",2026-03-17T09:27:53+00:00
+204,16,task_snapshot,51,UPDATE,,"{""task_id"": 506, ""status"": ""NOT_STARTED"", ""mh_incurred_hours"": ""0.00""}",2026-03-17T23:27:53+00:00
+205,17,task_snapshot,52,UPDATE,,"{""task_id"": 601, ""status"": ""COMPLETED"", ""mh_incurred_hours"": ""3.00""}",2026-03-17T09:27:53+00:00
+206,17,task_snapshot,53,UPDATE,,"{""task_id"": 602, ""status"": ""IN_PROGRESS"", ""mh_incurred_hours"": ""1.60""}",2026-03-17T09:27:53+00:00
+207,17,task_snapshot,54,UPDATE,,"{""task_id"": 603, ""status"": ""NOT_STARTED"", ""mh_incurred_hours"": ""0.00""}",2026-03-17T09:27:53+00:00
+208,17,task_snapshot,55,UPDATE,,"{""task_id"": 604, ""status"": ""COMPLETED"", ""mh_incurred_hours"": ""2.50""}",2026-03-17T09:27:53+00:00
+209,1,ot_request,1,CREATE,,"{""user_id"": 1, ""status"": ""APPROVED"", ""minutes"": 180}",2026-03-03T09:00:00+00:00
+210,1,ot_request,2,CREATE,,"{""user_id"": 1, ""status"": ""PENDING"", ""minutes"": 90}",2026-03-17T09:00:00+00:00
+211,1,ot_request,3,CREATE,,"{""user_id"": 1, ""status"": ""ENDORSED"", ""minutes"": 120}",2026-03-14T09:00:00+00:00
+212,3,ot_request,4,CREATE,,"{""user_id"": 3, ""status"": ""PENDING"", ""minutes"": 150}",2026-03-16T09:00:00+00:00
+213,3,ot_request,5,CREATE,,"{""user_id"": 3, ""status"": ""APPROVED"", ""minutes"": 180}",2026-03-11T09:00:00+00:00
+214,3,ot_request,6,CREATE,,"{""user_id"": 3, ""status"": ""CANCELLED"", ""minutes"": 120}",2026-03-13T09:00:00+00:00
+215,4,ot_request,7,CREATE,,"{""user_id"": 4, ""status"": ""ENDORSED"", ""minutes"": 240}",2026-03-18T09:00:00+00:00
+216,4,ot_request,8,CREATE,,"{""user_id"": 4, ""status"": ""APPROVED"", ""minutes"": 210}",2026-03-05T09:00:00+00:00
+217,4,ot_request,9,CREATE,,"{""user_id"": 4, ""status"": ""REJECTED"", ""minutes"": 120}",2026-03-10T09:00:00+00:00
+218,5,ot_request,10,CREATE,,"{""user_id"": 5, ""status"": ""APPROVED"", ""minutes"": 240}",2026-03-06T09:00:00+00:00
+219,5,ot_request,11,CREATE,,"{""user_id"": 5, ""status"": ""REJECTED"", ""minutes"": 180}",2026-03-15T09:00:00+00:00
+220,7,ot_request,12,CREATE,,"{""user_id"": 7, ""status"": ""APPROVED"", ""minutes"": 180}",2026-02-24T09:00:00+00:00
+221,6,ot_request,13,CREATE,,"{""user_id"": 7, ""status"": ""APPROVED"", ""minutes"": 240}",2026-03-04T09:00:00+00:00
+222,6,ot_request,14,CREATE,,"{""user_id"": 7, ""status"": ""PENDING"", ""minutes"": 180}",2026-03-17T09:00:00+00:00
+223,6,ot_request,15,CREATE,,"{""user_id"": 7, ""status"": ""ENDORSED"", ""minutes"": 210}",2026-03-14T09:00:00+00:00
+224,7,ot_request,16,CREATE,,"{""user_id"": 7, ""status"": ""CANCELLED"", ""minutes"": 120}",2026-03-18T09:00:00+00:00
+225,8,ot_request,17,CREATE,,"{""user_id"": 8, ""status"": ""APPROVED"", ""minutes"": 180}",2026-03-03T09:00:00+00:00
+226,8,ot_request,18,CREATE,,"{""user_id"": 8, ""status"": ""REJECTED"", ""minutes"": 180}",2026-03-12T09:00:00+00:00
+227,8,ot_request,19,CREATE,,"{""user_id"": 8, ""status"": ""APPROVED"", ""minutes"": 150}",2026-03-16T09:00:00+00:00
+228,19,ot_request,20,CREATE,,"{""user_id"": 19, ""status"": ""PENDING"", ""minutes"": 120}",2026-03-17T09:00:00+00:00
+229,19,ot_request,21,CREATE,,"{""user_id"": 19, ""status"": ""APPROVED"", ""minutes"": 120}",2026-03-11T09:00:00+00:00
+230,20,ot_request,22,CREATE,,"{""user_id"": 20, ""status"": ""ENDORSED"", ""minutes"": 150}",2026-03-15T09:00:00+00:00
+231,20,ot_request,23,CREATE,,"{""user_id"": 20, ""status"": ""APPROVED"", ""minutes"": 180}",2026-03-13T09:00:00+00:00
+232,10,ot_request,24,CREATE,,"{""user_id"": 10, ""status"": ""APPROVED"", ""minutes"": 180}",2026-03-04T09:00:00+00:00
+233,10,ot_request,25,CREATE,,"{""user_id"": 10, ""status"": ""PENDING"", ""minutes"": 180}",2026-03-17T09:00:00+00:00
+234,10,ot_request,26,CREATE,,"{""user_id"": 10, ""status"": ""ENDORSED"", ""minutes"": 210}",2026-03-15T09:00:00+00:00
+235,10,ot_request,27,CREATE,,"{""user_id"": 10, ""status"": ""APPROVED"", ""minutes"": 150}",2026-03-12T09:00:00+00:00
+236,11,ot_request,28,CREATE,,"{""user_id"": 11, ""status"": ""APPROVED"", ""minutes"": 180}",2026-02-26T09:00:00+00:00
+237,11,ot_request,29,CREATE,,"{""user_id"": 11, ""status"": ""APPROVED"", ""minutes"": 180}",2026-03-06T09:00:00+00:00
+238,11,ot_request,30,CREATE,,"{""user_id"": 11, ""status"": ""REJECTED"", ""minutes"": 180}",2026-03-16T09:00:00+00:00
+239,10,ot_request,31,CREATE,,"{""user_id"": 10, ""status"": ""APPROVED"", ""minutes"": 120}",2026-02-28T09:00:00+00:00
+240,13,ot_request,32,CREATE,,"{""user_id"": 13, ""status"": ""APPROVED"", ""minutes"": 180}",2026-03-04T09:00:00+00:00
+241,13,ot_request,33,CREATE,,"{""user_id"": 13, ""status"": ""PENDING"", ""minutes"": 180}",2026-03-17T09:00:00+00:00
+242,13,ot_request,34,CREATE,,"{""user_id"": 13, ""status"": ""APPROVED"", ""minutes"": 210}",2026-03-12T09:00:00+00:00
+243,13,ot_request,35,CREATE,,"{""user_id"": 13, ""status"": ""CANCELLED"", ""minutes"": 120}",2026-03-15T09:00:00+00:00
+244,15,ot_request,36,CREATE,,"{""user_id"": 15, ""status"": ""APPROVED"", ""minutes"": 300}",2026-03-01T09:00:00+00:00
+245,15,ot_request,37,CREATE,,"{""user_id"": 15, ""status"": ""APPROVED"", ""minutes"": 300}",2026-03-02T09:00:00+00:00
+246,15,ot_request,38,CREATE,,"{""user_id"": 15, ""status"": ""APPROVED"", ""minutes"": 300}",2026-03-03T09:00:00+00:00
+247,15,ot_request,39,CREATE,,"{""user_id"": 15, ""status"": ""APPROVED"", ""minutes"": 300}",2026-03-04T09:00:00+00:00
+248,15,ot_request,40,CREATE,,"{""user_id"": 15, ""status"": ""APPROVED"", ""minutes"": 300}",2026-03-05T09:00:00+00:00
+249,15,ot_request,41,CREATE,,"{""user_id"": 15, ""status"": ""APPROVED"", ""minutes"": 300}",2026-03-06T09:00:00+00:00
+250,15,ot_request,42,CREATE,,"{""user_id"": 15, ""status"": ""APPROVED"", ""minutes"": 300}",2026-03-08T09:00:00+00:00
+251,15,ot_request,43,CREATE,,"{""user_id"": 15, ""status"": ""APPROVED"", ""minutes"": 300}",2026-03-09T09:00:00+00:00
+252,15,ot_request,44,CREATE,,"{""user_id"": 15, ""status"": ""APPROVED"", ""minutes"": 300}",2026-03-10T09:00:00+00:00
+253,15,ot_request,45,CREATE,,"{""user_id"": 15, ""status"": ""APPROVED"", ""minutes"": 300}",2026-03-11T09:00:00+00:00
+254,15,ot_request,46,CREATE,,"{""user_id"": 15, ""status"": ""APPROVED"", ""minutes"": 300}",2026-03-12T09:00:00+00:00
+255,15,ot_request,47,CREATE,,"{""user_id"": 15, ""status"": ""APPROVED"", ""minutes"": 300}",2026-03-13T09:00:00+00:00
+256,15,ot_request,48,CREATE,,"{""user_id"": 15, ""status"": ""APPROVED"", ""minutes"": 300}",2026-03-15T09:00:00+00:00
+257,15,ot_request,49,CREATE,,"{""user_id"": 15, ""status"": ""APPROVED"", ""minutes"": 300}",2026-03-16T09:00:00+00:00
+258,14,ot_request,50,CREATE,,"{""user_id"": 14, ""status"": ""APPROVED"", ""minutes"": 180}",2026-03-11T09:00:00+00:00
+259,17,ot_request,51,CREATE,,"{""user_id"": 17, ""status"": ""APPROVED"", ""minutes"": 120}",2026-03-17T09:00:00+00:00
+260,6,ot_request,52,CREATE,,"{""user_id"": 18, ""status"": ""PENDING"", ""minutes"": 150}",2026-03-16T09:00:00+00:00
+261,2,ot_approval,1,APPROVE,,"{""ot_request_id"": 1, ""stage"": ""ENDORSE""}",2026-03-03T21:00:00+00:00
+262,16,ot_approval,2,APPROVE,,"{""ot_request_id"": 1, ""stage"": ""APPROVE""}",2026-03-04T13:00:00+00:00
+263,2,ot_approval,3,APPROVE,,"{""ot_request_id"": 3, ""stage"": ""ENDORSE""}",2026-03-14T21:00:00+00:00
+264,2,ot_approval,4,APPROVE,,"{""ot_request_id"": 5, ""stage"": ""ENDORSE""}",2026-03-11T21:00:00+00:00
+265,16,ot_approval,5,APPROVE,,"{""ot_request_id"": 5, ""stage"": ""APPROVE""}",2026-03-12T13:00:00+00:00
+266,2,ot_approval,6,APPROVE,,"{""ot_request_id"": 7, ""stage"": ""ENDORSE""}",2026-03-18T21:00:00+00:00
+267,2,ot_approval,7,APPROVE,,"{""ot_request_id"": 8, ""stage"": ""ENDORSE""}",2026-03-05T21:00:00+00:00
+268,16,ot_approval,8,APPROVE,,"{""ot_request_id"": 8, ""stage"": ""APPROVE""}",2026-03-06T13:00:00+00:00
+269,2,ot_approval,9,APPROVE,,"{""ot_request_id"": 9, ""stage"": ""ENDORSE""}",2026-03-10T21:00:00+00:00
+270,16,ot_approval,10,REJECT,,"{""ot_request_id"": 9, ""stage"": ""APPROVE""}",2026-03-11T13:00:00+00:00
+271,2,ot_approval,11,APPROVE,,"{""ot_request_id"": 10, ""stage"": ""ENDORSE""}",2026-03-06T21:00:00+00:00
+272,16,ot_approval,12,APPROVE,,"{""ot_request_id"": 10, ""stage"": ""APPROVE""}",2026-03-07T13:00:00+00:00
+273,2,ot_approval,13,REJECT,,"{""ot_request_id"": 11, ""stage"": ""ENDORSE""}",2026-03-15T21:00:00+00:00
+274,6,ot_approval,14,APPROVE,,"{""ot_request_id"": 12, ""stage"": ""ENDORSE""}",2026-02-24T21:00:00+00:00
+275,16,ot_approval,15,APPROVE,,"{""ot_request_id"": 12, ""stage"": ""APPROVE""}",2026-02-25T13:00:00+00:00
+276,6,ot_approval,16,APPROVE,,"{""ot_request_id"": 13, ""stage"": ""ENDORSE""}",2026-03-04T21:00:00+00:00
+277,16,ot_approval,17,APPROVE,,"{""ot_request_id"": 13, ""stage"": ""APPROVE""}",2026-03-05T13:00:00+00:00
+278,6,ot_approval,18,APPROVE,,"{""ot_request_id"": 15, ""stage"": ""ENDORSE""}",2026-03-14T21:00:00+00:00
+279,6,ot_approval,19,APPROVE,,"{""ot_request_id"": 17, ""stage"": ""ENDORSE""}",2026-03-03T21:00:00+00:00
+280,16,ot_approval,20,APPROVE,,"{""ot_request_id"": 17, ""stage"": ""APPROVE""}",2026-03-04T13:00:00+00:00
+281,6,ot_approval,21,REJECT,,"{""ot_request_id"": 18, ""stage"": ""ENDORSE""}",2026-03-12T21:00:00+00:00
+282,6,ot_approval,22,APPROVE,,"{""ot_request_id"": 19, ""stage"": ""ENDORSE""}",2026-03-16T21:00:00+00:00
+283,16,ot_approval,23,APPROVE,,"{""ot_request_id"": 19, ""stage"": ""APPROVE""}",2026-03-17T13:00:00+00:00
+284,6,ot_approval,24,APPROVE,,"{""ot_request_id"": 21, ""stage"": ""ENDORSE""}",2026-03-11T21:00:00+00:00
+285,16,ot_approval,25,APPROVE,,"{""ot_request_id"": 21, ""stage"": ""APPROVE""}",2026-03-12T13:00:00+00:00
+286,6,ot_approval,26,APPROVE,,"{""ot_request_id"": 22, ""stage"": ""ENDORSE""}",2026-03-15T21:00:00+00:00
+287,6,ot_approval,27,APPROVE,,"{""ot_request_id"": 23, ""stage"": ""ENDORSE""}",2026-03-13T21:00:00+00:00
+288,16,ot_approval,28,APPROVE,,"{""ot_request_id"": 23, ""stage"": ""APPROVE""}",2026-03-14T13:00:00+00:00
+289,9,ot_approval,29,APPROVE,,"{""ot_request_id"": 24, ""stage"": ""ENDORSE""}",2026-03-04T21:00:00+00:00
+290,16,ot_approval,30,APPROVE,,"{""ot_request_id"": 24, ""stage"": ""APPROVE""}",2026-03-05T13:00:00+00:00
+291,9,ot_approval,31,APPROVE,,"{""ot_request_id"": 26, ""stage"": ""ENDORSE""}",2026-03-15T21:00:00+00:00
+292,9,ot_approval,32,APPROVE,,"{""ot_request_id"": 27, ""stage"": ""ENDORSE""}",2026-03-12T21:00:00+00:00
+293,16,ot_approval,33,APPROVE,,"{""ot_request_id"": 27, ""stage"": ""APPROVE""}",2026-03-13T13:00:00+00:00
+294,9,ot_approval,34,APPROVE,,"{""ot_request_id"": 28, ""stage"": ""ENDORSE""}",2026-02-26T21:00:00+00:00
+295,16,ot_approval,35,APPROVE,,"{""ot_request_id"": 28, ""stage"": ""APPROVE""}",2026-02-27T13:00:00+00:00
+296,9,ot_approval,36,APPROVE,,"{""ot_request_id"": 29, ""stage"": ""ENDORSE""}",2026-03-06T21:00:00+00:00
+297,16,ot_approval,37,APPROVE,,"{""ot_request_id"": 29, ""stage"": ""APPROVE""}",2026-03-07T13:00:00+00:00
+298,9,ot_approval,38,APPROVE,,"{""ot_request_id"": 30, ""stage"": ""ENDORSE""}",2026-03-16T21:00:00+00:00
+299,16,ot_approval,39,REJECT,,"{""ot_request_id"": 30, ""stage"": ""APPROVE""}",2026-03-17T13:00:00+00:00
+300,9,ot_approval,40,APPROVE,,"{""ot_request_id"": 31, ""stage"": ""ENDORSE""}",2026-02-28T21:00:00+00:00
+301,16,ot_approval,41,APPROVE,,"{""ot_request_id"": 31, ""stage"": ""APPROVE""}",2026-03-01T13:00:00+00:00
+302,12,ot_approval,42,APPROVE,,"{""ot_request_id"": 32, ""stage"": ""ENDORSE""}",2026-03-04T21:00:00+00:00
+303,16,ot_approval,43,APPROVE,,"{""ot_request_id"": 32, ""stage"": ""APPROVE""}",2026-03-05T13:00:00+00:00
+304,12,ot_approval,44,APPROVE,,"{""ot_request_id"": 34, ""stage"": ""ENDORSE""}",2026-03-12T21:00:00+00:00
+305,16,ot_approval,45,APPROVE,,"{""ot_request_id"": 34, ""stage"": ""APPROVE""}",2026-03-13T13:00:00+00:00
+306,14,ot_approval,46,APPROVE,,"{""ot_request_id"": 36, ""stage"": ""ENDORSE""}",2026-03-01T21:00:00+00:00
+307,16,ot_approval,47,APPROVE,,"{""ot_request_id"": 36, ""stage"": ""APPROVE""}",2026-03-02T13:00:00+00:00
+308,14,ot_approval,48,APPROVE,,"{""ot_request_id"": 37, ""stage"": ""ENDORSE""}",2026-03-02T21:00:00+00:00
+309,16,ot_approval,49,APPROVE,,"{""ot_request_id"": 37, ""stage"": ""APPROVE""}",2026-03-03T13:00:00+00:00
+310,14,ot_approval,50,APPROVE,,"{""ot_request_id"": 38, ""stage"": ""ENDORSE""}",2026-03-03T21:00:00+00:00
+311,16,ot_approval,51,APPROVE,,"{""ot_request_id"": 38, ""stage"": ""APPROVE""}",2026-03-04T13:00:00+00:00
+312,14,ot_approval,52,APPROVE,,"{""ot_request_id"": 39, ""stage"": ""ENDORSE""}",2026-03-04T21:00:00+00:00
+313,16,ot_approval,53,APPROVE,,"{""ot_request_id"": 39, ""stage"": ""APPROVE""}",2026-03-05T13:00:00+00:00
+314,14,ot_approval,54,APPROVE,,"{""ot_request_id"": 40, ""stage"": ""ENDORSE""}",2026-03-05T21:00:00+00:00
+315,16,ot_approval,55,APPROVE,,"{""ot_request_id"": 40, ""stage"": ""APPROVE""}",2026-03-06T13:00:00+00:00
+316,14,ot_approval,56,APPROVE,,"{""ot_request_id"": 41, ""stage"": ""ENDORSE""}",2026-03-06T21:00:00+00:00
+317,16,ot_approval,57,APPROVE,,"{""ot_request_id"": 41, ""stage"": ""APPROVE""}",2026-03-07T13:00:00+00:00
+318,14,ot_approval,58,APPROVE,,"{""ot_request_id"": 42, ""stage"": ""ENDORSE""}",2026-03-08T21:00:00+00:00
+319,16,ot_approval,59,APPROVE,,"{""ot_request_id"": 42, ""stage"": ""APPROVE""}",2026-03-09T13:00:00+00:00
+320,14,ot_approval,60,APPROVE,,"{""ot_request_id"": 43, ""stage"": ""ENDORSE""}",2026-03-09T21:00:00+00:00
+321,16,ot_approval,61,APPROVE,,"{""ot_request_id"": 43, ""stage"": ""APPROVE""}",2026-03-10T13:00:00+00:00
+322,14,ot_approval,62,APPROVE,,"{""ot_request_id"": 44, ""stage"": ""ENDORSE""}",2026-03-10T21:00:00+00:00
+323,16,ot_approval,63,APPROVE,,"{""ot_request_id"": 44, ""stage"": ""APPROVE""}",2026-03-11T13:00:00+00:00
+324,14,ot_approval,64,APPROVE,,"{""ot_request_id"": 45, ""stage"": ""ENDORSE""}",2026-03-11T21:00:00+00:00
+325,16,ot_approval,65,APPROVE,,"{""ot_request_id"": 45, ""stage"": ""APPROVE""}",2026-03-12T13:00:00+00:00
+326,14,ot_approval,66,APPROVE,,"{""ot_request_id"": 46, ""stage"": ""ENDORSE""}",2026-03-12T21:00:00+00:00
+327,16,ot_approval,67,APPROVE,,"{""ot_request_id"": 46, ""stage"": ""APPROVE""}",2026-03-13T13:00:00+00:00
+328,14,ot_approval,68,APPROVE,,"{""ot_request_id"": 47, ""stage"": ""ENDORSE""}",2026-03-13T21:00:00+00:00
+329,16,ot_approval,69,APPROVE,,"{""ot_request_id"": 47, ""stage"": ""APPROVE""}",2026-03-14T13:00:00+00:00
+330,14,ot_approval,70,APPROVE,,"{""ot_request_id"": 48, ""stage"": ""ENDORSE""}",2026-03-15T21:00:00+00:00
+331,16,ot_approval,71,APPROVE,,"{""ot_request_id"": 48, ""stage"": ""APPROVE""}",2026-03-16T13:00:00+00:00
+332,14,ot_approval,72,APPROVE,,"{""ot_request_id"": 49, ""stage"": ""ENDORSE""}",2026-03-16T21:00:00+00:00
+333,16,ot_approval,73,APPROVE,,"{""ot_request_id"": 49, ""stage"": ""APPROVE""}",2026-03-17T13:00:00+00:00
+334,14,ot_approval,74,APPROVE,,"{""ot_request_id"": 50, ""stage"": ""ENDORSE""}",2026-03-11T21:00:00+00:00
+335,16,ot_approval,75,APPROVE,,"{""ot_request_id"": 50, ""stage"": ""APPROVE""}",2026-03-12T13:00:00+00:00
+336,17,ot_approval,76,APPROVE,,"{""ot_request_id"": 51, ""stage"": ""ENDORSE""}",2026-03-17T21:00:00+00:00
+337,16,ot_approval,77,APPROVE,,"{""ot_request_id"": 51, ""stage"": ""APPROVE""}",2026-03-18T13:00:00+00:00

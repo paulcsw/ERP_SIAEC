@@ -1,0 +1,16 @@
+id,key,value,updated_by,updated_at
+1,meeting_current_date,2026-03-16,16,2026-03-18T03:27:53+00:00
+2,needs_update_threshold_hours,72,16,2026-03-18T03:27:53+00:00
+3,teams_enabled,true,16,2026-03-18T03:27:53+00:00
+4,snapshot_advance_day,Sunday,16,2026-03-18T03:27:53+00:00
+5,snapshot_advance_time,18:00,16,2026-03-18T03:27:53+00:00
+6,auto_advance_week,true,16,2026-03-18T03:27:53+00:00
+7,notify_critical,true,16,2026-03-18T03:27:53+00:00
+8,notify_teams,false,16,2026-03-18T03:27:53+00:00
+9,notify_outlook,false,16,2026-03-18T03:27:53+00:00
+10,notify_recipients,planning@demo.local;qa@demo.local,16,2026-03-18T03:27:53+00:00
+11,critical_recipients,chief.engineer@demo.local,16,2026-03-18T03:27:53+00:00
+12,notify_template,default,16,2026-03-18T03:27:53+00:00
+13,outlook_subject,[ERP] Critical task notification,16,2026-03-18T03:27:53+00:00
+14,outlook_body,This is a demo placeholder body.,16,2026-03-18T03:27:53+00:00
+15,outlook_recipients,ops.control@demo.local,16,2026-03-18T03:27:53+00:00

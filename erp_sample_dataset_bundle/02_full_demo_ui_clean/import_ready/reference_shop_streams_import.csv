@@ -1,0 +1,23 @@
+work_package_rfo_no,title,shop_code
+RFO-260301,SQ A350 Heavy Check C01,STRUCT
+RFO-260301,SQ A350 Heavy Check C01,AVN
+RFO-260301,SQ A350 Heavy Check C01,CAB
+RFO-260301,SQ A350 Heavy Check C01,QA
+RFO-260302,SQ A350 Cabin Retrofit,CAB
+RFO-260302,SQ A350 Cabin Retrofit,AVN
+RFO-260302,SQ A350 Cabin Retrofit,QA
+RFO-260303,SQ 787 Avionics Upgrade,AVN
+RFO-260303,SQ 787 Avionics Upgrade,QA
+RFO-260304,EK 777 Phase Check,STRUCT
+RFO-260304,EK 777 Phase Check,ENG
+RFO-260304,EK 777 Phase Check,QA
+RFO-260305,CX Cabin Refresh,CAB
+RFO-260305,CX Cabin Refresh,QA
+RFO-260306,MH Engine Preservation,ENG
+RFO-260306,MH Engine Preservation,QA
+RFO-260307,Corrosion Repair Package,STRUCT
+RFO-260307,Corrosion Repair Package,QA
+RFO-260308,Galley Modification Campaign,CAB
+RFO-260308,Galley Modification Campaign,QA
+RFO-260309,Seat Track Repair,STRUCT
+RFO-260309,Seat Track Repair,CAB

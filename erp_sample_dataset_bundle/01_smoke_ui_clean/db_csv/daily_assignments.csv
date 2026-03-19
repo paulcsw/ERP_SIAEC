@@ -1,0 +1,5 @@
+id,user_id,shop_stream_id,date,planned_minutes,note,assigned_by,created_at
+1,7,1,2026-03-16,360,Primary heavy-check structural scope,6,2026-03-16T07:00:00+00:00
+2,8,10,2026-03-16,300,Seat track repair support,6,2026-03-16T07:00:00+00:00
+3,10,8,2026-03-16,330,787 avionics troubleshooting,9,2026-03-16T07:00:00+00:00
+4,11,8,2026-03-16,300,Software load closeout,9,2026-03-16T07:00:00+00:00

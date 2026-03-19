@@ -1,0 +1,7 @@
+id,user_id,shop_stream_id,date,allocated_regular_minutes,allocated_ot_minutes,source
+1,7,1,2026-03-16,360,0,PLANNED
+2,8,10,2026-03-16,300,150,PLANNED
+3,10,8,2026-03-16,330,0,PLANNED
+4,11,8,2026-03-16,300,0,PLANNED
+5,13,5,2026-03-16,360,0,PLANNED
+6,15,15,2026-03-16,420,300,ACTUAL

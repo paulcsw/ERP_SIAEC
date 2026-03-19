@@ -1,0 +1,5 @@
+id,user_id,date,capacity_minutes,planned_minutes_total,actual_minutes_total,regular_minutes,ot_minutes_actual,ot_minutes_approved,cost_regular,cost_ot,calc_version,calculated_at
+1,7,2026-03-16,480,360,360,360,0,0,270.00,0.00,1,2026-03-16T23:00:00+00:00
+2,8,2026-03-16,480,300,300,300,150,150,225.00,180.00,1,2026-03-16T23:00:00+00:00
+3,10,2026-03-16,480,330,330,330,0,0,247.50,0.00,1,2026-03-16T23:00:00+00:00
+4,11,2026-03-16,480,300,300,300,0,0,225.00,0.00,1,2026-03-16T23:00:00+00:00

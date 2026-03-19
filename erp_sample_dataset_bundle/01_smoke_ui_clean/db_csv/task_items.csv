@@ -1,0 +1,13 @@
+id,aircraft_id,shop_id,work_package_id,assigned_supervisor_id,assigned_worker_id,distributed_at,planned_mh,task_text,is_active,deactivated_at,deactivated_by,created_at,created_by
+101,1,1,,2,3,2026-03-06T09:27:53+00:00,4.00,Validate imported task template for A350 C01,1,,,2026-02-19T09:27:53+00:00,2
+102,2,1,,2,4,2026-03-10T09:27:53+00:00,6.00,Cross-check manpower plan against latest meeting notes,1,,,2026-02-20T09:27:53+00:00,2
+103,3,1,3,2,5,2026-03-17T09:27:53+00:00,5.50,Prepare avionics kit issue tracker handover,1,,,2026-02-21T09:27:53+00:00,2
+104,1,1,1,2,3,2026-03-10T09:27:53+00:00,3.00,Review heavy-check open points with structures,1,,,2026-02-22T09:27:53+00:00,2
+201,1,2,1,6,7,2026-03-10T09:27:53+00:00,28.00,Open LH wing root panel and inspect corrosion,1,,,2026-02-21T09:27:53+00:00,16
+202,1,2,1,6,20,2026-03-06T09:27:53+00:00,16.00,Blend out frame 47 doubler damage,1,,,2026-02-22T09:27:53+00:00,16
+203,1,2,1,6,19,2026-03-10T09:27:53+00:00,14.00,Install replacement cargo liner supports,1,,,2026-02-16T09:27:53+00:00,16
+204,4,2,4,6,7,2026-03-10T09:27:53+00:00,18.00,Inspect seat track attachment at row 32,1,,,2026-02-17T09:27:53+00:00,16
+301,1,3,1,9,10,2026-03-06T09:27:53+00:00,10.00,Update ELT wiring harness routing,1,,,2026-02-16T09:27:53+00:00,16
+302,1,3,1,9,11,2026-03-10T09:27:53+00:00,9.00,Functional test SATCOM LRU after removal,1,,,2026-02-17T09:27:53+00:00,16
+303,2,3,2,9,10,2026-03-17T09:27:53+00:00,7.00,Install cabin IFE control unit patch,1,,,2026-02-18T09:27:53+00:00,16
+304,3,3,3,9,10,2026-03-06T09:27:53+00:00,14.00,Replace ADC cooling fan assembly,1,,,2026-02-19T09:27:53+00:00,16

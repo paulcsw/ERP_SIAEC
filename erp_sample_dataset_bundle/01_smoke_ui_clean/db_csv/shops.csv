@@ -1,0 +1,4 @@
+id,code,name,created_at,updated_at,created_by
+1,DEVCELL,Development Demo Cell,2026-02-16T09:27:53+00:00,2026-03-18T09:27:53+00:00,16
+2,STRUCT,Structures Shop,2026-02-16T09:27:53+00:00,2026-03-18T09:27:53+00:00,16
+3,AVN,Avionics Shop,2026-02-16T09:27:53+00:00,2026-03-18T09:27:53+00:00,16

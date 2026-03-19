@@ -1,0 +1,8 @@
+persona,user_id,role_in_db,team,shop_access,demo_use
+Dev seed operator (user_id=1),1,ADMIN,DEV,"DEVCELL=VIEW, STRUCT=MANAGE, AVN=EDIT",`/dev/login`와 가장 잘 맞는 기본 시연 사용자
+DEV supervisor,2,SUPERVISOR,DEV,DEVCELL=MANAGE,DEV 팀 OT 1차 승인 시연
+Structures view-only worker,19,WORKER,Structures,STRUCT=VIEW,모바일/데이터엔트리 읽기전용 시연
+Structures edit worker,20,WORKER,Structures,STRUCT=EDIT,모바일 Quick Update 시연
+No-access worker,18,WORKER,Temporary,없음,shop access 없는 Worker 예외 케이스
+Engine worker near OT limit,15,WORKER,Engine,ENG=EDIT,월 72h OT 한도 근접 사용자 (현 데이터 4200분 / 70.0h)
+Planning admin,16,ADMIN,Planning,ADMIN bypass,설정/승인/레퍼런스 데이터/감사 로그 시연

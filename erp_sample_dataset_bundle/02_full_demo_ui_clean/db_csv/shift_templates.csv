@@ -1,0 +1,4 @@
+id,code,start_time,end_time,paid_break_minutes
+1,DAY,08:00:00,17:00:00,60
+2,EVE,14:00:00,23:00:00,30
+3,NIGHT,22:00:00,06:00:00,45

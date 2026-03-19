@@ -1,0 +1,13 @@
+id,task_id,meeting_date,status,mh_incurred_hours,remarks,critical_issue,has_issue,deadline_date,correction_reason,is_deleted,deleted_at,deleted_by,version,supervisor_updated_at,last_updated_at,last_updated_by,created_at
+1,101,2026-03-16,COMPLETED,4.00,Closed during weekly review,,0,,,0,,,3,2026-03-17T13:27:53+00:00,2026-03-17T09:27:53+00:00,2,2026-03-16T08:00:00+00:00
+2,102,2026-03-16,IN_PROGRESS,2.70,Progressing to plan,,0,,,0,,,2,2026-03-17T15:27:53+00:00,2026-03-17T09:27:53+00:00,4,2026-03-16T08:00:00+00:00
+3,103,2026-03-16,NOT_STARTED,0.00,Newly distributed - awaiting first supervisor update,,0,,,0,,,1,,2026-03-17T23:27:53+00:00,16,2026-03-16T08:00:00+00:00
+4,104,2026-03-16,WAITING,1.80,Blocked pending external action,Awaiting structures sign-off,1,2026-03-15,,0,,,3,2026-03-14T03:27:53+00:00,2026-03-17T09:27:53+00:00,2,2026-03-16T08:00:00+00:00
+7,201,2026-03-16,WAITING,16.80,Blocked pending external action,Awaiting NDT clearance,1,2026-03-14,,0,,,3,2026-03-14T03:27:53+00:00,2026-03-17T09:27:53+00:00,6,2026-03-16T08:00:00+00:00
+8,202,2026-03-16,COMPLETED,16.00,Closed during weekly review,,0,,,0,,,3,2026-03-17T13:27:53+00:00,2026-03-17T09:27:53+00:00,6,2026-03-16T08:00:00+00:00
+9,203,2026-03-16,IN_PROGRESS,6.30,Progressing to plan,,0,2026-03-19,,0,,,2,2026-03-17T15:27:53+00:00,2026-03-17T09:27:53+00:00,19,2026-03-16T08:00:00+00:00
+10,204,2026-03-16,IN_PROGRESS,6.30,No update received in last 72h,,0,2026-03-15,,0,,,2,2026-03-13T07:27:53+00:00,2026-03-17T09:27:53+00:00,7,2026-03-16T08:00:00+00:00
+28,301,2026-03-16,COMPLETED,10.00,Closed during weekly review,,0,2026-03-23,,0,,,3,2026-03-17T13:27:53+00:00,2026-03-17T09:27:53+00:00,9,2026-03-16T08:00:00+00:00
+29,302,2026-03-16,IN_PROGRESS,4.00,Progressing to plan,,0,2026-03-18,,0,,,2,2026-03-17T15:27:53+00:00,2026-03-17T09:27:53+00:00,11,2026-03-16T08:00:00+00:00
+30,303,2026-03-16,NOT_STARTED,0.00,Newly distributed - awaiting first supervisor update,,0,2026-03-23,,0,,,1,,2026-03-17T23:27:53+00:00,16,2026-03-16T08:00:00+00:00
+31,304,2026-03-16,COMPLETED,14.00,Closed during weekly review,,0,2026-03-23,,0,,,3,2026-03-17T13:27:53+00:00,2026-03-17T09:27:53+00:00,9,2026-03-16T08:00:00+00:00

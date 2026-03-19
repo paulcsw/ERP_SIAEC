@@ -1,0 +1,11 @@
+ac_reg,rfo_no,description,planned_mh
+9V-SKA,RFO-260301,Update ELT wiring harness routing,10.00
+9V-SKA,RFO-260301,Functional test SATCOM LRU after removal,9.00
+9V-SKB,RFO-260302,Install cabin IFE control unit patch,7.00
+9V-SKC,RFO-260303,Replace ADC cooling fan assembly,14.00
+9V-SKC,RFO-260303,Troubleshoot intermittent autopilot disconnect,18.00
+9V-SKC,RFO-260303,Software load for communication management unit,11.00
+9V-SKB,RFO-260302,Terminate new PSU loom at zone 410,8.00
+9V-SKA,RFO-260301,Bonding resistance check for VHF antenna feed,6.50
+9V-SKC,,General avionics defect backlog cleanup,5.00
+9V-SKC,RFO-260303,Close open MEL-related wiring findings,7.50
