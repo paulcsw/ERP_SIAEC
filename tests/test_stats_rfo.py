@@ -568,11 +568,16 @@ async def test_rfo_detail_ssr(async_client, db):
 
 
 async def test_rfo_detail_ssr_with_id(async_client, rfo_env):
-    """GET /rfo?id=X returns selected RFO details."""
+    """GET /rfo?id=X redirects to /rfo/{id} (backward compat)."""
     wp_id = rfo_env["wp_id"]
-    resp = await async_client.get(f"/rfo?id={wp_id}")
-    assert resp.status_code == 200
-    assert "RFO-001" in resp.text
+    # Query-param form now redirects to path form
+    resp = await async_client.get(f"/rfo?id={wp_id}", follow_redirects=False)
+    assert resp.status_code == 302
+    assert f"/rfo/{wp_id}" in resp.headers["location"]
+    # Following the redirect should render successfully
+    resp2 = await async_client.get(f"/rfo/{wp_id}")
+    assert resp2.status_code == 200
+    assert "RFO-001" in resp2.text
 
 
 # ── Admin SSR smoke tests ────────────────────────────────────────────
@@ -1197,17 +1202,18 @@ async def test_ot_new_page_contains_mobile_responsive_submit_layout(async_client
 
 # ── Fix A: Dashboard RFO card navigation ──────────────────────────────────
 
-async def test_dashboard_rfo_links_use_id_param(rfo_env, async_client, db):
-    """Dashboard RFO cards link to /rfo?id=<wp_id> instead of /rfo/<rfo_no>."""
+async def test_dashboard_rfo_links_use_path_route(rfo_env, async_client, db):
+    """Dashboard RFO cards link to /rfo/<wp_id> (SSOT §11 path route)."""
     resp = await async_client.get("/dashboard")
     assert resp.status_code == 200
     body = resp.text
-    # Should NOT contain /rfo/RFO- pattern (old broken route)
+    # Should NOT contain /rfo/RFO- pattern (rfo_no in URL is wrong)
     import re
     broken_links = re.findall(r'href="/rfo/[A-Z]', body)
     assert broken_links == [], f"Found broken /rfo/<rfo_no> links: {broken_links}"
-    # Should contain /rfo?id= pattern (correct route)
-    assert "/rfo?id=" in body or "No active work packages" in body
+    # Should contain /rfo/<int> path pattern (correct SSOT route)
+    wp_id = rfo_env["wp_id"]
+    assert f"/rfo/{wp_id}" in body or "No active work packages" in body
 
 
 # ── Fix B: Mobile logout uses POST + CSRF ──────────────────────────────────

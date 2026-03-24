@@ -2,6 +2,7 @@
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,12 +33,35 @@ def _ctx(request, user, **kw):
     }
 
 
+@router.get("/rfo/{work_package_id}")
+async def rfo_by_path(
+    request: Request,
+    work_package_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """SSOT §11 route: /rfo/{id}."""
+    return await _rfo_page(request, work_package_id, current_user, db)
+
+
 @router.get("/rfo")
 async def rfo_index(
     request: Request,
     id: int | None = Query(None),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+):
+    """Backward-compatible /rfo?id= entry point."""
+    if id is not None:
+        return RedirectResponse(f"/rfo/{id}", status_code=302)
+    return await _rfo_page(request, None, current_user, db)
+
+
+async def _rfo_page(
+    request: Request,
+    id: int | None,
+    current_user: dict,
+    db: AsyncSession,
 ):
     # RFO selector: list all work packages
     wps = (await db.execute(

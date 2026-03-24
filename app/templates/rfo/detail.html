@@ -23,7 +23,7 @@
           </div>
           <div id="rfo-list" class="max-h-48 overflow-y-auto">
           {% for opt in rfo_options %}
-            <a href="/rfo?id={{ opt.id }}"
+            <a href="/rfo/{{ opt.id }}"
                class="rfo-item block px-3 py-2.5 cursor-pointer hover:bg-surf-50 border-l-[3px] border-transparent"
                {% if selected and selected.id == opt.id %}style="border-left:3px solid #1e3a5f;background:#eef2f7"{% endif %}
                data-search="{{ opt.rfo_no }} {{ opt.title }} {{ opt.ac_reg or '' }}">

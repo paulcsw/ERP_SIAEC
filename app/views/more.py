@@ -279,14 +279,101 @@ async def global_search(
 @router.get("/more/rfo-summary")
 async def more_rfo_summary(
     request: Request,
+    wp_id: int | None = Query(None),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.models.reference import Aircraft, WorkPackage
+    from app.models.task import TaskItem, TaskSnapshot
+    from sqlalchemy import func
+    from datetime import datetime, timezone
+
+    # List active work packages for selector
+    wps = (await db.execute(
+        select(WorkPackage, Aircraft)
+        .join(Aircraft, WorkPackage.aircraft_id == Aircraft.id)
+        .where(WorkPackage.status == "ACTIVE")
+        .order_by(WorkPackage.rfo_no)
+    )).all()
+    wp_options = [
+        {"id": w.id, "rfo_no": w.rfo_no or f"WP-{w.id}", "ac_reg": a.ac_reg}
+        for w, a in wps
+    ]
+
+    rfo = None
+    metrics = None
+    blockers_list: list[dict] = []
+
+    selected_wp = None
+    if wp_id:
+        selected_wp = next((w for w, _ in wps if w.id == wp_id), None)
+    elif wps:
+        selected_wp = wps[0][0]
+        wp_id = selected_wp.id
+
+    if selected_wp:
+        ac = next((a for w, a in wps if w.id == selected_wp.id), None)
+        rfo = {
+            "id": selected_wp.id,
+            "rfo_no": selected_wp.rfo_no or f"WP-{selected_wp.id}",
+            "ac_reg": ac.ac_reg if ac else "N/A",
+        }
+
+        tasks = (await db.execute(
+            select(TaskItem).where(
+                TaskItem.work_package_id == selected_wp.id,
+                TaskItem.is_active == True,  # noqa: E712
+            )
+        )).scalars().all()
+
+        planned_mh = sum(float(t.planned_mh or 0) for t in tasks)
+        actual_mh = 0.0
+        completed = 0
+        overdue = 0
+        blocker_count = 0
+        total = len(tasks)
+        now = datetime.now(timezone.utc)
+
+        for ti in tasks:
+            snap = (await db.execute(
+                select(TaskSnapshot)
+                .where(TaskSnapshot.task_id == ti.id, TaskSnapshot.is_deleted == False)  # noqa: E712
+                .order_by(TaskSnapshot.meeting_date.desc()).limit(1)
+            )).scalar_one_or_none()
+            if not snap:
+                continue
+            mh = float(snap.mh_incurred_hours or 0)
+            actual_mh += mh
+            if snap.status == "COMPLETED":
+                completed += 1
+            if snap.status != "COMPLETED" and snap.deadline_date and snap.deadline_date < now.date():
+                overdue += 1
+            if snap.status == "WAITING" and snap.has_issue:
+                blocker_count += 1
+                days = (now.date() - snap.meeting_date).days if snap.meeting_date else 0
+                blockers_list.append({
+                    "task_text": ti.task_text,
+                    "days_waiting": max(0, days),
+                })
+
+        blockers_list.sort(key=lambda x: -x["days_waiting"])
+        progress_pct = round(completed / total * 100) if total else 0
+        remaining_mh = round(max(0, planned_mh - actual_mh), 1)
+
+        metrics = {
+            "progress_pct": progress_pct,
+            "overdue_count": overdue,
+            "blocker_count": blocker_count,
+            "remaining_mh": remaining_mh,
+        }
+
     return templates.TemplateResponse(request, "more/rfo_summary.html", _ctx(
         request, current_user,
-        rfo=None,
-        metrics=None,
-        blockers=[],
+        rfo=rfo,
+        metrics=metrics,
+        blockers=blockers_list[:5],
+        wp_options=wp_options,
+        selected_wp_id=wp_id,
     ))
 
 

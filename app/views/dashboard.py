@@ -22,6 +22,22 @@ router = APIRouter(tags=["dashboard"])
 LIMIT_HOURS = round(MONTHLY_LIMIT_MINUTES / 60, 1)
 
 
+def _latest_snapshot_subquery():
+    """Subquery returning (task_id, max meeting_date) for non-deleted snapshots.
+
+    Joining on this ensures dashboard KPIs count only the latest snapshot
+    per task â€” avoiding inflated counts when history-rich data exists.
+    """
+    return (
+        select(
+            TaskSnapshot.task_id.label("task_id"),
+            func.max(TaskSnapshot.meeting_date).label("max_md"),
+        )
+        .where(TaskSnapshot.is_deleted == False)  # noqa: E712
+        .group_by(TaskSnapshot.task_id)
+    ).subquery("latest_snap")
+
+
 def _ctx(request, user, **kw):
     return {
         "request": request,
@@ -94,11 +110,14 @@ async def dashboard_page(
             )
         ).scalars().all()
 
-    # ?€?€ KPI 1: Active Tasks ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
+    ls = _latest_snapshot_subquery()
+
+    # KPI 1: Active Tasks (latest snapshot per task only)
     active_tasks_q = (
         select(func.count())
         .select_from(TaskSnapshot)
         .join(TaskItem, TaskSnapshot.task_id == TaskItem.id)
+        .join(ls, (TaskSnapshot.task_id == ls.c.task_id) & (TaskSnapshot.meeting_date == ls.c.max_md))
         .where(
             TaskItem.is_active == True,
             TaskSnapshot.is_deleted == False,
@@ -109,7 +128,7 @@ async def dashboard_page(
         active_tasks_q = active_tasks_q.where(TaskItem.shop_id == selected_shop_id)
     active_tasks = (await db.execute(active_tasks_q)).scalar() or 0
 
-    # ?€?€ KPI 2-3: OT Pending / Endorsed ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
+    # ?ï¿½?ï¿½ KPI 2-3: OT Pending / Endorsed ?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½
     ot_pending_q = select(func.count()).select_from(OtRequest).where(OtRequest.status == "PENDING")
     ot_endorsed_q = select(func.count()).select_from(OtRequest).where(OtRequest.status == "ENDORSED")
     if user_scope_ids is not None:
@@ -122,11 +141,12 @@ async def dashboard_page(
     ot_pending = (await db.execute(ot_pending_q)).scalar() or 0
     ot_endorsed = (await db.execute(ot_endorsed_q)).scalar() or 0
 
-    # ?€?€ KPI 4: Critical Issues ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
+    # KPI 4: Critical Issues (latest snapshot per task only)
     critical_issues_q = (
         select(func.count())
         .select_from(TaskSnapshot)
         .join(TaskItem, TaskSnapshot.task_id == TaskItem.id)
+        .join(ls, (TaskSnapshot.task_id == ls.c.task_id) & (TaskSnapshot.meeting_date == ls.c.max_md))
         .where(
             TaskItem.is_active == True,
             TaskSnapshot.is_deleted == False,
@@ -137,10 +157,12 @@ async def dashboard_page(
         critical_issues_q = critical_issues_q.where(TaskItem.shop_id == selected_shop_id)
     critical_issues = (await db.execute(critical_issues_q)).scalar() or 0
 
-    # ?€?€ KPI 5: Total MH (latest snapshots) ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
+    # KPI 5: Total MH (latest snapshot per task only)
     total_mh_q = (
         select(func.coalesce(func.sum(TaskSnapshot.mh_incurred_hours), 0))
+        .select_from(TaskSnapshot)
         .join(TaskItem, TaskSnapshot.task_id == TaskItem.id)
+        .join(ls, (TaskSnapshot.task_id == ls.c.task_id) & (TaskSnapshot.meeting_date == ls.c.max_md))
         .where(
             TaskItem.is_active == True,
             TaskSnapshot.is_deleted == False,
@@ -151,7 +173,7 @@ async def dashboard_page(
     total_mh_raw = (await db.execute(total_mh_q)).scalar() or 0
     total_mh = round(float(total_mh_raw), 1)
 
-    # ?€?€ Monthly OT Quota (per user) ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
+    # ?ï¿½?ï¿½ Monthly OT Quota (per user) ?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½
     if is_admin:
         if selected_shop_code:
             user_rows = (await db.execute(
@@ -203,7 +225,7 @@ async def dashboard_page(
     else:
         avg_hours = 0
 
-    # ?€?€ RFO Progress (per work package) ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
+    # ?ï¿½?ï¿½ RFO Progress (per work package) ?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½
     wp_q = (
         select(WorkPackage, Aircraft)
         .join(Aircraft, WorkPackage.aircraft_id == Aircraft.id)
@@ -223,10 +245,12 @@ async def dashboard_page(
     grand_total_mh = 0.0
     grand_planned_mh = 0.0
     for wp, ac in wp_rows:
-        # Count tasks by status for this WP
+        # Count tasks by status for this WP (latest snapshot only)
         snap_q = (
             select(TaskSnapshot.status, func.count(), func.coalesce(func.sum(TaskSnapshot.mh_incurred_hours), 0))
+            .select_from(TaskSnapshot)
             .join(TaskItem, TaskSnapshot.task_id == TaskItem.id)
+            .join(ls, (TaskSnapshot.task_id == ls.c.task_id) & (TaskSnapshot.meeting_date == ls.c.max_md))
             .where(
                 TaskItem.work_package_id == wp.id,
                 TaskItem.is_active == True,
@@ -257,11 +281,12 @@ async def dashboard_page(
         planned = float(planned_raw)
 
         total = wp_task_count or 1
-        # Overdue count
+        # Overdue count (latest snapshot only)
         overdue_q = (
             select(func.count())
             .select_from(TaskSnapshot)
             .join(TaskItem, TaskSnapshot.task_id == TaskItem.id)
+            .join(ls, (TaskSnapshot.task_id == ls.c.task_id) & (TaskSnapshot.meeting_date == ls.c.max_md))
             .where(
                 TaskItem.work_package_id == wp.id,
                 TaskItem.is_active == True,
@@ -320,7 +345,7 @@ async def dashboard_page(
 
     rfo_overall_pct = round(grand_total_mh / grand_planned_mh * 100) if grand_planned_mh else 0
 
-    # ?€?€ OT Approval Pipeline ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
+    # ?ï¿½?ï¿½ OT Approval Pipeline ?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½
     ot_month_q = select(OtRequest).where(
         OtRequest.date >= first, OtRequest.date <= last
     )
@@ -360,7 +385,7 @@ async def dashboard_page(
         if turnarounds:
             avg_turnaround = round(sum(turnarounds) / len(turnarounds), 1)
 
-    # ?€?€ Recent Activity (last 5 audit logs) ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
+    # ?ï¿½?ï¿½ Recent Activity (last 5 audit logs) ?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½
     recent_logs = (await db.execute(
         select(AuditLog, User)
         .outerjoin(User, AuditLog.actor_id == User.id)

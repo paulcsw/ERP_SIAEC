@@ -70,14 +70,20 @@
           <script>
           async function mobLogout(btn) {
             btn.disabled = true;
-            btn.textContent = 'Logging out...';
+            btn.textContent = 'Logging out\u2026';
             try {
-              await fetch('/logout', {
+              var resp = await fetch('/logout', {
                 method: 'POST',
+                credentials: 'same-origin',
+                redirect: 'manual',
                 headers: {'X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || ''},
               });
-            } catch(_) {}
-            window.location.href = '/login';
+              /* 302 with redirect:manual becomes opaqueredirect (type=opaqueredirect, status=0) */
+              window.location.replace('/login');
+            } catch(e) {
+              /* Network error — still navigate away so stale UI is not shown */
+              window.location.replace('/login');
+            }
           }
           </script>
         </div>

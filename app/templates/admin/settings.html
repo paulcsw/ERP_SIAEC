@@ -51,8 +51,8 @@
         <div>
           <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">Auto-advance</label>
           <select id="auto-advance" class="inp w-full h-9 text-sm">
-            <option value="manual" {% if configs.get('auto_advance_week', 'false') != 'true' %}selected{% endif %}>Manual only</option>
-            <option value="auto" {% if configs.get('auto_advance_week', 'false') == 'true' %}selected{% endif %}>Automatic weekly</option>
+            <option value="manual" {% if configs.get('meeting_auto_advance', 'manual') != 'every_monday' %}selected{% endif %}>Manual only</option>
+            <option value="auto" {% if configs.get('meeting_auto_advance', 'manual') == 'every_monday' %}selected{% endif %}>Automatic weekly</option>
           </select>
         </div>
       </div>
@@ -93,31 +93,31 @@
         {# Teams #}
         <label class="flex items-center gap-3 p-2 rounded-lg hover:bg-surf-50 cursor-pointer">
           <input type="checkbox" id="chk-teams" class="w-4 h-4 rounded"
-                 {% if configs.get('notify_teams', 'false') == 'true' %}checked{% endif %}/>
+                 {% if configs.get('teams_enabled', 'false') == 'true' %}checked{% endif %}/>
           <div class="flex-1">
-            <div class="text-sm text-navy-900">Teams Auto-notification</div>
-            <div class="text-[11px] text-surf-400">Send meeting summary to Teams channel every Monday</div>
+            <div class="text-sm text-navy-900">Teams Auto-notification <span class="text-[10px] text-surf-300 font-normal">(Phase 2)</span></div>
+            <div class="text-[11px] text-surf-400">Send meeting summary to Teams channel · settings saved only</div>
           </div>
         </label>
         <div class="ml-9 p-3 bg-surf-50 rounded-lg space-y-2">
           <div>
             <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">Recipients (Teams channel or users)</label>
             <input id="teams-recipients" class="inp w-full h-8 text-xs" placeholder="e.g. #cis-sheet-metal, @supervisor.lee"
-                   value="{{ configs.get('notify_recipients', '') }}"/>
+                   value="{{ configs.get('teams_recipients', '') }}"/>
           </div>
           <div>
             <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">Message Template</label>
-            <textarea id="teams-template" class="inp w-full text-xs h-14 resize-y" placeholder="Use {week}, {shop}, {task_count}, {issues}...">{{ configs.get('notify_template', 'Weekly Summary — {shop} · Week {week}: {task_count} tasks, {issues} issues flagged.') }}</textarea>
+            <textarea id="teams-template" class="inp w-full text-xs h-14 resize-y" placeholder="Use {week}, {shop}, {task_count}, {issues}...">{{ configs.get('teams_message_template', 'Weekly Summary — {shop} · Week {week}: {task_count} tasks, {issues} issues flagged.') }}</textarea>
           </div>
         </div>
 
         {# Outlook #}
         <label class="flex items-center gap-3 p-2 rounded-lg hover:bg-surf-50 cursor-pointer">
           <input type="checkbox" id="chk-outlook" class="w-4 h-4 rounded"
-                 {% if configs.get('notify_outlook', 'false') == 'true' %}checked{% endif %}/>
+                 {% if configs.get('outlook_enabled', 'false') == 'true' %}checked{% endif %}/>
           <div class="flex-1">
-            <div class="text-sm text-navy-900">Outlook Email Reminders</div>
-            <div class="text-[11px] text-surf-400">Send OT approval reminders via Outlook email</div>
+            <div class="text-sm text-navy-900">Outlook Email Reminders <span class="text-[10px] text-surf-300 font-normal">(Phase 2)</span></div>
+            <div class="text-[11px] text-surf-400">Send OT approval reminders via Outlook · settings saved only</div>
           </div>
         </label>
         <div class="ml-9 p-3 bg-surf-50 rounded-lg space-y-2">
@@ -129,28 +129,28 @@
           <div>
             <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">Email Subject Template</label>
             <input id="outlook-subject" class="inp w-full h-8 text-xs"
-                   value="{{ configs.get('outlook_subject', '[CIS ERP] OT Approval Reminder — {date}') }}"/>
+                   value="{{ configs.get('outlook_subject_template', '[CIS ERP] OT Approval Reminder — {date}') }}"/>
           </div>
           <div>
             <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">Email Body</label>
-            <textarea id="outlook-body" class="inp w-full text-xs h-14 resize-y">{{ configs.get('outlook_body', 'You have {pending_count} pending OT requests awaiting approval for {shop}. Please review at your earliest convenience.') }}</textarea>
+            <textarea id="outlook-body" class="inp w-full text-xs h-14 resize-y">{{ configs.get('outlook_body_template', 'You have {pending_count} pending OT requests awaiting approval for {shop}. Please review at your earliest convenience.') }}</textarea>
           </div>
         </div>
 
         {# Critical Issue Alerts #}
         <label class="flex items-center gap-3 p-2 rounded-lg hover:bg-surf-50 cursor-pointer">
           <input type="checkbox" id="chk-critical" class="w-4 h-4 rounded"
-                 {% if configs.get('notify_critical', 'false') == 'true' %}checked{% endif %}/>
+                 {% if configs.get('critical_alert_enabled', 'false') == 'true' %}checked{% endif %}/>
           <div class="flex-1">
-            <div class="text-sm text-navy-900">Critical Issue Alerts</div>
-            <div class="text-[11px] text-surf-400">Instant alert when critical issue is flagged</div>
+            <div class="text-sm text-navy-900">Critical Issue Alerts <span class="text-[10px] text-surf-300 font-normal">(Phase 2)</span></div>
+            <div class="text-[11px] text-surf-400">Instant alert when critical issue is flagged · settings saved only</div>
           </div>
         </label>
         <div class="ml-9 p-3 bg-surf-50 rounded-lg space-y-2">
           <div>
             <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">Alert Recipients</label>
             <input id="critical-recipients" class="inp w-full h-8 text-xs"
-                   value="{{ configs.get('critical_recipients', '') }}"
+                   value="{{ configs.get('critical_alert_recipients', '') }}"
                    placeholder="#cis-alerts, @supervisor.lee, supervisor.lee@siaec.com.sg"/>
           </div>
         </div>
@@ -250,10 +250,13 @@ function csrfToken() {
 }
 
 function patchConfig(data) {
+  /* Transform flat {key: value, ...} into SSOT §8.9 bulk shape:
+     { configs: [ {key: "...", value: "..."}, ... ] }                 */
+  const configs = Object.entries(data).map(([k, v]) => ({key: k, value: String(v)}));
   return fetch('/api/config', {
     method: 'PATCH',
     headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken()},
-    body: JSON.stringify(data)
+    body: JSON.stringify({configs})
   });
 }
 
@@ -266,9 +269,7 @@ function saveSnapshotConfig() {
     String(snapWeekStart.getDate()).padStart(2,'0');
   patchConfig({
     meeting_current_date: dateStr,
-    snapshot_advance_day: document.getElementById('adv-day').value,
-    snapshot_advance_time: document.getElementById('adv-time').value,
-    auto_advance_week: document.getElementById('auto-advance').value === 'auto' ? 'true' : 'false',
+    meeting_auto_advance: document.getElementById('auto-advance').value === 'auto' ? 'every_monday' : 'manual',
   }).then(r => {
     if (r.ok) showToast('Saved', 'Snapshot week configuration updated', 'green');
     else r.json().then(d => showToast('Error', d.detail || 'Failed', 'red'));
@@ -286,15 +287,15 @@ function saveThreshold() {
 
 function saveNotifications() {
   patchConfig({
-    notify_teams: document.getElementById('chk-teams').checked ? 'true' : 'false',
-    notify_recipients: document.getElementById('teams-recipients').value,
-    notify_template: document.getElementById('teams-template').value,
-    notify_outlook: document.getElementById('chk-outlook').checked ? 'true' : 'false',
+    teams_enabled: document.getElementById('chk-teams').checked ? 'true' : 'false',
+    teams_recipients: document.getElementById('teams-recipients').value,
+    teams_message_template: document.getElementById('teams-template').value,
+    outlook_enabled: document.getElementById('chk-outlook').checked ? 'true' : 'false',
     outlook_recipients: document.getElementById('outlook-recipients').value,
-    outlook_subject: document.getElementById('outlook-subject').value,
-    outlook_body: document.getElementById('outlook-body').value,
-    notify_critical: document.getElementById('chk-critical').checked ? 'true' : 'false',
-    critical_recipients: document.getElementById('critical-recipients').value,
+    outlook_subject_template: document.getElementById('outlook-subject').value,
+    outlook_body_template: document.getElementById('outlook-body').value,
+    critical_alert_enabled: document.getElementById('chk-critical').checked ? 'true' : 'false',
+    critical_alert_recipients: document.getElementById('critical-recipients').value,
   }).then(r => {
     if (r.ok) showToast('Saved', 'Notification settings updated', 'green');
     else r.json().then(d => showToast('Error', d.detail || 'Failed', 'red'));

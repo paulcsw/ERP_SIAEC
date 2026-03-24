@@ -17,6 +17,13 @@
         </svg> More
       </a>
       <h2 class="text-lg font-bold text-navy-900">{% if rfo %}{{ rfo.rfo_no }} &middot; {{ rfo.ac_reg }}{% else %}RFO Summary{% endif %}</h2>
+      {% if wp_options is defined and wp_options|length > 1 %}
+      <select class="inp w-full h-9 text-sm mt-2" onchange="window.location.href='/more/rfo-summary?wp_id='+this.value">
+        {% for opt in wp_options %}
+        <option value="{{ opt.id }}" {% if selected_wp_id == opt.id %}selected{% endif %}>{{ opt.rfo_no }} &middot; {{ opt.ac_reg }}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
     </div>
     <div class="flex-1 overflow-y-auto p-4 space-y-4">
       {% if metrics %}
@@ -59,7 +66,7 @@
       </a>
       {% else %}
       <div class="text-center py-8 text-surf-400">
-        <p class="text-sm">No RFO data available. RFO metrics will be available after Branch 11 implementation.</p>
+        <p class="text-sm">No active work packages found.</p>
       </div>
       {% endif %}
     </div>

@@ -358,6 +358,20 @@ async def task_manager_page(
     is_admin = "ADMIN" in roles
     airline_filter = _normalize_airline_filter(airline)
 
+    # Default meeting_date to configured week or latest available snapshot date
+    if not meeting_date:
+        cfg_row = (await db.execute(
+            select(SystemConfig.value).where(SystemConfig.key == "meeting_current_date")
+        )).scalar_one_or_none()
+        if cfg_row:
+            meeting_date = cfg_row
+        else:
+            latest_md = (await db.execute(
+                select(func.max(TaskSnapshot.meeting_date)).where(TaskSnapshot.is_deleted == False)
+            )).scalar()
+            if latest_md:
+                meeting_date = latest_md.isoformat() if hasattr(latest_md, 'isoformat') else str(latest_md)
+
     allowed_shop_ids: set[int] | None = None
     manageable_shop_ids: set[int] = set()
     if not is_admin:
