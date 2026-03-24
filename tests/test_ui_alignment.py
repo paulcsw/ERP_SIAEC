@@ -8,7 +8,8 @@ Covers:
   E. More > RFO Summary rendering
   F. Mobile access behavior
 """
-from datetime import date, datetime, timezone
+import re
+from datetime import date, datetime, time, timezone
 
 import pytest
 from tests.conftest import CSRF_HEADERS, _make_session_cookie
@@ -82,6 +83,27 @@ async def _seed_snapshot(db_factory, *, task_id, meeting_date, status="IN_PROGRE
         return snap
 
 
+async def _seed_ot(db_factory, *, user_id, status="APPROVED", minutes=120, dt=None):
+    from app.models.ot import OtRequest
+
+    async with db_factory() as s:
+        req = OtRequest(
+            user_id=user_id,
+            date=dt or date.today(),
+            start_time=time(18, 0),
+            end_time=time(20, 0),
+            requested_minutes=minutes,
+            reason_code="BACKLOG",
+            status=status,
+            created_at=NOW,
+            updated_at=NOW,
+        )
+        s.add(req)
+        await s.commit()
+        await s.refresh(req)
+        return req
+
+
 async def _seed_config(db_factory, key, value):
     from app.models.system_config import SystemConfig
     async with db_factory() as s:
@@ -94,6 +116,18 @@ async def _grant_shop_access(db_factory, user_id, shop_id, access="VIEW"):
     async with db_factory() as s:
         s.add(UserShopAccess(user_id=user_id, shop_id=shop_id, access=access, granted_by=1))
         await s.commit()
+
+
+def _extract_int_metric(html: str, pattern: str) -> int:
+    match = re.search(pattern, html, re.DOTALL)
+    assert match, f"Could not find metric with pattern: {pattern}"
+    return int(match.group(1))
+
+
+def _extract_float_metric(html: str, pattern: str) -> float:
+    match = re.search(pattern, html, re.DOTALL)
+    assert match, f"Could not find metric with pattern: {pattern}"
+    return float(match.group(1))
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -154,6 +188,73 @@ async def test_dashboard_uses_latest_snapshot_only(async_client, db):
 
 
 @pytest.mark.asyncio
+async def test_dashboard_non_admin_ot_widgets_use_same_team_scope(sup_client, db):
+    """Non-admin OT cards should scope by the user's shop aliases, not drop to zero on shop-code mismatch."""
+    await _seed_shop(db, code="SMA", name="Sheet Metal")
+    await _seed_shop(db, code="AFM", name="Airframe")
+    await _seed_ot(db, user_id=2, status="PENDING", minutes=120)
+    await _seed_ot(db, user_id=2, status="ENDORSED", minutes=180)
+    await _seed_ot(db, user_id=4, status="PENDING", minutes=240)
+
+    resp = await sup_client.get("/dashboard")
+    assert resp.status_code == 200
+    html = resp.text
+
+    assert _extract_int_metric(
+        html,
+        r'OT Pending.*?<span class="text-2xl font-bold text-gold-500">(\d+)</span>',
+    ) == 1
+    assert _extract_int_metric(
+        html,
+        r'OT Endorsed.*?<span class="text-2xl font-bold text-st-purple">(\d+)</span>',
+    ) == 1
+    assert _extract_int_metric(
+        html,
+        r'text-lg font-bold text-st-yellow">(\d+)</div>PENDING',
+    ) == 1
+    assert _extract_int_metric(
+        html,
+        r'text-lg font-bold text-st-purple">(\d+)</div>ENDORSED',
+    ) == 1
+    assert _extract_float_metric(
+        html,
+        r'This month total</span><span class="font-semibold">([\d.]+)h</span>',
+    ) == 5.0
+
+
+@pytest.mark.asyncio
+async def test_dashboard_admin_shop_filter_scopes_ot_widgets_by_shop_aliases(async_client, db):
+    """Admin shop filter should include users stored with either the shop name or code."""
+    sheet_metal = await _seed_shop(db, code="SMA", name="Sheet Metal")
+    await _seed_shop(db, code="AFM", name="Airframe")
+    await _seed_ot(db, user_id=2, status="PENDING", minutes=120)
+    await _seed_ot(db, user_id=4, status="ENDORSED", minutes=240)
+
+    resp = await async_client.get(f"/dashboard?shop_id={sheet_metal.id}")
+    assert resp.status_code == 200
+    html = resp.text
+
+    assert _extract_int_metric(
+        html,
+        r'OT Pending.*?<span class="text-2xl font-bold text-gold-500">(\d+)</span>',
+    ) == 1
+    assert _extract_int_metric(
+        html,
+        r'OT Endorsed.*?<span class="text-2xl font-bold text-st-purple">(\d+)</span>',
+    ) == 0
+    assert _extract_int_metric(
+        html,
+        r'text-lg font-bold text-st-yellow">(\d+)</div>PENDING',
+    ) == 1
+    assert _extract_int_metric(
+        html,
+        r'text-lg font-bold text-st-purple">(\d+)</div>ENDORSED',
+    ) == 0
+    assert "Test Supervisor" in html
+    assert "Other Team Worker" not in html
+
+
+@pytest.mark.asyncio
 async def test_task_manager_defaults_to_meeting_date(async_client, db):
     """Task Manager without meeting_date param should default to configured week,
     not show all historical snapshots."""
@@ -178,6 +279,29 @@ async def test_task_manager_defaults_to_meeting_date(async_client, db):
 
 
 @pytest.mark.asyncio
+async def test_task_manager_honors_view_query(async_client, db):
+    """Task Manager should render the requested view and preserve it in the form/JS state."""
+    resp = await async_client.get("/tasks?view=kanban")
+    assert resp.status_code == 200
+    html = resp.text
+    assert 'name="view" value="kanban"' in html
+    assert 'let currentTaskView = "kanban";' in html
+    assert 'id="task-view-table" class="hidden flex flex-col' in html
+    assert 'id="task-view-kanban" class="flex-1 flex gap-3' in html
+
+
+@pytest.mark.asyncio
+async def test_task_manager_refresh_keeps_view_and_kanban_uses_stable_card_ref(async_client, db):
+    """Filter/pagination refreshes should carry the current view, and kanban drop should keep a local card ref."""
+    resp = await async_client.get("/tasks?view=rfo")
+    assert resp.status_code == 200
+    html = resp.text
+    assert "data.set('view', currentTaskView);" in html
+    assert "credentials: 'same-origin'" in html
+    assert "const movedCard = draggedCard;" in html
+
+
+@pytest.mark.asyncio
 async def test_task_detail_shows_full_history(async_client, db):
     """Task detail page should show all snapshots (full history)."""
     ac = await _seed_aircraft(db)
@@ -195,6 +319,52 @@ async def test_task_detail_shows_full_history(async_client, db):
     # Both meeting dates should be visible in the detail/history view
     assert "2026-03-04" in html
     assert "2026-03-11" in html
+
+
+@pytest.mark.asyncio
+async def test_task_entry_edit_panel_renders_below_selected_card(async_client, db):
+    """Desktop Data Entry should render quick update directly below the selected card."""
+    ac = await _seed_aircraft(db)
+    shop = await _seed_shop(db)
+    task1 = await _seed_task(db, ac_id=ac.id, shop_id=shop.id, text="First task")
+    task2 = await _seed_task(db, ac_id=ac.id, shop_id=shop.id, text="Second task")
+    await _seed_snapshot(db, task_id=task1.id, meeting_date=date(2026, 3, 18),
+                         status="IN_PROGRESS", mh=5.0)
+    await _seed_snapshot(db, task_id=task2.id, meeting_date=date(2026, 3, 18),
+                         status="WAITING", mh=2.0, has_issue=True)
+
+    resp = await async_client.get(
+        f"/tasks/entry?ac={ac.ac_reg}&meeting_date=2026-03-18&edit={task1.id}"
+    )
+    assert resp.status_code == 200
+    html = resp.text
+    card1_idx = html.index(f'id="task-card-{task1.id}"')
+    panel_idx = html.index('id="editPanel"')
+    card2_idx = html.index(f'id="task-card-{task2.id}"')
+    assert card1_idx < panel_idx < card2_idx
+    assert "function toggleDesktopTaskEditor" in html
+    assert "Quick Update" in html
+
+
+@pytest.mark.asyncio
+async def test_task_entry_save_actions_update_locally_and_close_panel(async_client, db):
+    """Desktop Data Entry save actions should avoid full refresh and close locally when requested."""
+    ac = await _seed_aircraft(db)
+    shop = await _seed_shop(db)
+    task = await _seed_task(db, ac_id=ac.id, shop_id=shop.id, text="Save behavior task")
+    await _seed_snapshot(db, task_id=task.id, meeting_date=date(2026, 3, 18),
+                         status="IN_PROGRESS", mh=5.0)
+
+    resp = await async_client.get(
+        f"/tasks/entry?ac={ac.ac_reg}&meeting_date=2026-03-18&edit={task.id}"
+    )
+    assert resp.status_code == 200
+    html = resp.text
+    assert "Save &amp; Close" in html
+    assert "function updateDesktopTaskCard(taskId, snapshotResult, workerName)" in html
+    assert "closeDesktopEditor();" in html
+    assert "refreshTaskEntry({ edit: taskId });" not in html
+    assert "refreshTaskEntry({ edit: nextTaskId });" not in html
 
 
 # ═══════════════════════════════════════════════════════════════════════

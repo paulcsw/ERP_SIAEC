@@ -38,6 +38,18 @@ def _latest_snapshot_subquery():
     ).subquery("latest_snap")
 
 
+def _scope_aliases(*values: str | None) -> list[str]:
+    seen: set[str] = set()
+    aliases: list[str] = []
+    for value in values:
+        item = (value or "").strip()
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        aliases.append(item)
+    return aliases
+
+
 def _ctx(request, user, **kw):
     return {
         "request": request,
@@ -77,14 +89,18 @@ async def dashboard_page(
 
     selected_shop_id: int | None = None
     selected_shop_code: str | None = None
+    selected_shop_name: str | None = None
     dashboard_scope_label = "All Shops"
     shop_select_disabled = False
+    team_scope_values: list[str] | None = None
 
     if is_admin:
         if shop_id and shop_id in shop_by_id:
             selected_shop_id = shop_id
             selected_shop_code = shop_by_id[shop_id]["code"]
-            dashboard_scope_label = shop_by_id[shop_id]["name"] or selected_shop_code
+            selected_shop_name = shop_by_id[shop_id]["name"]
+            dashboard_scope_label = selected_shop_name or selected_shop_code
+            team_scope_values = _scope_aliases(selected_shop_name, selected_shop_code)
     else:
         shop_select_disabled = True
         user_team = (current_user.get("team") or "").strip()
@@ -95,16 +111,19 @@ async def dashboard_page(
         if team_shop:
             selected_shop_id = team_shop["id"]
             selected_shop_code = team_shop["code"]
-            dashboard_scope_label = team_shop["name"] or team_shop["code"]
+            selected_shop_name = team_shop["name"]
+            dashboard_scope_label = selected_shop_name or selected_shop_code
+            team_scope_values = _scope_aliases(selected_shop_name, selected_shop_code, user_team)
         elif user_team:
             dashboard_scope_label = user_team
+            team_scope_values = _scope_aliases(user_team)
 
     user_scope_ids: list[int] | None = None
-    if selected_shop_code:
+    if team_scope_values is not None:
         user_scope_ids = (
             await db.execute(
                 select(User.id).where(
-                    User.team == selected_shop_code,
+                    User.team.in_(team_scope_values),
                     User.is_active == True,  # noqa: E712
                 )
             )
@@ -175,10 +194,10 @@ async def dashboard_page(
 
     # ?�?� Monthly OT Quota (per user) ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
     if is_admin:
-        if selected_shop_code:
+        if team_scope_values is not None:
             user_rows = (await db.execute(
                 select(User).where(
-                    User.team == selected_shop_code,
+                    User.team.in_(team_scope_values),
                     User.is_active == True,  # noqa: E712
                 )
             )).scalars().all()
@@ -189,7 +208,7 @@ async def dashboard_page(
     else:
         user_rows = (await db.execute(
             select(User).where(
-                User.team == current_user.get("team"),
+                User.team.in_(team_scope_values or _scope_aliases(current_user.get("team"))),
                 User.is_active == True,
             )
         )).scalars().all()
