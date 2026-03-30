@@ -87,6 +87,7 @@
     {# Filters bar #}
     <form id="task-filter-form" class="flex items-center gap-2 flex-wrap mb-3 filter-bar" onsubmit="event.preventDefault(); refreshManagerContent(false);">
       <input type="hidden" name="per_page" value="{{ per_page }}">
+      <input type="hidden" name="view" value="{{ current_view }}">
       <select id="f-shop" name="shop_id" class="inp h-8 text-xs" onchange="refreshManagerContent(true)">
         <option value="">All Shops</option>
         {% for s in shops %}
@@ -124,9 +125,9 @@
                onkeydown="if(event.key==='Enter'){event.preventDefault();refreshManagerContent(true)}">
       </div>
       <div class="view-pill">
-        <button type="button" class="tab-btn active" data-view="table" onclick="setTaskView('table')">&#9776; Table</button>
-        <button type="button" class="tab-btn" data-view="kanban" onclick="setTaskView('kanban')">&#8862; Kanban</button>
-        <button type="button" class="tab-btn" data-view="rfo" onclick="setTaskView('rfo')">&#9636; RFO</button>
+        <button type="button" class="tab-btn{% if current_view == 'table' %} active{% endif %}" data-view="table" onclick="setTaskView('table')">&#9776; Table</button>
+        <button type="button" class="tab-btn{% if current_view == 'kanban' %} active{% endif %}" data-view="kanban" onclick="setTaskView('kanban')">&#8862; Kanban</button>
+        <button type="button" class="tab-btn{% if current_view == 'rfo' %} active{% endif %}" data-view="rfo" onclick="setTaskView('rfo')">&#9636; RFO</button>
       </div>
     </form>
   </div>
@@ -166,7 +167,7 @@
   <div class="flex flex-1 min-h-0" id="task-content">
 
     {# TABLE VIEW (default) #}
-    <div id="task-view-table" class="flex flex-col flex-1 min-h-0 relative overflow-hidden">
+    <div id="task-view-table" class="{% if current_view != 'table' %}hidden {% endif %}flex flex-col flex-1 min-h-0 relative overflow-hidden">
       {# Bulk action toolbar #}
       {% if can_manage_tasks %}
       <div id="bulk-bar" class="hidden absolute bottom-16 left-1/2 -translate-x-1/2 z-20 bg-navy-800 text-white rounded-xl px-4 py-2.5 flex items-center gap-3 shadow-xl">
@@ -280,7 +281,7 @@
     </div>
 
     {# KANBAN VIEW #}
-    <div id="task-view-kanban" class="hidden flex-1 flex gap-3 px-4 pb-4 overflow-x-auto overflow-y-hidden min-h-0">
+    <div id="task-view-kanban" class="{% if current_view != 'kanban' %}hidden {% endif %}flex-1 flex gap-3 px-4 pb-4 overflow-x-auto overflow-y-hidden min-h-0">
       {% set status_cfg = [
         ('NOT_STARTED', 'not-started', 'NOT STARTED', 'text-st-grey', '', 'bg-surf-200'),
         ('IN_PROGRESS', 'in-progress', 'IN PROGRESS', 'text-st-yellow', 'background:#fefcf5', 'bg-st-yellowBg'),
@@ -332,7 +333,7 @@
     </div>
 
     {# RFO ACCORDION VIEW #}
-    <div id="task-view-rfo" class="hidden flex-1 flex flex-col overflow-y-auto px-4 py-3 gap-2 min-h-0">
+    <div id="task-view-rfo" class="{% if current_view != 'rfo' %}hidden {% endif %}flex-1 flex flex-col overflow-y-auto px-4 py-3 gap-2 min-h-0">
       {% if rfo_list %}
       {% for grp in rfo_list %}
       <div class="rfo-group{% if loop.first %} open{% endif %}">
@@ -691,7 +692,7 @@ async function requestJson(url, options = {}) {
     body = JSON.stringify(json);
   }
 
-  const res = await fetch(url, { method, headers: reqHeaders, body });
+  const res = await fetch(url, { method, headers: reqHeaders, body, credentials: 'same-origin' });
   const raw = await res.text();
   let data = {};
   if (raw) {
@@ -804,26 +805,16 @@ function escapeHtml(v) {
     .replaceAll("'", '&#39;');
 }
 
-let currentTaskView = 'table';
+let currentTaskView = {{ current_view | tojson }};
 
-function setTaskView(view) {
-  currentTaskView = view;
-  ['table', 'kanban', 'rfo'].forEach(v => {
-    const el = document.getElementById('task-view-' + v);
-    if (!el) return;
-    el.classList.toggle('hidden', v !== view);
-    el.classList.toggle('flex', v === view);
-  });
-  document.querySelectorAll('.view-pill .tab-btn').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.view === view);
-  });
-}
-
-function refreshManagerContent(resetPage, pageOverride) {
+function getManagerQueryParams(resetPage = false, pageOverride) {
   const form = document.getElementById('task-filter-form');
-  if (!form || typeof htmx === 'undefined') return;
+  const params = new URLSearchParams();
+  if (!form) return params;
 
   const data = new FormData(form);
+  data.set('view', currentTaskView);
+
   const currentPage = new URLSearchParams(window.location.search).get('page');
   if (!resetPage && typeof pageOverride !== 'number' && currentPage) {
     data.set('page', currentPage);
@@ -831,11 +822,39 @@ function refreshManagerContent(resetPage, pageOverride) {
   if (resetPage) data.set('page', '1');
   if (typeof pageOverride === 'number') data.set('page', String(pageOverride));
 
-  const params = new URLSearchParams();
   for (const [k, v] of data.entries()) {
     if (String(v).trim()) params.set(k, String(v).trim());
   }
+  return params;
+}
 
+function syncManagerUrl(resetPage = false, pageOverride) {
+  const params = getManagerQueryParams(resetPage, pageOverride);
+  const query = params.toString();
+  window.history.replaceState({}, '', '/tasks' + (query ? '?' + query : ''));
+}
+
+function setTaskView(view, options = {}) {
+  currentTaskView = ['table', 'kanban', 'rfo'].includes(view) ? view : 'table';
+  const viewInput = document.querySelector('#task-filter-form input[name="view"]');
+  if (viewInput) viewInput.value = currentTaskView;
+  ['table', 'kanban', 'rfo'].forEach(v => {
+    const el = document.getElementById('task-view-' + v);
+    if (!el) return;
+    el.classList.toggle('hidden', v !== currentTaskView);
+    el.classList.toggle('flex', v === currentTaskView);
+  });
+  document.querySelectorAll('.view-pill .tab-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.view === currentTaskView);
+  });
+  if (options.syncUrl !== false) syncManagerUrl(false);
+}
+
+function refreshManagerContent(resetPage, pageOverride) {
+  const form = document.getElementById('task-filter-form');
+  if (!form || typeof htmx === 'undefined') return;
+
+  const params = getManagerQueryParams(resetPage, pageOverride);
   const query = params.toString();
   htmx.ajax('GET', '/tasks' + (query ? '?' + query : ''), {
     target: '#tm-content',
@@ -981,26 +1000,31 @@ async function kanbanDrop(e) {
   if (!CAN_MANAGE_TASKS) return;
   e.preventDefault();
   const col = e.target.closest('.kanban-col');
-  if (!col || !draggedCard) return;
+  const movedCard = draggedCard;
+  if (!col || !movedCard) return;
+  const sourceCol = movedCard.closest('.kanban-col');
+  const previousStatusSlug = sourceCol?.dataset.status || '';
   col.classList.remove('drag-over');
 
   const dropZone = col.querySelector('.kanban-drop-zone');
-  if (dropZone) col.insertBefore(draggedCard, dropZone);
-  else col.appendChild(draggedCard);
+  if (dropZone) col.insertBefore(movedCard, dropZone);
+  else col.appendChild(movedCard);
 
   const statusSlug = col.dataset.status;
   const statusMap = { 'not-started': 'NOT_STARTED', 'in-progress': 'IN_PROGRESS', 'waiting': 'WAITING', 'completed': 'COMPLETED' };
   const apiStatus = statusMap[statusSlug];
-  const snapId = draggedCard.dataset.snapId;
-  const version = parseInt(draggedCard.dataset.version, 10);
+  const snapId = movedCard.dataset.snapId;
+  const version = parseInt(movedCard.dataset.version, 10);
 
-  draggedCard.classList.remove('border-l-2', 'border-st-yellow', 'border-st-red', 'border-st-green', 'opacity-70');
+  movedCard.classList.remove('border-l-2', 'border-st-yellow', 'border-st-red', 'border-st-green', 'opacity-70');
   const borderMap = { 'in-progress': 'border-st-yellow', 'waiting': 'border-st-red', 'completed': 'border-st-green' };
   if (borderMap[statusSlug]) {
-    draggedCard.classList.add('border-l-2', borderMap[statusSlug]);
-    if (statusSlug === 'completed') draggedCard.classList.add('opacity-70');
+    movedCard.classList.add('border-l-2', borderMap[statusSlug]);
+    if (statusSlug === 'completed') movedCard.classList.add('opacity-70');
   }
   updateKanbanCounts();
+
+  if (previousStatusSlug === statusSlug) return;
 
   if (snapId && apiStatus) {
     try {
@@ -1008,11 +1032,22 @@ async function kanbanDrop(e) {
         method: 'PATCH',
         json: { version: version, status: apiStatus },
       });
-      draggedCard.dataset.version = result.version || (version + 1);
-      draggedCard.dataset.status = apiStatus;
+      movedCard.dataset.version = result.version || (version + 1);
+      movedCard.dataset.status = apiStatus;
       const labelMap = { 'not-started': 'Not Started', 'in-progress': 'In Progress', 'waiting': 'Waiting', 'completed': 'Completed' };
-      showToast('Status Updated', (draggedCard.dataset.title || 'Task') + ' -> ' + labelMap[statusSlug], 'green');
+      showToast('Status Updated', (movedCard.dataset.title || 'Task') + ' -> ' + labelMap[statusSlug], 'green');
     } catch (err) {
+      if (sourceCol && sourceCol !== col) {
+        const sourceDropZone = sourceCol.querySelector('.kanban-drop-zone');
+        if (sourceDropZone) sourceCol.insertBefore(movedCard, sourceDropZone);
+        else sourceCol.appendChild(movedCard);
+        movedCard.classList.remove('border-l-2', 'border-st-yellow', 'border-st-red', 'border-st-green', 'opacity-70');
+        if (borderMap[previousStatusSlug]) {
+          movedCard.classList.add('border-l-2', borderMap[previousStatusSlug]);
+          if (previousStatusSlug === 'completed') movedCard.classList.add('opacity-70');
+        }
+        updateKanbanCounts();
+      }
       showToast('Error', err.message || 'Failed to update status', 'red');
       refreshManagerContent(false);
     }
@@ -1272,13 +1307,13 @@ async function runImport() {
   });
 }
 
-setTaskView(currentTaskView);
+setTaskView(currentTaskView, { syncUrl: false });
 
 document.body.addEventListener('htmx:afterSwap', (evt) => {
   if (!evt.target || evt.target.id !== 'tm-content') return;
   closeDetailPanel();
   closeBulk();
-  setTaskView(currentTaskView);
+  setTaskView(currentTaskView, { syncUrl: false });
 });
 
 document.body.addEventListener('htmx:responseError', (evt) => {

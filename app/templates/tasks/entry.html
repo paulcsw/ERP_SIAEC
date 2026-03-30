@@ -11,6 +11,8 @@
 .task-card{background:#fff;border:1px solid #dee4ed;border-radius:10px;padding:14px;cursor:pointer;transition:all .15s}
 .task-card:hover{border-color:#aebdd2}
 .task-card.editing{border-color:#2e5a8a;box-shadow:0 0 0 2px rgba(46,90,138,.15)}
+.task-card-stack{display:flex;flex-direction:column;gap:12px}
+.inline-edit-panel{animation:entry-slide-down .2s ease}
 .badge-new{background:#c8850a;color:#fff;font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;letter-spacing:.3px}
 .badge-needs-update{background:#fdf5e0;color:#a07d12;font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;letter-spacing:.3px}
 .badge-uptodate{color:#2d7a4f;font-size:11px;font-weight:500}
@@ -22,6 +24,10 @@
 .status-btn.active-completed{background:#ecf7f0;color:#2d7a4f;border-color:#2d7a4f}
 .quick-update-card{background:#fff;border:1px solid #dee4ed;border-left:4px solid #c8850a;border-radius:10px}
 .entry-toolbar .inp,.entry-toolbar select{min-width:0}
+@keyframes entry-slide-down{
+  from{opacity:0;transform:translateY(-8px)}
+  to{opacity:1;transform:translateY(0)}
+}
 /* Modal-entry-task: mobile full-screen */
 @media(max-width:767px){
   #modal-entry-task .modal-entry-task-card{width:100%!important;height:100vh!important;max-height:100vh!important;border-radius:0!important;display:flex;flex-direction:column}
@@ -105,7 +111,7 @@
             <div class="text-sm font-semibold text-navy-900">{{ ac.ac_reg }}</div>
             <div class="text-xs text-surf-400">{{ ac.task_count }} task{{ 's' if ac.task_count != 1 else '' }}</div>
           </div>
-          <div class="flex items-center gap-1.5">
+          <div class="flex items-center gap-1.5" data-role="ac-badges">
             {% if ac.has_new %}
             <span class="badge-new">NEW</span>
             {% endif %}
@@ -146,132 +152,144 @@
       {% if tasks %}
       <div class="space-y-3" id="taskCardList">
         {% for task in tasks %}
-        <div class="task-card {% if editing_task_id == task.task_id %}editing{% endif %}"
-             id="task-card-{{ task.task_id }}"
-             data-task-id="{{ task.task_id }}"
-             onclick="refreshTaskEntry({ ac: '{{ selected_ac }}', edit: '{{ task.task_id }}' }, { resetEdit: false })">
-          <div class="flex items-start justify-between gap-3">
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2 mb-1">
-                {% if task.status == 'NOT_STARTED' %}
-                <span class="badge badge-not-started text-[11px]">Not Started</span>
-                {% elif task.status == 'IN_PROGRESS' %}
-                <span class="badge badge-in-progress text-[11px]">In Progress</span>
-                {% elif task.status == 'WAITING' %}
-                <span class="badge badge-waiting text-[11px]">Waiting</span>
-                {% elif task.status == 'COMPLETED' %}
-                <span class="badge badge-completed text-[11px]">Completed</span>
-                {% endif %}
-                {% if task.is_new %}
-                <span class="badge-new">NEW</span>
-                {% endif %}
-                {% if task.needs_update %}
-                <span class="badge-needs-update">NEEDS UPDATE</span>
-                {% endif %}
+        <div class="task-card-stack{% if editing_task_id == task.task_id %} editing-stack{% endif %}" id="task-stack-{{ task.task_id }}">
+          <div class="task-card {% if editing_task_id == task.task_id %}editing{% endif %}"
+               id="task-card-{{ task.task_id }}"
+               data-task-id="{{ task.task_id }}"
+               data-status="{{ task.status }}"
+               data-is-new="{{ 'true' if task.is_new else 'false' }}"
+               data-needs-update="{{ 'true' if task.needs_update else 'false' }}"
+               data-has-issue="{{ 'true' if task.has_issue else 'false' }}"
+               data-is-editing="{{ 'true' if editing_task_id == task.task_id else 'false' }}"
+               onclick="toggleDesktopTaskEditor('{{ selected_ac }}', {{ task.task_id }}, this.dataset.isEditing === 'true')">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1" data-role="task-badges">
+                  {% if task.status == 'NOT_STARTED' %}
+                  <span class="badge badge-not-started text-[11px]">Not Started</span>
+                  {% elif task.status == 'IN_PROGRESS' %}
+                  <span class="badge badge-in-progress text-[11px]">In Progress</span>
+                  {% elif task.status == 'WAITING' %}
+                  <span class="badge badge-waiting text-[11px]">Waiting</span>
+                  {% elif task.status == 'COMPLETED' %}
+                  <span class="badge badge-completed text-[11px]">Completed</span>
+                  {% endif %}
+                  {% if task.is_new %}
+                  <span class="badge-new">NEW</span>
+                  {% endif %}
+                  {% if task.needs_update %}
+                  <span class="badge-needs-update">NEEDS UPDATE</span>
+                  {% endif %}
+                </div>
+                <p class="text-sm font-medium text-navy-900 truncate" data-role="task-title">{{ task.task_text }}</p>
+                <div class="flex items-center gap-3 mt-1.5 text-xs text-surf-400" data-role="task-meta">
+                  <span>MH: <span class="font-mono font-medium text-navy-700">{{ task.mh_incurred_hours }}</span></span>
+                  {% if task.deadline_date %}
+                  <span>Due: {{ task.deadline_date }}</span>
+                  {% endif %}
+                  {% if task.assigned_worker %}
+                  <span>{{ task.assigned_worker }}</span>
+                  {% endif %}
+                </div>
               </div>
-              <p class="text-sm font-medium text-navy-900 truncate">{{ task.task_text }}</p>
-              <div class="flex items-center gap-3 mt-1.5 text-xs text-surf-400">
-                <span>MH: <span class="font-mono font-medium text-navy-700">{{ task.mh_incurred_hours }}</span></span>
-                {% if task.deadline_date %}
-                <span>Due: {{ task.deadline_date }}</span>
-                {% endif %}
-                {% if task.assigned_worker %}
-                <span>{{ task.assigned_worker }}</span>
+              <div data-role="task-issue-slot">
+                {% if task.has_issue %}
+                <svg class="w-5 h-5 text-st-red shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
                 {% endif %}
               </div>
             </div>
-            {% if task.has_issue %}
-            <svg class="w-5 h-5 text-st-red shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
-            {% endif %}
           </div>
+
+          {% if editing_task_id == task.task_id and editing_task %}
+          <div class="inline-edit-panel" id="editPanel">
+            <div class="quick-update-card p-5">
+              <div class="flex items-start justify-between gap-3 mb-3">
+                <div class="min-w-0">
+                  <h4 class="text-sm font-semibold text-navy-900">Quick Update</h4>
+                  <p class="text-xs text-surf-400 mt-1 truncate">{{ task.task_text }}</p>
+                </div>
+                <button type="button" class="btn-outline btn-sm text-xs shrink-0" onclick="event.stopPropagation(); closeDesktopEditor()">Close</button>
+              </div>
+              <form id="desktopQuickUpdateForm"
+                    data-task-id="{{ editing_task.task_id }}"
+                    data-snapshot-id="{{ editing_task.snapshot_id }}"
+                    onsubmit="return submitDesktopQuickUpdate(event)">
+                <input type="hidden" name="version" value="{{ editing_task.version }}">
+                <input type="hidden" name="submit_mode" id="desktopSubmitMode" value="save">
+
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                  <div class="space-y-3">
+                    <div>
+                      <label class="text-xs font-medium text-surf-400 block mb-1.5">Status</label>
+                      <div class="flex flex-wrap gap-2" id="statusButtons">
+                        <button type="button" class="status-btn {% if editing_task.status == 'NOT_STARTED' %}active-not-started{% endif %}" data-status="NOT_STARTED" onclick="setStatus(this,'NOT_STARTED')">Not Started</button>
+                        <button type="button" class="status-btn {% if editing_task.status == 'IN_PROGRESS' %}active-in-progress{% endif %}" data-status="IN_PROGRESS" onclick="setStatus(this,'IN_PROGRESS')">In Progress</button>
+                        <button type="button" class="status-btn {% if editing_task.status == 'WAITING' %}active-waiting{% endif %}" data-status="WAITING" onclick="setStatus(this,'WAITING')">Waiting</button>
+                        <button type="button" class="status-btn {% if editing_task.status == 'COMPLETED' %}active-completed{% endif %}" data-status="COMPLETED" onclick="setStatus(this,'COMPLETED')">Completed</button>
+                      </div>
+                      <input type="hidden" name="status" id="statusInput" value="{{ editing_task.status }}">
+                    </div>
+                    <div>
+                      <label class="text-xs font-medium text-surf-400 block mb-1">MH Incurred (cumulative)</label>
+                      <input type="number" name="mh_incurred_hours" class="inp w-full text-sm" step="0.5" min="0"
+                             value="{{ editing_task.mh_incurred_hours }}">
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <input type="checkbox" name="has_issue" class="chk" id="hasIssueChk" {% if editing_task.has_issue %}checked{% endif %} value="true">
+                      <label for="hasIssueChk" class="text-sm text-navy-700">Has Active Issue</label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="text-xs font-medium text-surf-400 block mb-1.5">Worker Assignment</label>
+                    <select name="assigned_worker_id" class="inp w-full text-sm">
+                      <option value="">Unassigned</option>
+                      {% for w in workers %}
+                      <option value="{{ w.id }}" {% if editing_task.assigned_worker_id == w.id %}selected{% endif %}>{{ w.name }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-4 mb-4">
+                  <div>
+                    <label class="text-xs font-medium text-surf-400 block mb-1">Deadline</label>
+                    <input type="date" name="deadline_date" class="inp w-full text-sm"
+                           value="{{ editing_task.deadline_date or '' }}">
+                  </div>
+                  <div>
+                    <label class="text-xs font-medium text-surf-400 block mb-1">Remarks</label>
+                    <textarea name="remarks" class="inp w-full text-sm" rows="2" placeholder="Add remarks...">{{ editing_task.remarks or '' }}</textarea>
+                  </div>
+                  <div>
+                    <label class="text-xs font-medium text-surf-400 block mb-1">Critical Issue</label>
+                    <textarea name="critical_issue" class="inp w-full text-sm" rows="2" placeholder="Describe critical issue...">{{ editing_task.critical_issue or '' }}</textarea>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between">
+                  <span class="text-[11px] text-surf-400" id="desktopVersionLabel">Version {{ editing_task.version }}</span>
+                  <div class="flex items-center gap-2">
+                    <button type="submit" class="btn-outline h-10 px-4 text-sm"
+                            data-submit-mode="save"
+                            onclick="setDesktopSubmitMode('save')">
+                      Save
+                    </button>
+                    <button type="submit" class="btn-gold h-10 px-4 text-sm flex items-center justify-center gap-1.5"
+                            data-submit-mode="next"
+                            onclick="setDesktopSubmitMode('next')">
+                      Save &amp; Close
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+          {% endif %}
         </div>
         {% endfor %}
       </div>
-
-      {# ???? Edit Panel (shown when task selected) ???? #}
-      {% if editing_task %}
-      <div class="max-w-4xl mx-auto mt-6" id="editPanel">
-        <div class="quick-update-card p-5 mb-4">
-          <h4 class="text-sm font-semibold text-navy-900 mb-3">Quick Update</h4>
-          <form id="desktopQuickUpdateForm"
-                data-task-id="{{ editing_task.task_id }}"
-                data-snapshot-id="{{ editing_task.snapshot_id }}"
-                onsubmit="return submitDesktopQuickUpdate(event)">
-            <input type="hidden" name="version" value="{{ editing_task.version }}">
-            <input type="hidden" name="submit_mode" id="desktopSubmitMode" value="save">
-
-            <div class="grid grid-cols-2 gap-4 mb-4">
-              {# Left: Status + MH + Issue #}
-              <div class="space-y-3">
-                <div>
-                  <label class="text-xs font-medium text-surf-400 block mb-1.5">Status</label>
-                  <div class="flex flex-wrap gap-2" id="statusButtons">
-                    <button type="button" class="status-btn {% if editing_task.status == 'NOT_STARTED' %}active-not-started{% endif %}" data-status="NOT_STARTED" onclick="setStatus(this,'NOT_STARTED')">Not Started</button>
-                    <button type="button" class="status-btn {% if editing_task.status == 'IN_PROGRESS' %}active-in-progress{% endif %}" data-status="IN_PROGRESS" onclick="setStatus(this,'IN_PROGRESS')">In Progress</button>
-                    <button type="button" class="status-btn {% if editing_task.status == 'WAITING' %}active-waiting{% endif %}" data-status="WAITING" onclick="setStatus(this,'WAITING')">Waiting</button>
-                    <button type="button" class="status-btn {% if editing_task.status == 'COMPLETED' %}active-completed{% endif %}" data-status="COMPLETED" onclick="setStatus(this,'COMPLETED')">Completed</button>
-                  </div>
-                  <input type="hidden" name="status" id="statusInput" value="{{ editing_task.status }}">
-                </div>
-                <div>
-                  <label class="text-xs font-medium text-surf-400 block mb-1">MH Incurred (cumulative)</label>
-                  <input type="number" name="mh_incurred_hours" class="inp w-full text-sm" step="0.5" min="0"
-                         value="{{ editing_task.mh_incurred_hours }}">
-                </div>
-                <div class="flex items-center gap-2">
-                  <input type="checkbox" name="has_issue" class="chk" id="hasIssueChk" {% if editing_task.has_issue %}checked{% endif %} value="true">
-                  <label for="hasIssueChk" class="text-sm text-navy-700">Has Active Issue</label>
-                </div>
-              </div>
-
-              {# Right: Worker Assignment #}
-              <div>
-                <label class="text-xs font-medium text-surf-400 block mb-1.5">Worker Assignment</label>
-                <select name="assigned_worker_id" class="inp w-full text-sm">
-                  <option value="">Unassigned</option>
-                  {% for w in workers %}
-                  <option value="{{ w.id }}" {% if editing_task.assigned_worker_id == w.id %}selected{% endif %}>{{ w.name }}</option>
-                  {% endfor %}
-                </select>
-              </div>
-            </div>
-
-            <div class="grid grid-cols-3 gap-4 mb-4">
-              <div>
-                <label class="text-xs font-medium text-surf-400 block mb-1">Deadline</label>
-                <input type="date" name="deadline_date" class="inp w-full text-sm"
-                       value="{{ editing_task.deadline_date or '' }}">
-              </div>
-              <div>
-                <label class="text-xs font-medium text-surf-400 block mb-1">Remarks</label>
-                <textarea name="remarks" class="inp w-full text-sm" rows="2" placeholder="Add remarks...">{{ editing_task.remarks or '' }}</textarea>
-              </div>
-              <div>
-                <label class="text-xs font-medium text-surf-400 block mb-1">Critical Issue</label>
-                <textarea name="critical_issue" class="inp w-full text-sm" rows="2" placeholder="Describe critical issue...">{{ editing_task.critical_issue or '' }}</textarea>
-              </div>
-            </div>
-
-            <div class="flex items-center justify-between">
-              <span class="text-[11px] text-surf-400">Version {{ editing_task.version }}</span>
-              <div class="flex items-center gap-2">
-                <button type="submit" class="btn-outline h-10 px-4 text-sm"
-                        data-submit-mode="save"
-                        onclick="setDesktopSubmitMode('save')">
-                  Save
-                </button>
-                <button type="submit" class="btn-gold h-10 px-4 text-sm flex items-center justify-center gap-1.5"
-                        data-submit-mode="next"
-                        onclick="setDesktopSubmitMode('next')">
-                  Save &amp; Next
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
-                </button>
-              </div>
-            </div>
-          </form>
-        </div>
-      </div>
-      {% endif %}
 
       {% elif selected_ac %}
       <div class="text-center py-16 text-surf-400">
@@ -468,20 +486,49 @@ function refreshTaskEntry(overrides = {}, options = {}) {
   });
 }
 
+function toggleDesktopTaskEditor(ac, taskId, isEditing) {
+  if (isEditing) {
+    closeDesktopEditor();
+    return;
+  }
+  refreshTaskEntry({ ac: ac || '', edit: taskId }, { resetEdit: false });
+}
+
+function syncTaskEntryUrl(mutator) {
+  const params = new URLSearchParams(window.location.search || '');
+  mutator(params);
+  const query = params.toString() ? '?' + params.toString() : '';
+  window.history.replaceState({}, '', '/tasks/entry' + query);
+}
+
+function closeDesktopEditor() {
+  const activeStack = document.querySelector('#taskCardList .editing-stack');
+  if (activeStack) {
+    activeStack.classList.remove('editing-stack');
+    const activeCard = activeStack.querySelector('.task-card');
+    if (activeCard) {
+      activeCard.classList.remove('editing');
+      activeCard.dataset.isEditing = 'false';
+    }
+    const panel = activeStack.querySelector('#editPanel');
+    if (panel) panel.remove();
+  }
+  syncTaskEntryUrl((params) => params.delete('edit'));
+}
+
+function focusEditingTaskCard() {
+  const activeStack = document.querySelector('#taskCardList .editing-stack');
+  if (!activeStack) return;
+  requestAnimationFrame(() => {
+    activeStack.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+}
+
 function setDesktopSubmitMode(mode) {
   const form = document.getElementById('desktopQuickUpdateForm');
   if (!form) return;
   const modeInput = form.elements['submit_mode'];
   if (modeInput) modeInput.value = mode;
-}
-
-function getNextDesktopTaskId(currentTaskId) {
-  const cards = Array.from(document.querySelectorAll('#taskCardList .task-card'));
-  if (!cards.length) return null;
-  const idx = cards.findIndex((card) => Number(card.dataset.taskId) === currentTaskId);
-  if (idx < 0 || idx >= cards.length - 1) return null;
-  const nextId = Number(cards[idx + 1].dataset.taskId);
-  return Number.isFinite(nextId) ? nextId : null;
 }
 
 function setStatus(btn, status) {
@@ -512,6 +559,98 @@ function toOptionalInt(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+function escapeTaskEntryHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function formatTaskEntryMh(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return escapeTaskEntryHtml(value);
+  return n.toFixed(1);
+}
+
+function renderDesktopStatusBadge(status) {
+  const map = {
+    NOT_STARTED: { cls: 'badge-not-started', label: 'Not Started' },
+    IN_PROGRESS: { cls: 'badge-in-progress', label: 'In Progress' },
+    WAITING: { cls: 'badge-waiting', label: 'Waiting' },
+    COMPLETED: { cls: 'badge-completed', label: 'Completed' },
+  };
+  const meta = map[status] || map.NOT_STARTED;
+  return `<span class="badge ${meta.cls} text-[11px]">${meta.label}</span>`;
+}
+
+function renderDesktopIssueIcon() {
+  return '<svg class="w-5 h-5 text-st-red shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>';
+}
+
+function updateSelectedAircraftBadges() {
+  const badgeWrap = document.querySelector('.ac-card.selected [data-role="ac-badges"]');
+  if (!badgeWrap) return;
+  const cards = Array.from(document.querySelectorAll('#taskCardList .task-card'));
+  const hasNew = cards.some((card) => card.dataset.isNew === 'true');
+  const needsUpdate = cards.some((card) => card.dataset.needsUpdate === 'true');
+
+  const badges = [];
+  if (hasNew) badges.push('<span class="badge-new">NEW</span>');
+  if (needsUpdate) badges.push('<span class="badge-needs-update">NEEDS UPDATE</span>');
+  if (!hasNew && !needsUpdate && cards.length > 0) {
+    badges.push('<span class="badge-uptodate">&#10003;</span>');
+  }
+  badgeWrap.innerHTML = badges.join('');
+}
+
+function updateDesktopTaskCard(taskId, snapshotResult, workerName) {
+  const card = document.getElementById('task-card-' + taskId);
+  if (!card) return;
+
+  const badgeWrap = card.querySelector('[data-role="task-badges"]');
+  const metaWrap = card.querySelector('[data-role="task-meta"]');
+  const issueWrap = card.querySelector('[data-role="task-issue-slot"]');
+
+  card.dataset.status = snapshotResult.status;
+  card.dataset.isNew = 'false';
+  card.dataset.needsUpdate = 'false';
+  card.dataset.hasIssue = snapshotResult.has_issue ? 'true' : 'false';
+
+  if (badgeWrap) {
+    badgeWrap.innerHTML = renderDesktopStatusBadge(snapshotResult.status);
+  }
+  if (metaWrap) {
+    const parts = [
+      `MH: <span class="font-mono font-medium text-navy-700">${formatTaskEntryMh(snapshotResult.mh_incurred_hours)}</span>`,
+    ];
+    if (snapshotResult.deadline_date) {
+      parts.push(`Due: ${escapeTaskEntryHtml(snapshotResult.deadline_date)}`);
+    }
+    if (workerName) {
+      parts.push(escapeTaskEntryHtml(workerName));
+    }
+    metaWrap.innerHTML = parts.map((part) => `<span>${part}</span>`).join('');
+  }
+  if (issueWrap) {
+    issueWrap.innerHTML = snapshotResult.has_issue ? renderDesktopIssueIcon() : '';
+  }
+  updateSelectedAircraftBadges();
+}
+
+function syncDesktopQuickUpdateState(snapshotResult) {
+  const form = document.getElementById('desktopQuickUpdateForm');
+  if (!form) return;
+  if (form.elements['version']) {
+    form.elements['version'].value = String(snapshotResult.version);
+  }
+  const versionLabel = document.getElementById('desktopVersionLabel');
+  if (versionLabel) {
+    versionLabel.textContent = 'Version ' + snapshotResult.version;
+  }
+}
+
 function submitDesktopQuickUpdate(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -525,7 +664,9 @@ function submitDesktopQuickUpdate(event) {
   const version = parseInt((form.elements['version']?.value || '').trim(), 10);
   const status = (form.elements['status']?.value || '').trim();
   const workerId = toOptionalInt(form.elements['assigned_worker_id']?.value);
-  const nextTaskId = mode === 'next' ? getNextDesktopTaskId(taskId) : null;
+  const workerName = workerId === null
+    ? ''
+    : (form.elements['assigned_worker_id']?.selectedOptions?.[0]?.textContent || '').trim();
 
   if (!snapshotId || !taskId || !Number.isFinite(version) || !status) {
     showToast('Error', 'Task context is missing. Reload and try again.', 'red');
@@ -541,7 +682,7 @@ function submitDesktopQuickUpdate(event) {
   runTaskEntryAction(async () => {
     setTaskEntryButtonBusy(submitBtn, true, 'Saving...');
     try {
-      await taskEntryRequestJson('/api/tasks/snapshots/' + snapshotId, {
+      const snapshotResult = await taskEntryRequestJson('/api/tasks/snapshots/' + snapshotId, {
         method: 'PATCH',
         json: {
           version,
@@ -559,12 +700,14 @@ function submitDesktopQuickUpdate(event) {
         json: { assigned_worker_id: workerId },
       });
 
-      if (mode === 'next' && nextTaskId) {
-        showToast('Saved & Next', 'Loading next task...', 'green');
-        refreshTaskEntry({ edit: nextTaskId });
+      updateDesktopTaskCard(taskId, snapshotResult, workerName);
+      syncDesktopQuickUpdateState(snapshotResult);
+
+      if (mode === 'next') {
+        closeDesktopEditor();
+        showToast('Saved & Closed', 'Task updated', 'green');
       } else {
         showToast('Saved', 'Task updated', 'green');
-        refreshTaskEntry({ edit: taskId });
       }
     } catch (err) {
       const code = err?.payload?.code || '';
@@ -655,5 +798,12 @@ function submitDesktopCreateTask(event) {
   });
   return false;
 }
+
+focusEditingTaskCard();
+
+document.body.addEventListener('htmx:afterSwap', (evt) => {
+  if (!evt.target || evt.target.id !== 'task-entry-content') return;
+  focusEditingTaskCard();
+});
 </script>
 {% endblock %}

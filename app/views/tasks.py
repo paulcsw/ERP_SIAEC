@@ -216,6 +216,12 @@ def _normalize_airline_filter(value: str | None) -> str:
     return upper
 
 
+def _normalize_task_manager_view(value: str | None) -> str:
+    if value in {"table", "kanban", "rfo"}:
+        return value
+    return "table"
+
+
 async def _compute_mob_badges(db: AsyncSession, user: dict) -> dict:
     """Compute mobile tab badge counts."""
     roles = user.get("roles", [])
@@ -349,6 +355,7 @@ async def task_manager_page(
     status: str | None = Query(None),
     rfo: str | None = Query(None),
     search: str | None = Query(None),
+    view: str | None = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(10, ge=1, le=100),
     current_user: dict = Depends(require_role("SUPERVISOR", "ADMIN")),
@@ -357,6 +364,7 @@ async def task_manager_page(
     roles = current_user.get("roles", [])
     is_admin = "ADMIN" in roles
     airline_filter = _normalize_airline_filter(airline)
+    current_view = _normalize_task_manager_view(view)
 
     # Default meeting_date to configured week or latest available snapshot date
     if not meeting_date:
@@ -595,6 +603,7 @@ async def task_manager_page(
         status_filter=status or "",
         rfo_filter=rfo or "",
         search_filter=search or "",
+        current_view=current_view,
         shops=shops,
         supervisors=supervisors,
         aircraft_list=aircraft_list,
