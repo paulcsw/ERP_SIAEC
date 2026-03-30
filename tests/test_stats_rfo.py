@@ -2,6 +2,7 @@
 from datetime import date, datetime, time, timedelta, timezone
 
 import pytest
+from sqlalchemy import select
 from tests.conftest import CSRF_HEADERS
 
 
@@ -133,6 +134,26 @@ async def _seed_config_value(db_factory, *, key: str, value: str):
     async with db_factory() as s:
         s.add(SystemConfig(key=key, value=value, updated_by=1))
         await s.commit()
+
+
+async def _seed_user(db_factory, *, employee_no: str, name: str, email: str, team: str, roles=("WORKER",)):
+    from app.models.user import Role, User
+
+    async with db_factory() as s:
+        role_rows = (await s.execute(select(Role).where(Role.name.in_(roles)))).scalars().all()
+        user = User(
+            employee_no=employee_no,
+            name=name,
+            email=email,
+            team=team,
+            created_at=NOW,
+            updated_at=NOW,
+        )
+        user.roles = role_rows
+        s.add(user)
+        await s.commit()
+        await s.refresh(user)
+        return user.id
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -559,6 +580,91 @@ async def test_ot_dashboard_ssr(async_client, db):
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "OT Dashboard" in resp.text
+
+
+async def test_ot_dashboard_worker_forbidden_ssr(worker_client, db):
+    """WORKER should get an explicit 403 HTML state for the OT dashboard."""
+    resp = await worker_client.get("/stats/ot")
+    assert resp.status_code == 403
+    assert "text/html" in resp.headers.get("content-type", "")
+    body = resp.text
+    assert "Access denied" in body
+    assert "You do not have permission to view the OT dashboard." in body
+    assert "Total OT Hours" not in body
+    assert 'id="ot-team"' not in body
+
+
+async def test_ot_dashboard_supervisor_ignores_foreign_team_query_and_hides_team_filter(sup_client, db):
+    """SUPERVISOR OT dashboard should stay scoped to the supervisor's own team and not expose team switching UI."""
+    await _seed_ot(db, user_id=2, dt="2026-03-11", minutes=60, status="APPROVED")
+    await _seed_ot(db, user_id=4, dt="2026-03-12", minutes=180, status="APPROVED")
+
+    resp = await sup_client.get("/stats/ot?month=2026-03&team=Airframe")
+    assert resp.status_code == 200
+    body = resp.text
+    assert 'id="ot-team"' not in body
+    assert "March 2026 - Sheet Metal - Employment Act Part IV compliance" in body
+    assert "Airframe - Employment Act Part IV compliance" not in body
+    assert "Other Team Worker" not in body
+
+
+async def test_ot_dashboard_admin_team_filter_still_filters_rendered_scope(async_client, db):
+    """ADMIN OT dashboard should still allow team filtering and render the selected team's users."""
+    await _seed_ot(db, user_id=4, dt="2026-03-12", minutes=180, status="APPROVED")
+
+    resp = await async_client.get("/stats/ot?month=2026-03&team=Airframe")
+    assert resp.status_code == 200
+    body = resp.text
+    assert 'id="ot-team"' in body
+    assert 'value="Airframe" selected' in body
+    assert "March 2026 - Airframe - Employment Act Part IV compliance" in body
+    assert "Other Team Worker" in body
+    assert "Test Worker" not in body
+
+
+async def test_ot_dashboard_usage_footer_uses_full_scope_population(async_client, db):
+    """Usage footer should aggregate the full scoped population even when only the top 6 users are displayed."""
+    extra_user_ids = []
+    extra_names = []
+    for idx in range(4):
+        name = f"Extra Worker {idx + 1}"
+        extra_names.append(name)
+        user_id = await _seed_user(
+            db,
+            employee_no=f"E10{idx + 1}",
+            name=name,
+            email=f"extra{idx + 1}@test.com",
+            team="Sheet Metal",
+        )
+        extra_user_ids.append(user_id)
+
+    seeded_hours = {
+        1: 7,
+        2: 6,
+        3: 5,
+        extra_user_ids[0]: 4,
+        extra_user_ids[1]: 3,
+        extra_user_ids[2]: 2,
+        extra_user_ids[3]: 1,
+    }
+    for user_id, hours in seeded_hours.items():
+        await _seed_ot(
+            db,
+            user_id=user_id,
+            dt="2026-03-11",
+            minutes=hours * 60,
+            status="APPROVED",
+        )
+
+    resp = await async_client.get("/stats/ot?month=2026-03&team=Sheet%20Metal")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "Showing top 6 highest usage in scope" in body
+    assert "Team average: <strong class=\"text-navy-700\">4.0h</strong> (5.6%)" in body
+    assert extra_names[0] in body
+    assert extra_names[1] in body
+    assert extra_names[2] in body
+    assert extra_names[3] not in body
 
 
 async def test_rfo_detail_ssr(async_client, db):

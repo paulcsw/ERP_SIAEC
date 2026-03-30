@@ -1,32 +1,41 @@
 {% extends "base.html" %}
-{% block title %}OT Dashboard — CIS ERP{% endblock %}
+{% block title %}OT Dashboard | CIS ERP{% endblock %}
 {% block breadcrumb %}OT Dashboard{% endblock %}
 
 {% block content %}
 <div class="p-4 lg:p-5 flex flex-col h-full w-full overflow-y-auto">
+  <div class="mb-3 shrink-0">
+    <h1 class="text-lg font-semibold text-navy-900">OT Dashboard</h1>
+    <p class="text-xs text-surf-400">Overtime statistics &amp; monthly compliance</p>
+  </div>
 
-  {# ── Header + Filters ─────────────────────────────────────── #}
+  {% if error_title %}
+  <div class="card p-5 max-w-xl">
+    <div class="text-base font-semibold text-navy-900">{{ error_title }}</div>
+    <p class="text-sm text-surf-400 mt-2">{{ error_message }}</p>
+  </div>
+  {% else %}
   <div class="flex items-center justify-between mb-3 shrink-0">
-    <div>
-      <h1 class="text-lg font-semibold text-navy-900">OT Dashboard</h1>
-      <p class="text-xs text-surf-400">Overtime statistics &amp; monthly compliance</p>
-    </div>
+    <div></div>
     <div class="flex gap-2">
       <select class="inp h-8 text-xs" onchange="applyOtFilter();" id="ot-month">
         {% for m in months %}
         <option value="{{ m.value }}" {% if m.value == month_label %}selected{% endif %}>{{ m.label }}</option>
         {% endfor %}
       </select>
+      {% if can_filter_team %}
       <select class="inp h-8 text-xs" onchange="applyOtFilter();" id="ot-team">
         <option value="">All Teams</option>
         {% for t in teams %}
         <option value="{{ t }}" {% if t == team_filter %}selected{% endif %}>{{ t }}</option>
         {% endfor %}
       </select>
+      {% else %}
+      <div class="inp h-8 px-3 text-xs inline-flex items-center text-navy-700">{{ effective_team_label }}</div>
+      {% endif %}
     </div>
   </div>
 
-  {# ── Summary KPI Cards (4 cols) ────────────────────────────── #}
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 shrink-0">
     <div class="card p-3">
       <span class="text-[10px] text-surf-400 uppercase tracking-wider font-medium">Total OT Hours</span>
@@ -46,13 +55,15 @@
     </div>
   </div>
 
-  {# ── Individual Monthly OT vs 72h Limit (full-width) ───────── #}
   <div class="grid lg:grid-cols-2 gap-4 mb-4">
     <div class="card p-4 lg:col-span-2">
       <div class="flex items-center justify-between mb-4">
         <div>
           <div class="text-sm font-semibold text-navy-900">Individual Monthly OT vs 72h Limit</div>
-          <div class="text-[11px] text-surf-400 mt-0.5">{{ month_display }} · {% if team_filter %}{{ team_filter }}{% else %}All Teams{% endif %} · Employment Act Part IV compliance</div>
+          <div class="text-[11px] text-surf-400 mt-0.5">{{ month_display }} - {{ effective_team_label }} - Employment Act Part IV compliance</div>
+          {% if usage_scope_count > usage_list|length %}
+          <div class="text-[11px] text-surf-400 mt-0.5">Showing top {{ usage_list|length }} highest usage in scope</div>
+          {% endif %}
         </div>
         <div class="flex items-center gap-3 text-[10px]">
           <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-st-green"></span> Safe (&lt;50%)</span>
@@ -73,9 +84,9 @@
           </div>
           <div class="prog-bar h-2.5"><div class="prog-fill {{ u.bar_color }} rounded-full" style="width:{{ [u.pct, 100] | min }}%"></div></div>
           {% if u.pct >= 100 %}
-          <div class="text-[10px] text-st-red mt-0.5 font-medium">Limit reached — no further OT allowed this month</div>
+          <div class="text-[10px] text-st-red mt-0.5 font-medium">Limit reached - no further OT allowed this month</div>
           {% else %}
-          <div class="text-[10px] text-surf-400 mt-0.5">Remaining: {{ u.remaining_hours }}h · ~{{ u.sessions_left }} OT sessions left</div>
+          <div class="text-[10px] text-surf-400 mt-0.5">Remaining: {{ u.remaining_hours }}h - ~{{ u.sessions_left }} OT sessions left</div>
           {% endif %}
         </div>
       {% endfor %}
@@ -86,16 +97,13 @@
       {% if usage_list %}
       <div class="mt-4 pt-3 border-t border-surf-100 flex items-center justify-between text-xs">
         <span class="text-surf-400">Team average: <strong class="text-navy-700">{{ usage_footer.team_avg }}h</strong> ({{ usage_footer.team_avg_pct }}%)</span>
-        <span class="text-st-red font-medium">{% if usage_footer.at_limit %}{{ usage_footer.at_limit }} worker{{ 's' if usage_footer.at_limit != 1 }} at limit{% endif %}{% if usage_footer.at_limit and usage_footer.above_warning %} · {% endif %}{% if usage_footer.above_warning %}{{ usage_footer.above_warning }} worker{{ 's' if usage_footer.above_warning != 1 }} above 70%{% endif %}</span>
+        <span class="text-st-red font-medium">{% if usage_footer.at_limit %}{{ usage_footer.at_limit }} worker{{ 's' if usage_footer.at_limit != 1 }} at limit{% endif %}{% if usage_footer.at_limit and usage_footer.above_warning %} - {% endif %}{% if usage_footer.above_warning %}{{ usage_footer.above_warning }} worker{{ 's' if usage_footer.above_warning != 1 }} above 70%{% endif %}</span>
       </div>
       {% endif %}
     </div>
   </div>
 
-  {# ── 3-column: Pipeline / By Reason / Weekly Trend ─────────── #}
   <div class="grid lg:grid-cols-3 gap-4 mb-4">
-
-    {# Approval Pipeline #}
     <div class="card p-4">
       <div class="text-sm font-semibold text-navy-900 mb-3">Approval Pipeline</div>
       <div class="space-y-3">
@@ -114,10 +122,9 @@
         </div>
         {% endfor %}
       </div>
-      <div class="mt-3 pt-3 border-t border-surf-100 text-xs text-surf-400">Conversion: {{ pipeline.conversion }}% submitted → approved</div>
+      <div class="mt-3 pt-3 border-t border-surf-100 text-xs text-surf-400">Conversion: {{ pipeline.conversion }}% submitted - approved</div>
     </div>
 
-    {# OT by Reason #}
     <div class="card p-4">
       <div class="text-sm font-semibold text-navy-900 mb-3">OT by Reason Code</div>
       <div class="space-y-2.5">
@@ -138,7 +145,6 @@
       {% endif %}
     </div>
 
-    {# Weekly OT Trend #}
     <div class="card p-4">
       <div class="text-sm font-semibold text-navy-900 mb-3">Weekly OT Trend</div>
       <div class="flex items-end gap-2 h-28">
@@ -162,16 +168,17 @@
       </div>
       {% endif %}
     </div>
-
   </div>
+  {% endif %}
 </div>
 
 <script>
 function applyOtFilter() {
-  const month = document.getElementById('ot-month').value;
-  const team = document.getElementById('ot-team').value;
-  let url = '/stats/ot?month=' + month;
-  if (team) url += '&team=' + encodeURIComponent(team);
+  const monthEl = document.getElementById('ot-month');
+  if (!monthEl) return;
+  let url = '/stats/ot?month=' + monthEl.value;
+  const teamEl = document.getElementById('ot-team');
+  if (teamEl && teamEl.value) url += '&team=' + encodeURIComponent(teamEl.value);
   location.href = url;
 }
 </script>
