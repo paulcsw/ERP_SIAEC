@@ -25,6 +25,25 @@ def _shop_to_dict(shop: Shop) -> dict:
     }
 
 
+def _provided_fields(body) -> set[str]:
+    if hasattr(body, "model_fields_set"):
+        return set(body.model_fields_set)
+    return set(getattr(body, "__fields_set__", set()))
+
+
+def _normalize_shop_value(value: str | None, *, field: str) -> str:
+    trimmed = (value or "").strip()
+    if not trimmed:
+        label = "Shop code" if field == "code" else "Shop name"
+        raise APIError(
+            422,
+            f"{label} is required",
+            "VALIDATION_ERROR",
+            field=field,
+        )
+    return trimmed
+
+
 # ── GET /api/shops ────────────────────────────────────────────────────
 
 @router.get("", response_model=PaginatedResponse[ShopResponse])
@@ -59,18 +78,21 @@ async def create_shop(
     current_user: dict = Depends(require_role("ADMIN")),
     db: AsyncSession = Depends(get_db),
 ):
+    normalized_code = _normalize_shop_value(body.code, field="code")
+    normalized_name = _normalize_shop_value(body.name, field="name")
+
     existing = (
-        await db.execute(select(Shop).where(Shop.code == body.code))
+        await db.execute(select(Shop).where(Shop.code == normalized_code))
     ).scalar_one_or_none()
     if existing:
         raise APIError(
-            422, f"Shop code '{body.code}' already exists",
+            422, f"Shop code '{normalized_code}' already exists",
             "VALIDATION_ERROR", field="code",
         )
 
     shop = Shop(
-        code=body.code,
-        name=body.name,
+        code=normalized_code,
+        name=normalized_name,
         created_by=current_user["user_id"],
     )
     db.add(shop)
@@ -106,21 +128,17 @@ async def update_shop(
         raise APIError(404, "Shop not found", "NOT_FOUND")
 
     before = _shop_to_dict(shop)
+    provided_fields = _provided_fields(body)
 
-    if body.code is not None:
-        dup = (
-            await db.execute(
-                select(Shop).where(Shop.code == body.code, Shop.id != shop_id)
-            )
-        ).scalar_one_or_none()
-        if dup:
-            raise APIError(
-                422, f"Shop code '{body.code}' already exists",
-                "VALIDATION_ERROR", field="code",
-            )
-        shop.code = body.code
-    if body.name is not None:
-        shop.name = body.name
+    if "code" in provided_fields:
+        raise APIError(
+            422,
+            "Shop code cannot be changed after creation",
+            "VALIDATION_ERROR",
+            field="code",
+        )
+    if "name" in provided_fields:
+        shop.name = _normalize_shop_value(body.name, field="name")
 
     shop.updated_at = datetime.now(timezone.utc)
     await db.flush()

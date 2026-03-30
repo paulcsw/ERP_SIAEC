@@ -712,8 +712,8 @@ async def test_view_only_cannot_patch_assign_worker(db, worker_client, async_cli
 
 
 @pytest.mark.asyncio
-async def test_worker_no_shop_access_mobile_tasks_empty(db, worker_client, async_client):
-    """Worker without any shop_access sees zero aircraft on mobile tasks path."""
+async def test_worker_no_shop_access_mobile_tasks_forbidden(db, worker_client, async_client):
+    """Worker without any shop_access is blocked from the mobile task surface entry route."""
     shop_id, ac_id = await _seed_shop_and_aircraft(db)
 
     # Create task as admin (worker has no shop_access, no assignment)
@@ -726,6 +726,5 @@ async def test_worker_no_shop_access_mobile_tasks_empty(db, worker_client, async
 
     # Worker with no shop_access hits mobile m1 → page renders but no aircraft
     r = await worker_client.get("/tasks/entry/mobile/m1")
-    assert r.status_code == 200
-    # No aircraft groups should appear in the HTML
-    assert "9V-SMA" not in r.text
+    assert r.status_code == 403
+    assert r.json()["code"] == "SHOP_ACCESS_DENIED"

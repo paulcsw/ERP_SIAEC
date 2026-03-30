@@ -16,6 +16,24 @@ def _access_level(access: str) -> int:
     return ACCESS_LEVELS.get(access, 0)
 
 
+async def has_any_shop_access(db: AsyncSession, user: dict) -> bool:
+    """Return True when the user can enter task surfaces.
+
+    ADMIN keeps the global bypass. All other roles require at least one
+    explicit ``user_shop_access`` row.
+    """
+    if "ADMIN" in user.get("roles", []):
+        return True
+    row = (
+        await db.execute(
+            select(UserShopAccess.id).where(
+                UserShopAccess.user_id == user["user_id"]
+            ).limit(1)
+        )
+    ).scalar_one_or_none()
+    return row is not None
+
+
 async def check_shop_access(
     db: AsyncSession, user: dict, shop_id: int, required: str,
 ) -> bool:
@@ -44,6 +62,12 @@ async def enforce_shop_access(
     """Check and raise 403 SHOP_ACCESS_DENIED if insufficient."""
     ok = await check_shop_access(db, user, shop_id, required)
     if not ok:
+        raise APIError(403, "Shop access denied", "SHOP_ACCESS_DENIED")
+
+
+async def enforce_task_surface_access(db: AsyncSession, user: dict) -> None:
+    """Raise 403 when the user cannot enter task list / entry surfaces."""
+    if not await has_any_shop_access(db, user):
         raise APIError(403, "Shop access denied", "SHOP_ACCESS_DENIED")
 
 

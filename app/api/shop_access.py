@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, require_role
 from app.models.shop import Shop
@@ -33,6 +34,27 @@ def _validate_access(access: str) -> None:
             f"Invalid access level '{access}'. Must be one of: {', '.join(sorted(VALID_ACCESS))}",
             "VALIDATION_ERROR",
             field="access",
+        )
+
+
+def _is_admin_user(user: User) -> bool:
+    return any(role.name == "ADMIN" for role in user.roles)
+
+
+def _validate_target_user(user: User) -> None:
+    if not user.is_active:
+        raise APIError(
+            422,
+            "Inactive users cannot be managed in Shop Access",
+            "VALIDATION_ERROR",
+            field="user_id",
+        )
+    if _is_admin_user(user):
+        raise APIError(
+            422,
+            "ADMIN users have global task access and cannot be managed in Shop Access",
+            "VALIDATION_ERROR",
+            field="user_id",
         )
 
 
@@ -76,10 +98,15 @@ async def create_shop_access(
 
     # FK validation
     user = (
-        await db.execute(select(User).where(User.id == body.user_id))
+        await db.execute(
+            select(User)
+            .options(selectinload(User.roles))
+            .where(User.id == body.user_id)
+        )
     ).scalar_one_or_none()
     if not user:
         raise APIError(422, "User not found", "VALIDATION_ERROR", field="user_id")
+    _validate_target_user(user)
 
     shop = (
         await db.execute(select(Shop).where(Shop.id == body.shop_id))
@@ -142,6 +169,16 @@ async def update_shop_access(
     ).scalar_one_or_none()
     if not row:
         raise APIError(404, "Shop access not found", "NOT_FOUND")
+    user = (
+        await db.execute(
+            select(User)
+            .options(selectinload(User.roles))
+            .where(User.id == row.user_id)
+        )
+    ).scalar_one_or_none()
+    if not user:
+        raise APIError(422, "User not found", "VALIDATION_ERROR", field="user_id")
+    _validate_target_user(user)
 
     before = _access_to_dict(row)
     row.access = body.access

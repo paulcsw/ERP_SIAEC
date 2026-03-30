@@ -699,12 +699,65 @@ async def test_admin_users_ssr(async_client, db):
     assert "E001" in resp.text  # seeded admin
 
 
+async def test_admin_users_ssr_uses_safe_multirole_edit_payload(async_client, db):
+    """Personnel SSR should use safe data payloads, multi-role checkboxes, and self-protection affordances."""
+    await _seed_user(
+        db,
+        employee_no="E099",
+        name="O'Brien",
+        email="obrien@test.com",
+        team="Line 'A'",
+        roles=("SUPERVISOR", "ADMIN"),
+    )
+
+    resp = await async_client.get("/admin/users")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "O&#39;Brien" in body or "O'Brien" in body
+    assert 'data-user=' in body
+    assert 'onclick="openEditUser(this)"' in body
+    assert 'name="add-roles"' in body
+    assert 'name="edit-roles"' in body
+    assert 'id="edit-role-admin"' in body
+    assert 'id="edit-role"' not in body
+    assert "roles.split(',')[0]" not in body
+    assert "normalizeOptionalEmail(document.getElementById('edit-email').value)" in body
+    assert "getCheckedRoles('edit-roles')" in body
+    assert "You cannot deactivate your own account or remove your own ADMIN role." in body
+    assert "button.dataset.user" in body
+
+
 async def test_admin_reference_ssr(async_client, db):
     """GET /admin/reference returns HTML with tabs."""
     resp = await async_client.get("/admin/reference")
     assert resp.status_code == 200
     assert "Reference Data" in resp.text
     assert "Aircraft" in resp.text
+
+
+async def test_admin_reference_ssr_shows_import_result_panel_and_shop_stream_fallback(async_client, db):
+    """Reference SSR should expose import result markup and fallback WP labels for null RFO shop streams."""
+    from app.models.reference import Aircraft, ShopStream, WorkPackage
+
+    async with db() as s:
+        ac = Aircraft(ac_reg="9V-REFSSR", airline="Test Air", created_at=NOW)
+        s.add(ac)
+        await s.flush()
+        wp = WorkPackage(aircraft_id=ac.id, title="Fallback SSR WP", created_at=NOW)
+        s.add(wp)
+        await s.flush()
+        ss = ShopStream(work_package_id=wp.id, shop_code="SM", created_at=NOW)
+        s.add(ss)
+        await s.commit()
+
+    resp = await async_client.get("/admin/reference")
+    assert resp.status_code == 200
+    body = resp.text
+    assert 'id="csv-import-result"' in body
+    assert 'id="csv-import-errors"' in body
+    assert "function renderCsvImportResult(data)" in body
+    assert "Review row errors below" in body
+    assert f"WP-{wp.id}" in body
 
 
 async def test_admin_shops_ssr(async_client, db):
@@ -714,11 +767,67 @@ async def test_admin_shops_ssr(async_client, db):
     assert "Shop Management" in resp.text
 
 
+async def test_admin_shops_ssr_uses_safe_payload_and_immutable_code_copy(async_client, db):
+    """Shops SSR should use safe data payloads and make code immutability explicit."""
+    import re
+
+    from app.models.shop import Shop
+
+    async with db() as s:
+        shop = Shop(code="SAFE", name="O'Brien Shop", created_by=1)
+        s.add(shop)
+        await s.commit()
+
+    resp = await async_client.get("/admin/shops")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "Code is fixed after creation." in body
+    assert 'data-shop=' in body
+    assert 'onclick="editShop(this)"' in body
+    assert "button.dataset.shop" in body
+    assert "O&#39;Brien Shop" in body or "O'Brien Shop" in body
+    assert re.findall(r'onclick="editShop\((.*?)\)"', body) == ["this"]
+
+
 async def test_admin_shop_access_ssr(async_client, db):
     """GET /admin/shop-access returns HTML."""
     resp = await async_client.get("/admin/shop-access")
     assert resp.status_code == 200
     assert "Shop Access" in resp.text
+
+
+async def test_admin_shop_access_ssr_filters_grant_targets_and_flags_legacy_rows(async_client, db):
+    """Shop Access SSR should exclude ADMIN/inactive targets from the picker and flag legacy rows as revoke-only."""
+    from sqlalchemy import select
+
+    from app.models.shop import Shop
+    from app.models.user import User
+    from app.models.user_shop_access import UserShopAccess
+
+    async with db() as s:
+        inactive_user = (await s.execute(select(User).where(User.id == 4))).scalar_one()
+        inactive_user.is_active = False
+        shop = Shop(code="SACL", name="Legacy Access Shop", created_by=1)
+        s.add(shop)
+        await s.flush()
+        s.add_all([
+            UserShopAccess(user_id=1, shop_id=shop.id, access="VIEW", granted_by=1),
+            UserShopAccess(user_id=4, shop_id=shop.id, access="EDIT", granted_by=1),
+        ])
+        await s.commit()
+
+    resp = await async_client.get("/admin/shop-access")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "ADMIN is global; Shop Access applies to supervisor/worker task access." in body
+    assert '>E002 - Test Supervisor</option>' in body
+    assert '>E003 - Test Worker</option>' in body
+    assert '>E001 - Test Admin</option>' not in body
+    assert '>E004 - Other Team Worker</option>' not in body
+    assert "ADMIN BYPASS" in body
+    assert "INACTIVE USER" in body
+    assert "Legacy cleanup only. ADMIN users always keep global task access." in body
+    assert "Legacy cleanup only. Inactive users cannot be granted or updated." in body
 
 
 async def test_admin_pages_worker_forbidden(worker_client, db):
@@ -1804,6 +1913,13 @@ async def test_mobile_task_tab_disabled_no_shop_access(worker_client, db):
     assert "pointer-events:none" in body or "aria-disabled" in body
 
 
+async def test_worker_without_shop_access_task_entry_forbidden(worker_client, db):
+    """Worker without explicit shop_access should be blocked from the Data Entry page."""
+    resp = await worker_client.get("/tasks/entry")
+    assert resp.status_code == 403
+    assert resp.json()["code"] == "SHOP_ACCESS_DENIED"
+
+
 async def test_mobile_task_tab_enabled_with_shop_access(worker_client, db):
     """Worker with VIEW shop_access sees active Tasks tab."""
     from app.models.shop import Shop
@@ -1825,6 +1941,51 @@ async def test_mobile_task_tab_enabled_with_shop_access(worker_client, db):
     body = resp.text
     # Tasks tab should be active/clickable (no pointer-events:none on the tasks tab)
     assert 'href="/tasks/entry"' in body
+
+
+async def test_supervisor_without_shop_access_task_surfaces_forbidden_and_tabs_disabled(sup_client, db):
+    """Supervisor without explicit shop_access should be blocked from task surfaces and see disabled task affordances."""
+    manager_resp = await sup_client.get("/tasks")
+    assert manager_resp.status_code == 403
+    assert manager_resp.json()["code"] == "SHOP_ACCESS_DENIED"
+
+    entry_resp = await sup_client.get("/tasks/entry")
+    assert entry_resp.status_code == 403
+    assert entry_resp.json()["code"] == "SHOP_ACCESS_DENIED"
+
+    mobile_resp = await sup_client.get("/tasks/entry/mobile/m1")
+    assert mobile_resp.status_code == 403
+    assert mobile_resp.json()["code"] == "SHOP_ACCESS_DENIED"
+
+    ot_resp = await sup_client.get("/ot")
+    assert ot_resp.status_code == 200
+    assert 'aria-disabled="true"' in ot_resp.text
+
+    more_resp = await sup_client.get("/more")
+    assert more_resp.status_code == 200
+    assert 'aria-disabled="true"' in more_resp.text
+
+
+async def test_supervisor_with_shop_access_keeps_task_affordances_enabled(sup_client, db):
+    """Supervisor with any explicit shop_access should keep task affordances enabled."""
+    from app.models.shop import Shop
+    from app.models.user_shop_access import UserShopAccess
+
+    async with db() as s:
+        shop = Shop(code="SUPA", name="Supervisor Access Shop", created_by=1)
+        s.add(shop)
+        await s.flush()
+        s.add(UserShopAccess(user_id=2, shop_id=shop.id, access="VIEW", granted_by=1))
+        await s.commit()
+
+    ot_resp = await sup_client.get("/ot")
+    assert ot_resp.status_code == 200
+    assert 'aria-disabled="true"' not in ot_resp.text
+    assert 'href="/tasks/entry"' in ot_resp.text
+
+    more_resp = await sup_client.get("/more")
+    assert more_resp.status_code == 200
+    assert 'aria-disabled="true"' not in more_resp.text
 
 
 # ── Fix E/F: Sidebar role gating for OT Stats and RFO Detail ──────────────

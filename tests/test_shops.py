@@ -21,6 +21,37 @@ async def test_create_shop(async_client):
 
 
 @pytest.mark.asyncio
+async def test_create_shop_trims_code_and_name(async_client):
+    r = await async_client.post(
+        "/api/shops", json={"code": "  TRIM  ", "name": "  Trim Shop  "}, headers=CSRF,
+    )
+    assert r.status_code == 201
+    data = r.json()
+    assert data["code"] == "TRIM"
+    assert data["name"] == "Trim Shop"
+
+
+@pytest.mark.asyncio
+async def test_create_shop_rejects_blank_code(async_client):
+    r = await async_client.post(
+        "/api/shops", json={"code": "   ", "name": "Valid Name"}, headers=CSRF,
+    )
+    assert r.status_code == 422
+    assert r.json()["code"] == "VALIDATION_ERROR"
+    assert r.json()["field"] == "code"
+
+
+@pytest.mark.asyncio
+async def test_create_shop_rejects_blank_name(async_client):
+    r = await async_client.post(
+        "/api/shops", json={"code": "BLANK", "name": "   "}, headers=CSRF,
+    )
+    assert r.status_code == 422
+    assert r.json()["code"] == "VALIDATION_ERROR"
+    assert r.json()["field"] == "name"
+
+
+@pytest.mark.asyncio
 async def test_create_shop_duplicate_code(async_client):
     await async_client.post(
         "/api/shops", json={"code": "DUP", "name": "First"}, headers=CSRF,
@@ -60,6 +91,65 @@ async def test_update_shop(async_client):
     assert r2.status_code == 200
     assert r2.json()["name"] == "After"
     assert r2.json()["code"] == "UPD"
+
+
+@pytest.mark.asyncio
+async def test_update_shop_trims_name(async_client):
+    r = await async_client.post(
+        "/api/shops", json={"code": "TRIMUPD", "name": "Before"}, headers=CSRF,
+    )
+    shop_id = r.json()["id"]
+
+    r2 = await async_client.patch(
+        f"/api/shops/{shop_id}", json={"name": "  After Trim  "}, headers=CSRF,
+    )
+    assert r2.status_code == 200
+    assert r2.json()["name"] == "After Trim"
+
+
+@pytest.mark.asyncio
+async def test_update_shop_rejects_blank_name(async_client):
+    r = await async_client.post(
+        "/api/shops", json={"code": "NONBLANK", "name": "Before"}, headers=CSRF,
+    )
+    shop_id = r.json()["id"]
+
+    r2 = await async_client.patch(
+        f"/api/shops/{shop_id}", json={"name": "   "}, headers=CSRF,
+    )
+    assert r2.status_code == 422
+    assert r2.json()["code"] == "VALIDATION_ERROR"
+    assert r2.json()["field"] == "name"
+
+
+@pytest.mark.asyncio
+async def test_update_shop_code_is_immutable(async_client):
+    r = await async_client.post(
+        "/api/shops", json={"code": "IMMUT", "name": "Before"}, headers=CSRF,
+    )
+    shop_id = r.json()["id"]
+
+    r2 = await async_client.patch(
+        f"/api/shops/{shop_id}", json={"code": "RENAMED"}, headers=CSRF,
+    )
+    assert r2.status_code == 422
+    assert r2.json()["code"] == "VALIDATION_ERROR"
+    assert r2.json()["field"] == "code"
+
+
+@pytest.mark.asyncio
+async def test_update_shop_code_is_immutable_even_if_same_value(async_client):
+    r = await async_client.post(
+        "/api/shops", json={"code": "IMMUT2", "name": "Before"}, headers=CSRF,
+    )
+    shop_id = r.json()["id"]
+
+    r2 = await async_client.patch(
+        f"/api/shops/{shop_id}", json={"code": "IMMUT2"}, headers=CSRF,
+    )
+    assert r2.status_code == 422
+    assert r2.json()["code"] == "VALIDATION_ERROR"
+    assert r2.json()["field"] == "code"
 
 
 @pytest.mark.asyncio
@@ -153,6 +243,47 @@ async def test_create_shop_access_invalid_level(async_client):
 
 
 @pytest.mark.asyncio
+async def test_create_shop_access_rejects_admin_target(async_client):
+    shop = (await async_client.post(
+        "/api/shops", json={"code": "ACC2A", "name": "Admin Reject Shop"}, headers=CSRF,
+    )).json()
+
+    r = await async_client.post(
+        "/api/shop-access",
+        json={"user_id": 1, "shop_id": shop["id"], "access": "VIEW"},
+        headers=CSRF,
+    )
+    assert r.status_code == 422
+    assert r.json()["code"] == "VALIDATION_ERROR"
+    assert r.json()["field"] == "user_id"
+
+
+@pytest.mark.asyncio
+async def test_create_shop_access_rejects_inactive_target(async_client, db):
+    from sqlalchemy import select
+
+    from app.models.user import User
+
+    shop = (await async_client.post(
+        "/api/shops", json={"code": "ACC2B", "name": "Inactive Reject Shop"}, headers=CSRF,
+    )).json()
+
+    async with db() as session:
+        user = (await session.execute(select(User).where(User.id == 4))).scalar_one()
+        user.is_active = False
+        await session.commit()
+
+    r = await async_client.post(
+        "/api/shop-access",
+        json={"user_id": 4, "shop_id": shop["id"], "access": "VIEW"},
+        headers=CSRF,
+    )
+    assert r.status_code == 422
+    assert r.json()["code"] == "VALIDATION_ERROR"
+    assert r.json()["field"] == "user_id"
+
+
+@pytest.mark.asyncio
 async def test_create_shop_access_duplicate(async_client):
     shop = (await async_client.post(
         "/api/shops", json={"code": "ACC3", "name": "Access Shop 3"}, headers=CSRF,
@@ -208,6 +339,59 @@ async def test_update_shop_access(async_client):
 
 
 @pytest.mark.asyncio
+async def test_update_shop_access_rejects_admin_target_row(async_client, db):
+    from app.models.shop import Shop
+    from app.models.user_shop_access import UserShopAccess
+
+    async with db() as session:
+        shop = Shop(code="ACC5A", name="Legacy Admin Shop", created_by=1)
+        session.add(shop)
+        await session.flush()
+        row = UserShopAccess(user_id=1, shop_id=shop.id, access="VIEW", granted_by=1)
+        session.add(row)
+        await session.commit()
+        access_id = row.id
+
+    r = await async_client.patch(
+        f"/api/shop-access/{access_id}",
+        json={"access": "MANAGE"},
+        headers=CSRF,
+    )
+    assert r.status_code == 422
+    assert r.json()["code"] == "VALIDATION_ERROR"
+    assert r.json()["field"] == "user_id"
+
+
+@pytest.mark.asyncio
+async def test_update_shop_access_rejects_inactive_target_row(async_client, db):
+    from sqlalchemy import select
+
+    from app.models.shop import Shop
+    from app.models.user import User
+    from app.models.user_shop_access import UserShopAccess
+
+    async with db() as session:
+        user = (await session.execute(select(User).where(User.id == 4))).scalar_one()
+        user.is_active = False
+        shop = Shop(code="ACC5B", name="Legacy Inactive Shop", created_by=1)
+        session.add(shop)
+        await session.flush()
+        row = UserShopAccess(user_id=4, shop_id=shop.id, access="VIEW", granted_by=1)
+        session.add(row)
+        await session.commit()
+        access_id = row.id
+
+    r = await async_client.patch(
+        f"/api/shop-access/{access_id}",
+        json={"access": "MANAGE"},
+        headers=CSRF,
+    )
+    assert r.status_code == 422
+    assert r.json()["code"] == "VALIDATION_ERROR"
+    assert r.json()["field"] == "user_id"
+
+
+@pytest.mark.asyncio
 async def test_delete_shop_access(async_client):
     shop = (await async_client.post(
         "/api/shops", json={"code": "ACC6", "name": "Delete Shop"}, headers=CSRF,
@@ -229,6 +413,34 @@ async def test_delete_shop_access(async_client):
         f"/api/shop-access/{access['id']}", headers=CSRF,
     )
     assert r2.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_shop_access_allows_legacy_admin_and_inactive_rows(async_client, db):
+    from sqlalchemy import select
+
+    from app.models.shop import Shop
+    from app.models.user import User
+    from app.models.user_shop_access import UserShopAccess
+
+    async with db() as session:
+        inactive_user = (await session.execute(select(User).where(User.id == 4))).scalar_one()
+        inactive_user.is_active = False
+        admin_shop = Shop(code="ACC6A", name="Legacy Admin Delete", created_by=1)
+        inactive_shop = Shop(code="ACC6B", name="Legacy Inactive Delete", created_by=1)
+        session.add_all([admin_shop, inactive_shop])
+        await session.flush()
+        admin_row = UserShopAccess(user_id=1, shop_id=admin_shop.id, access="VIEW", granted_by=1)
+        inactive_row = UserShopAccess(user_id=4, shop_id=inactive_shop.id, access="VIEW", granted_by=1)
+        session.add_all([admin_row, inactive_row])
+        await session.commit()
+        admin_access_id = admin_row.id
+        inactive_access_id = inactive_row.id
+
+    admin_delete = await async_client.delete(f"/api/shop-access/{admin_access_id}", headers=CSRF)
+    inactive_delete = await async_client.delete(f"/api/shop-access/{inactive_access_id}", headers=CSRF)
+    assert admin_delete.status_code == 200
+    assert inactive_delete.status_code == 200
 
 
 @pytest.mark.asyncio

@@ -32,6 +32,76 @@ def _user_to_response(user: User) -> dict:
     }
 
 
+def _provided_fields(body) -> set[str]:
+    if hasattr(body, "model_fields_set"):
+        return set(body.model_fields_set)
+    return set(getattr(body, "__fields_set__", set()))
+
+
+def _normalize_email(value: str | None) -> str | None:
+    if value is None:
+        return None
+    trimmed = value.strip()
+    return trimmed or None
+
+
+async def _resolve_role_objects(db: AsyncSession, role_names: list[str]) -> list[Role]:
+    role_objects = []
+    for role_name in role_names:
+        role = (
+            await db.execute(select(Role).where(Role.name == role_name))
+        ).scalar_one_or_none()
+        if not role:
+            raise APIError(
+                422, f"Unknown role: {role_name}", "VALIDATION_ERROR", field="roles"
+            )
+        role_objects.append(role)
+    return role_objects
+
+
+async def _count_active_admins(db: AsyncSession, *, exclude_user_id: int | None = None) -> int:
+    q = (
+        select(func.count(func.distinct(User.id)))
+        .select_from(User)
+        .join(user_roles, user_roles.c.user_id == User.id)
+        .join(Role, Role.id == user_roles.c.role_id)
+        .where(User.is_active == True, Role.name == "ADMIN")  # noqa: E712
+    )
+    if exclude_user_id is not None:
+        q = q.where(User.id != exclude_user_id)
+    return (await db.execute(q)).scalar() or 0
+
+
+async def _enforce_admin_lockout_guards(
+    db: AsyncSession,
+    current_user: dict,
+    user: User,
+    *,
+    target_roles: set[str],
+    target_is_active: bool,
+):
+    current_roles = {r.name for r in user.roles}
+    current_has_admin = "ADMIN" in current_roles
+    target_has_admin = "ADMIN" in target_roles
+    is_self = user.id == current_user["user_id"]
+
+    if is_self and "ADMIN" in current_user.get("roles", []) and (not target_is_active or not target_has_admin):
+        raise APIError(
+            422,
+            "You cannot deactivate your own account or remove your own ADMIN role.",
+            "SELF_LOCKOUT_FORBIDDEN",
+        )
+
+    if user.is_active and current_has_admin and (not target_is_active or not target_has_admin):
+        remaining_admins = await _count_active_admins(db, exclude_user_id=user.id)
+        if remaining_admins == 0:
+            raise APIError(
+                422,
+                "At least one active ADMIN must remain in the system.",
+                "LAST_ACTIVE_ADMIN",
+            )
+
+
 # ── GET /api/users ─────────────────────────────────────────────────
 
 @router.get("", response_model=PaginatedResponse[UserResponse])
@@ -70,6 +140,8 @@ async def create_user(
     current_user: dict = Depends(require_role("ADMIN")),
     db: AsyncSession = Depends(get_db),
 ):
+    normalized_email = _normalize_email(body.email)
+
     # Duplicate employee_no check
     existing = (
         await db.execute(select(User).where(User.employee_no == body.employee_no))
@@ -83,34 +155,32 @@ async def create_user(
         )
 
     # Duplicate email check
-    if body.email:
+    if normalized_email:
         existing_email = (
-            await db.execute(select(User).where(User.email == body.email))
+            await db.execute(select(User).where(User.email == normalized_email))
         ).scalar_one_or_none()
         if existing_email:
             raise APIError(
                 422,
-                f"Email '{body.email}' already exists",
+                f"Email '{normalized_email}' already exists",
                 "VALIDATION_ERROR",
                 field="email",
             )
 
     # Resolve role names → Role objects
-    role_objects = []
-    for role_name in body.roles:
-        role = (
-            await db.execute(select(Role).where(Role.name == role_name))
-        ).scalar_one_or_none()
-        if not role:
-            raise APIError(
-                422, f"Unknown role: {role_name}", "VALIDATION_ERROR", field="roles"
-            )
-        role_objects.append(role)
+    if not body.roles:
+        raise APIError(
+            422,
+            "At least one role is required.",
+            "VALIDATION_ERROR",
+            field="roles",
+        )
+    role_objects = await _resolve_role_objects(db, body.roles)
 
     user = User(
         employee_no=body.employee_no,
         name=body.name,
-        email=body.email,
+        email=normalized_email,
         team=body.team,
     )
     user.roles = role_objects
@@ -149,6 +219,32 @@ async def update_user(
         raise APIError(404, "User not found", "NOT_FOUND")
 
     before = _user_to_response(user)
+    provided_fields = _provided_fields(body)
+    next_roles = {r.name for r in user.roles}
+    next_is_active = user.is_active
+    resolved_role_objects: list[Role] | None = None
+
+    if "roles" in provided_fields:
+        if not body.roles:
+            raise APIError(
+                422,
+                "At least one role is required.",
+                "VALIDATION_ERROR",
+                field="roles",
+            )
+        resolved_role_objects = await _resolve_role_objects(db, body.roles)
+        next_roles = {role.name for role in resolved_role_objects}
+
+    if "is_active" in provided_fields and body.is_active is not None:
+        next_is_active = body.is_active
+
+    await _enforce_admin_lockout_guards(
+        db,
+        current_user,
+        user,
+        target_roles=next_roles,
+        target_is_active=next_is_active,
+    )
 
     if body.employee_no is not None:
         dup_emp = (
@@ -170,39 +266,28 @@ async def update_user(
 
     if body.name is not None:
         user.name = body.name
-    if body.email is not None:
-        dup = (
-            await db.execute(
-                select(User).where(User.email == body.email, User.id != user_id)
-            )
-        ).scalar_one_or_none()
-        if dup:
-            raise APIError(
-                422,
-                f"Email '{body.email}' already exists",
-                "VALIDATION_ERROR",
-                field="email",
-            )
-        user.email = body.email
+    if "email" in provided_fields:
+        normalized_email = _normalize_email(body.email)
+        if normalized_email:
+            dup = (
+                await db.execute(
+                    select(User).where(User.email == normalized_email, User.id != user_id)
+                )
+            ).scalar_one_or_none()
+            if dup:
+                raise APIError(
+                    422,
+                    f"Email '{normalized_email}' already exists",
+                    "VALIDATION_ERROR",
+                    field="email",
+                )
+        user.email = normalized_email
     if body.team is not None:
         user.team = body.team
     if body.is_active is not None:
         user.is_active = body.is_active
-    if body.roles is not None:
-        role_objects = []
-        for role_name in body.roles:
-            role = (
-                await db.execute(select(Role).where(Role.name == role_name))
-            ).scalar_one_or_none()
-            if not role:
-                raise APIError(
-                    422,
-                    f"Unknown role: {role_name}",
-                    "VALIDATION_ERROR",
-                    field="roles",
-                )
-            role_objects.append(role)
-        user.roles = role_objects
+    if "roles" in provided_fields:
+        user.roles = resolved_role_objects
 
     user.updated_at = datetime.now(timezone.utc)
     await db.flush()
@@ -238,6 +323,13 @@ async def deactivate_user(
         raise APIError(404, "User not found", "NOT_FOUND")
 
     before = _user_to_response(user)
+    await _enforce_admin_lockout_guards(
+        db,
+        current_user,
+        user,
+        target_roles={r.name for r in user.roles},
+        target_is_active=False,
+    )
     user.is_active = False
     user.updated_at = datetime.now(timezone.utc)
     await db.flush()

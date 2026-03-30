@@ -3,9 +3,15 @@
 {% block breadcrumb %}Admin &rsaquo; Users{% endblock %}
 
 {% block content %}
-<div id="admin-content" class="p-4 lg:p-5 flex flex-col h-full w-full">
+{% set role_options = ["WORKER", "SUPERVISOR", "ADMIN"] %}
+{% set admin_ns = namespace(active_admin_count=0) %}
+{% for item in users %}
+  {% if item.is_active and "ADMIN" in item.roles %}
+    {% set admin_ns.active_admin_count = admin_ns.active_admin_count + 1 %}
+  {% endif %}
+{% endfor %}
 
-  {# ?? Header ???????????????????????????????????????????????????????? #}
+<div id="admin-content" class="p-4 lg:p-5 flex flex-col h-full w-full">
   <div class="flex items-center justify-between mb-3 shrink-0">
     <div>
       <h1 class="text-lg font-semibold text-navy-900">Personnel Management</h1>
@@ -14,7 +20,6 @@
     <button class="btn-primary btn-sm text-xs" onclick="showModal('modal-add-user')">+ Add User</button>
   </div>
 
-  {# ?? User Table ???????????????????????????????????????????????????? #}
   <div class="card flex-1 flex flex-col min-h-0">
     <div class="flex-1 overflow-y-auto">
       <table class="tbl">
@@ -30,6 +35,18 @@
         </thead>
         <tbody>
         {% for u in users %}
+          {% set is_self = u.id == current_user.user_id %}
+          {% set has_admin_role = "ADMIN" in u.roles %}
+          {% set is_last_active_admin = u.is_active and has_admin_role and admin_ns.active_admin_count == 1 %}
+          {% set can_deactivate = not is_self and not is_last_active_admin %}
+          {% set can_remove_admin = not is_self and not is_last_active_admin %}
+          {% if is_self %}
+            {% set protection_reason = "You cannot deactivate your own account or remove your own ADMIN role." %}
+          {% elif is_last_active_admin %}
+            {% set protection_reason = "At least one active ADMIN must remain active." %}
+          {% else %}
+            {% set protection_reason = "" %}
+          {% endif %}
           <tr>
             <td class="font-mono text-xs">{{ u.employee_no }}</td>
             <td class="text-sm font-medium">{{ u.name }}</td>
@@ -47,8 +64,29 @@
               {% endif %}
             </td>
             <td>
-              <button class="btn-outline btn-sm text-xs"
-                      onclick="openEditUser({{ u.id }}, '{{ u.employee_no }}', '{{ u.name }}', '{{ u.email }}', '{{ u.team }}', '{{ u.roles | join(',') }}', {{ 'true' if u.is_active else 'false' }})">Edit</button>
+              <div class="flex flex-col items-start gap-1">
+                <button
+                  class="btn-outline btn-sm text-xs"
+                  data-user='{{ {
+                    "id": u.id,
+                    "employee_no": u.employee_no,
+                    "name": u.name,
+                    "email": u.email,
+                    "team": u.team,
+                    "roles": u.roles,
+                    "is_active": u.is_active,
+                    "is_self": is_self,
+                    "is_last_active_admin": is_last_active_admin,
+                    "can_deactivate": can_deactivate,
+                    "can_remove_admin": can_remove_admin,
+                    "protection_reason": protection_reason
+                  } | tojson | forceescape }}'
+                  onclick="openEditUser(this)"
+                >Edit</button>
+                {% if protection_reason %}
+                <span class="text-[11px] text-surf-400 max-w-[220px]">{{ protection_reason }}</span>
+                {% endif %}
+              </div>
             </td>
           </tr>
         {% endfor %}
@@ -61,9 +99,8 @@
   </div>
 </div>
 
-{# ?? Add User Modal ?????????????????????????????????????????????????? #}
 <div class="modal-overlay" id="modal-add-user">
-  <div class="card w-full sm:w-[420px]">
+  <div class="card w-full sm:w-[460px]">
     <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between">
       <h3 class="font-semibold text-navy-900">Add User</h3>
       <button onclick="closeModal('modal-add-user')" class="text-surf-400 hover:text-navy-700 text-lg">&times;</button>
@@ -88,12 +125,20 @@
           </select>
         </div>
         <div>
-          <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Role *</label>
-          <select id="add-role" class="inp w-full h-9 text-sm">
-            <option value="WORKER">WORKER</option>
-            <option value="SUPERVISOR">SUPERVISOR</option>
-            <option value="ADMIN">ADMIN</option>
-          </select>
+          <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Roles *</label>
+          <div class="grid grid-cols-1 gap-1 rounded-lg border border-surf-100 bg-surf-50 p-2">
+            {% for role in role_options %}
+            <label class="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="add-roles"
+                value="{{ role }}"
+                {% if role == "WORKER" %}checked{% endif %}
+              />
+              <span>{{ role }}</span>
+            </label>
+            {% endfor %}
+          </div>
         </div>
       </div>
       <div>
@@ -105,9 +150,8 @@
   </div>
 </div>
 
-{# ?? Edit User Modal ????????????????????????????????????????????????? #}
 <div class="modal-overlay" id="modal-edit-user">
-  <div class="card w-full sm:w-[420px]">
+  <div class="card w-full sm:w-[460px]">
     <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between">
       <h3 class="font-semibold text-navy-900">Edit User</h3>
       <button onclick="closeModal('modal-edit-user')" class="text-surf-400 hover:text-navy-700 text-lg">&times;</button>
@@ -133,12 +177,15 @@
           </select>
         </div>
         <div>
-          <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Role *</label>
-          <select id="edit-role" class="inp w-full h-9 text-sm">
-            <option value="WORKER">WORKER</option>
-            <option value="SUPERVISOR">SUPERVISOR</option>
-            <option value="ADMIN">ADMIN</option>
-          </select>
+          <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Roles *</label>
+          <div class="grid grid-cols-1 gap-1 rounded-lg border border-surf-100 bg-surf-50 p-2">
+            {% for role in role_options %}
+            <label class="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="edit-roles" value="{{ role }}" id="edit-role-{{ role|lower }}"/>
+              <span>{{ role }}</span>
+            </label>
+            {% endfor %}
+          </div>
         </div>
       </div>
       <div>
@@ -149,9 +196,10 @@
         <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Status</label>
         <div class="flex gap-3">
           <label class="flex items-center gap-1.5 text-sm"><input type="radio" name="edit-status" value="active" checked/> Active</label>
-          <label class="flex items-center gap-1.5 text-sm text-st-red"><input type="radio" name="edit-status" value="deactivate"/> Deactivate</label>
+          <label class="flex items-center gap-1.5 text-sm text-st-red"><input id="edit-status-deactivate" type="radio" name="edit-status" value="deactivate"/> Deactivate</label>
         </div>
       </div>
+      <div id="edit-protection" class="hidden rounded-lg border border-gold-200 bg-gold-50 px-3 py-2 text-xs text-gold-700"></div>
       <div class="flex gap-3">
         <button class="btn-outline flex-1" onclick="closeModal('modal-edit-user')">Cancel</button>
         <button class="btn-gold flex-1" onclick="saveUser()">Save Changes</button>
@@ -164,6 +212,8 @@
 {% block scripts %}
 <script>
 var csrf = () => (document.cookie.match(/csrftoken=([^;]+)/)||[])[1]||'';
+var editUserState = null;
+
 function refreshAdminUsers() {
   if (typeof htmx === 'undefined') return;
   htmx.ajax('GET', '/admin/users', {
@@ -174,54 +224,134 @@ function refreshAdminUsers() {
   });
 }
 
+function getCheckedRoles(groupName) {
+  return Array.from(document.querySelectorAll('input[name="' + groupName + '"]:checked'))
+    .map(function(input) { return input.value; });
+}
+
+function setCheckedRoles(groupName, roles) {
+  document.querySelectorAll('input[name="' + groupName + '"]').forEach(function(input) {
+    input.checked = roles.includes(input.value);
+  });
+}
+
+function normalizeOptionalEmail(value) {
+  var trimmed = (value || '').trim();
+  return trimmed ? trimmed : null;
+}
+
+function syncEditProtection(state) {
+  var protectionEl = document.getElementById('edit-protection');
+  var deactivateInput = document.getElementById('edit-status-deactivate');
+  var adminInput = document.getElementById('edit-role-admin');
+  var isProtectedAdmin = state.roles.includes('ADMIN') && !state.can_remove_admin;
+
+  deactivateInput.disabled = !state.can_deactivate;
+  adminInput.disabled = isProtectedAdmin;
+
+  if (isProtectedAdmin) {
+    adminInput.checked = true;
+  }
+  if (!state.can_deactivate) {
+    document.querySelector('input[name="edit-status"][value="active"]').checked = true;
+  }
+
+  protectionEl.textContent = state.protection_reason || '';
+  protectionEl.classList.toggle('hidden', !state.protection_reason);
+}
+
 function addUser() {
+  var roles = getCheckedRoles('add-roles');
   var body = {
     employee_no: document.getElementById('add-empno').value,
     name: document.getElementById('add-name').value,
     team: document.getElementById('add-team').value,
-    roles: [document.getElementById('add-role').value],
-    email: document.getElementById('add-email').value || undefined,
+    roles: roles,
+    email: normalizeOptionalEmail(document.getElementById('add-email').value),
   };
-  if(!body.employee_no||!body.name){showToast('Error','Employee No and Name are required','red');return;}
-  fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(body)})
-    .then(r=>{if(!r.ok)return r.json().then(e=>{throw e});return r.json()})
-    .then(()=>{closeModal('modal-add-user');showToast('Created','User added successfully','green');refreshAdminUsers();})
-    .catch(e=>showToast('Error',(e&&e.detail)||'Failed','red'));
+  if (!body.employee_no || !body.name) {
+    showToast('Error', 'Employee No and Name are required', 'red');
+    return;
+  }
+  if (!roles.length) {
+    showToast('Error', 'Select at least one role', 'red');
+    return;
+  }
+  fetch('/api/users', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
+    body: JSON.stringify(body)
+  })
+    .then(function(r){ if(!r.ok) return r.json().then(function(e){ throw e; }); return r.json(); })
+    .then(function(){
+      closeModal('modal-add-user');
+      showToast('Created', 'User added successfully', 'green');
+      refreshAdminUsers();
+    })
+    .catch(function(e){ showToast('Error', (e && e.detail) || 'Failed', 'red'); });
 }
 
-function openEditUser(id,empno,name,email,team,roles,active) {
-  document.getElementById('edit-id').value=id;
-  document.getElementById('edit-empno').value=empno;
-  document.getElementById('edit-name').value=name;
-  document.getElementById('edit-email').value=email;
-  document.getElementById('edit-team').value=team;
-  document.getElementById('edit-role').value=roles.split(',')[0]||'WORKER';
-  document.querySelectorAll('input[name="edit-status"]').forEach(r=>r.checked=(r.value==(active?'active':'deactivate')));
+function openEditUser(button) {
+  var user = JSON.parse(button.dataset.user);
+  editUserState = user;
+  document.getElementById('edit-id').value = user.id;
+  document.getElementById('edit-empno').value = user.employee_no;
+  document.getElementById('edit-name').value = user.name;
+  document.getElementById('edit-email').value = user.email || '';
+  document.getElementById('edit-team').value = user.team || '';
+  setCheckedRoles('edit-roles', user.roles || []);
+  document.querySelectorAll('input[name="edit-status"]').forEach(function(radio) {
+    radio.checked = radio.value === (user.is_active ? 'active' : 'deactivate');
+  });
+  syncEditProtection(user);
   showModal('modal-edit-user');
 }
 
 function saveUser() {
-  var id=document.getElementById('edit-id').value;
-  var active=document.querySelector('input[name="edit-status"]:checked').value==='active';
-  var body={
-    name:document.getElementById('edit-name').value,
-    team:document.getElementById('edit-team').value,
-    roles:[document.getElementById('edit-role').value],
-    email:document.getElementById('edit-email').value||undefined,
+  var id = document.getElementById('edit-id').value;
+  var active = document.querySelector('input[name="edit-status"]:checked').value === 'active';
+  var roles = getCheckedRoles('edit-roles');
+  var body = {
+    name: document.getElementById('edit-name').value,
+    team: document.getElementById('edit-team').value,
+    roles: roles,
+    email: normalizeOptionalEmail(document.getElementById('edit-email').value),
   };
-  // Update user
-  fetch('/api/users/'+id,{method:'PATCH',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(body)})
-    .then(r=>{if(!r.ok)return r.json().then(e=>{throw e});return r.json()})
-    .then(()=>{
-      // Sync activation toggle
-      if(active){
-        return fetch('/api/users/'+id+'/reactivate',{method:'PATCH',headers:{'X-CSRFToken':csrf()}});
+
+  if (!roles.length) {
+    showToast('Error', 'Select at least one role', 'red');
+    return;
+  }
+
+  fetch('/api/users/' + id, {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
+    body: JSON.stringify(body)
+  })
+    .then(function(r){ if(!r.ok) return r.json().then(function(e){ throw e; }); return r.json(); })
+    .then(function(){
+      if (active) {
+        return fetch('/api/users/' + id + '/reactivate', {
+          method: 'PATCH',
+          credentials: 'same-origin',
+          headers: {'X-CSRFToken': csrf()}
+        });
       }
-      return fetch('/api/users/'+id+'/deactivate',{method:'PATCH',headers:{'X-CSRFToken':csrf()}});
+      return fetch('/api/users/' + id + '/deactivate', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: {'X-CSRFToken': csrf()}
+      });
     })
-    .then(r=>{if(!r.ok)return r.json().then(e=>{throw e});return r.json()})
-    .then(()=>{closeModal('modal-edit-user');showToast('Updated','User saved','green');refreshAdminUsers();})
-    .catch(e=>showToast('Error',(e&&e.detail)||'Failed','red'));
+    .then(function(r){ if(!r.ok) return r.json().then(function(e){ throw e; }); return r.json(); })
+    .then(function(){
+      closeModal('modal-edit-user');
+      showToast('Updated', 'User saved', 'green');
+      refreshAdminUsers();
+    })
+    .catch(function(e){ showToast('Error', (e && e.detail) || 'Failed', 'red'); });
 }
 </script>
 {% endblock %}

@@ -37,6 +37,12 @@ def _validate_status(status: str) -> None:
         )
 
 
+def _provided_fields(body) -> set[str]:
+    if hasattr(body, "model_fields_set"):
+        return set(body.model_fields_set)
+    return set(getattr(body, "__fields_set__", set()))
+
+
 # ═══════════════════════════════════════════════════════════════════
 # Aircraft
 # ═══════════════════════════════════════════════════════════════════
@@ -106,8 +112,9 @@ async def update_aircraft(
         raise APIError(404, "Aircraft not found", "NOT_FOUND")
 
     before = AircraftResponse.model_validate(obj, from_attributes=True).model_dump(mode="json")
+    provided_fields = _provided_fields(body)
 
-    if body.airline is not None:
+    if "airline" in provided_fields:
         obj.airline = body.airline
     if body.status is not None:
         _validate_status(body.status)
@@ -217,22 +224,23 @@ async def update_work_package(
         raise APIError(404, "Work package not found", "NOT_FOUND")
 
     before = WorkPackageResponse.model_validate(obj, from_attributes=True).model_dump(mode="json")
+    provided_fields = _provided_fields(body)
 
-    if body.rfo_no is not None:
-        # Dup check
-        dup = (
-            await db.execute(
-                select(WorkPackage).where(WorkPackage.rfo_no == body.rfo_no, WorkPackage.id != wp_id)
-            )
-        ).scalar_one_or_none()
-        if dup:
-            raise APIError(422, f"rfo_no '{body.rfo_no}' already exists", "VALIDATION_ERROR", field="rfo_no")
+    if "rfo_no" in provided_fields:
+        if body.rfo_no is not None:
+            dup = (
+                await db.execute(
+                    select(WorkPackage).where(WorkPackage.rfo_no == body.rfo_no, WorkPackage.id != wp_id)
+                )
+            ).scalar_one_or_none()
+            if dup:
+                raise APIError(422, f"rfo_no '{body.rfo_no}' already exists", "VALIDATION_ERROR", field="rfo_no")
         obj.rfo_no = body.rfo_no
     if body.title is not None:
         obj.title = body.title
-    if body.start_date is not None:
+    if "start_date" in provided_fields:
         obj.start_date = body.start_date
-    if body.end_date is not None:
+    if "end_date" in provided_fields:
         obj.end_date = body.end_date
     if body.priority is not None:
         obj.priority = body.priority
@@ -557,9 +565,20 @@ async def _import_shop_streams(
                 await db.execute(select(WorkPackage).where(WorkPackage.rfo_no == wp_rfo))
             ).scalar_one_or_none()
         if not wp and wp_title:
-            wp = (
-                await db.execute(select(WorkPackage).where(WorkPackage.title == wp_title))
-            ).scalar_one_or_none()
+            title_matches = (
+                await db.execute(
+                    select(WorkPackage).where(WorkPackage.title == wp_title).order_by(WorkPackage.id)
+                )
+            ).scalars().all()
+            if len(title_matches) > 1:
+                errors.append(
+                    {
+                        "row": i,
+                        "reason": f"multiple work packages match title '{wp_title}'; use work_package_rfo_no",
+                    }
+                )
+                continue
+            wp = title_matches[0] if title_matches else None
         if not wp:
             ref = wp_rfo or wp_title or "(empty)"
             errors.append({"row": i, "reason": f"work_package '{ref}' not found"})

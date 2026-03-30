@@ -17,6 +17,7 @@ from app.models.task import TaskItem, TaskSnapshot
 from app.models.user import User
 from app.models.user_shop_access import UserShopAccess
 from app.schemas.common import APIError
+from app.services.shop_access_service import enforce_task_surface_access, has_any_shop_access
 from app.views import templates
 
 router = APIRouter(tags=["task-views"])
@@ -78,12 +79,8 @@ async def _get_allowed_shop_ids(db: AsyncSession, user: dict) -> set[int] | None
 
 
 async def _get_max_access_level(db: AsyncSession, user: dict) -> str | None:
-    """Return the highest shop access level for a non-admin user (VIEW/EDIT/MANAGE), or None.
-
-    ADMIN users always return 'MANAGE'. SUPERVISOR returns at least 'EDIT'.
-    """
-    roles = user.get("roles", [])
-    if "ADMIN" in roles:
+    """Return the highest explicit shop access level for a user, or None."""
+    if "ADMIN" in user.get("roles", []):
         return "MANAGE"
     rows = (
         await db.execute(
@@ -93,9 +90,6 @@ async def _get_max_access_level(db: AsyncSession, user: dict) -> str | None:
         )
     ).scalars().all()
     if not rows:
-        # SUPERVISOR without explicit shop_access still gets task access
-        if "SUPERVISOR" in roles:
-            return "EDIT"
         return None
     hierarchy = {"VIEW": 1, "EDIT": 2, "MANAGE": 3}
     best = max(rows, key=lambda a: hierarchy.get(a, 0))
@@ -635,6 +629,7 @@ async def task_manager_page(
     current_user: dict = Depends(require_role("SUPERVISOR", "ADMIN")),
     db: AsyncSession = Depends(get_db),
 ):
+    await enforce_task_surface_access(db, current_user)
     roles = current_user.get("roles", [])
     is_admin = "ADMIN" in roles
     airline_filter = _normalize_airline_filter(airline)
@@ -898,6 +893,7 @@ async def task_manager_detail_partial(
     current_user: dict = Depends(require_role("SUPERVISOR", "ADMIN")),
     db: AsyncSession = Depends(get_db),
 ):
+    await enforce_task_surface_access(db, current_user)
     roles = current_user.get("roles", [])
     is_admin = "ADMIN" in roles
 
@@ -1073,13 +1069,13 @@ async def task_entry_page(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await enforce_task_surface_access(db, current_user)
     configs = await _get_config_map(db)
     threshold_hours = int(configs.get("needs_update_threshold_hours", "72"))
     threshold_dt = datetime.now(timezone.utc) - timedelta(hours=threshold_hours)
     allowed_shop_ids = await _get_allowed_shop_ids(db, current_user)
     editable_shop_ids = await _get_entry_editable_shop_ids(db, current_user)
-    max_access = await _get_max_access_level(db, current_user)
-    has_task_access = max_access is not None
+    has_task_access = await has_any_shop_access(db, current_user)
     visibility_clause = _entry_visibility_clause(current_user, allowed_shop_ids)
     search_filter = _normalize_entry_search(search)
     available_meeting_dates = await _get_entry_meeting_dates(db, visibility_clause)
@@ -1318,6 +1314,9 @@ async def task_detail_page(
         ), status_code=404)
 
     task_item, aircraft, wp, shop = result
+    allowed_shop_ids = await _get_allowed_shop_ids(db, current_user)
+    if not _can_view_task_item(current_user, allowed_shop_ids, task_item):
+        raise APIError(403, "Shop access denied", "SHOP_ACCESS_DENIED")
 
     # Load supervisor and worker names
     supervisor = None
@@ -1441,6 +1440,7 @@ async def mobile_m1(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await enforce_task_surface_access(db, current_user)
     configs = await _get_config_map(db)
     threshold_hours = int(configs.get("needs_update_threshold_hours", "72"))
     threshold_dt = datetime.now(timezone.utc) - timedelta(hours=threshold_hours)
@@ -1558,6 +1558,7 @@ async def mobile_m2(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await enforce_task_surface_access(db, current_user)
     configs = await _get_config_map(db)
     threshold_hours = int(configs.get("needs_update_threshold_hours", "72"))
     threshold_dt = datetime.now(timezone.utc) - timedelta(hours=threshold_hours)

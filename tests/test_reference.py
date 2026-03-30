@@ -58,6 +58,23 @@ async def test_update_aircraft(async_client):
     assert resp.json()["status"] == "ON_HOLD"
 
 
+async def test_update_aircraft_can_clear_airline(async_client):
+    create = await async_client.post(
+        "/api/aircraft",
+        json={"ac_reg": "9V-CLR", "airline": "Singapore Airlines"},
+        headers=CSRF_HEADERS,
+    )
+    aid = create.json()["id"]
+
+    resp = await async_client.patch(
+        f"/api/aircraft/{aid}",
+        json={"airline": None},
+        headers=CSRF_HEADERS,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["airline"] is None
+
+
 # ═══════════════════════════════════════════════════════════════════
 # Work Packages
 # ═══════════════════════════════════════════════════════════════════
@@ -94,6 +111,34 @@ async def test_create_wp_bad_aircraft(async_client):
     )
     assert resp.status_code == 422
     assert resp.json()["field"] == "aircraft_id"
+
+
+async def test_update_work_package_can_clear_nullable_fields(async_client):
+    ac = await async_client.post(
+        "/api/aircraft", json={"ac_reg": "9V-CLRWP"}, headers=CSRF_HEADERS
+    )
+    wp = await async_client.post(
+        "/api/work-packages",
+        json={
+            "aircraft_id": ac.json()["id"],
+            "rfo_no": "RF-CLR",
+            "title": "Clearable WP",
+            "start_date": "2026-03-01",
+            "end_date": "2026-03-31",
+        },
+        headers=CSRF_HEADERS,
+    )
+
+    resp = await async_client.patch(
+        f"/api/work-packages/{wp.json()['id']}",
+        json={"rfo_no": None, "start_date": None, "end_date": None},
+        headers=CSRF_HEADERS,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["rfo_no"] is None
+    assert body["start_date"] is None
+    assert body["end_date"] is None
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -174,6 +219,65 @@ async def test_csv_import_work_package(async_client):
     body = resp.json()
     assert body["created_count"] == 1
     assert body["errors"] == []
+
+
+async def test_csv_import_shop_stream_unique_title_fallback(async_client):
+    ac = await async_client.post(
+        "/api/aircraft", json={"ac_reg": "9V-CSVSS"}, headers=CSRF_HEADERS
+    )
+    wp = await async_client.post(
+        "/api/work-packages",
+        json={"aircraft_id": ac.json()["id"], "title": "Unique Stream Title"},
+        headers=CSRF_HEADERS,
+    )
+
+    csv_content = "title,shop_code\nUnique Stream Title,SM\n"
+    resp = await async_client.post(
+        "/api/reference/import/csv?entity_type=shop_stream",
+        files={"file": ("ss.csv", io.BytesIO(csv_content.encode()), "text/csv")},
+        headers=CSRF_HEADERS,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["created_count"] == 1
+    assert body["errors"] == []
+
+    list_resp = await async_client.get(f"/api/shop-streams?work_package_id={wp.json()['id']}")
+    assert list_resp.status_code == 200
+    assert list_resp.json()["total"] == 1
+
+
+async def test_csv_import_shop_stream_ambiguous_title_returns_row_error(async_client):
+    ac = await async_client.post(
+        "/api/aircraft", json={"ac_reg": "9V-AMBSS"}, headers=CSRF_HEADERS
+    )
+    for rfo_no in ("RF-AMB-1", "RF-AMB-2"):
+        await async_client.post(
+            "/api/work-packages",
+            json={
+                "aircraft_id": ac.json()["id"],
+                "rfo_no": rfo_no,
+                "title": "Ambiguous Stream Title",
+            },
+            headers=CSRF_HEADERS,
+        )
+
+    csv_content = "title,shop_code\nAmbiguous Stream Title,SM\n"
+    resp = await async_client.post(
+        "/api/reference/import/csv?entity_type=shop_stream",
+        files={"file": ("ss-amb.csv", io.BytesIO(csv_content.encode()), "text/csv")},
+        headers=CSRF_HEADERS,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["created_count"] == 0
+    assert body["skipped_count"] == 0
+    assert body["errors"] == [
+        {
+            "row": 2,
+            "reason": "multiple work packages match title 'Ambiguous Stream Title'; use work_package_rfo_no",
+        }
+    ]
 
 
 async def test_csv_import_bad_entity_type(async_client):

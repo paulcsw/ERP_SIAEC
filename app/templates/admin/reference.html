@@ -120,6 +120,11 @@
       <div id="csv-preview" style="display:none" class="card p-3 bg-st-greenBg border-st-green/30">
         <div class="text-xs font-medium text-st-green" id="csv-preview-text"></div>
       </div>
+      <div id="csv-import-result" style="display:none" class="card p-3 bg-gold-50 border-gold-200/60">
+        <div class="text-xs font-semibold text-gold-700" id="csv-import-result-summary"></div>
+        <ul id="csv-import-errors" class="mt-2 space-y-1 text-xs text-gold-700 list-disc pl-4"></ul>
+        <div id="csv-import-errors-extra" class="mt-2 text-[11px] text-gold-600"></div>
+      </div>
       <button class="btn-gold w-full" onclick="importCsv()">Import</button>
     </div>
   </div>
@@ -147,10 +152,36 @@ function switchRefTab(btn) {
 
 function onCsvFileSelected(inputEl) {
   var f=inputEl.files[0];
+  resetCsvImportResult();
   if(f){
     document.getElementById('csv-preview').style.display='';
     document.getElementById('csv-preview-text').textContent='Selected: '+f.name+' ('+Math.round(f.size/1024)+'KB)';
   }
+}
+
+function resetCsvImportResult() {
+  document.getElementById('csv-import-result').style.display = 'none';
+  document.getElementById('csv-import-result-summary').textContent = '';
+  document.getElementById('csv-import-errors').innerHTML = '';
+  document.getElementById('csv-import-errors-extra').textContent = '';
+}
+
+function renderCsvImportResult(data) {
+  var errors = data.errors || [];
+  var panel = document.getElementById('csv-import-result');
+  var summary = document.getElementById('csv-import-result-summary');
+  var list = document.getElementById('csv-import-errors');
+  var extra = document.getElementById('csv-import-errors-extra');
+
+  summary.textContent = data.created_count + ' created, ' + data.skipped_count + ' skipped, ' + errors.length + ' errors';
+  list.innerHTML = '';
+  errors.slice(0, 5).forEach(function(err) {
+    var li = document.createElement('li');
+    li.textContent = 'Row ' + err.row + ': ' + err.reason;
+    list.appendChild(li);
+  });
+  extra.textContent = errors.length > 5 ? '+' + (errors.length - 5) + ' more row errors' : '';
+  panel.style.display = '';
 }
 
 function importCsv() {
@@ -160,9 +191,21 @@ function importCsv() {
   var fd=new FormData();
   fd.append('file',file);
   var csrf=(document.cookie.match(/csrftoken=([^;]+)/)||[])[1]||'';
-  fetch('/api/reference/import/csv?entity_type='+encodeURIComponent(entity),{method:'POST',headers:{'X-CSRFToken':csrf},body:fd})
+  fetch('/api/reference/import/csv?entity_type='+encodeURIComponent(entity),{method:'POST',credentials:'same-origin',headers:{'X-CSRFToken':csrf},body:fd})
     .then(r=>{if(!r.ok)return r.json().then(e=>{throw e});return r.json()})
-    .then(d=>{closeModal('modal-csv');showToast('Imported',d.created_count+' created, '+d.skipped_count+' skipped','green');refreshAdminReference();})
+    .then(d=>{
+      var hasErrors = !!(d.errors && d.errors.length);
+      if(hasErrors){
+        if(d.created_count > 0){ refreshAdminReference(); }
+        renderCsvImportResult(d);
+        showToast('Import Completed', 'Review row errors below', 'red');
+        return;
+      }
+      resetCsvImportResult();
+      closeModal('modal-csv');
+      showToast('Imported',d.created_count+' created, '+d.skipped_count+' skipped','green');
+      refreshAdminReference();
+    })
     .catch(e=>showToast('Error',(e&&e.detail)||'Import failed','red'));
 }
 </script>

@@ -11,7 +11,7 @@ from app.models.reference import Aircraft, WorkPackage
 from app.models.shop import Shop
 from app.models.task import TaskItem, TaskSnapshot
 from app.models.user import User
-from app.models.user_shop_access import UserShopAccess
+from app.services.shop_access_service import has_any_shop_access
 from app.services.ot_service import (
     apply_ot_role_scope,
     apply_ot_search_filter,
@@ -237,14 +237,7 @@ async def more_index(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    roles = current_user.get("roles", [])
-    if "ADMIN" in roles or "SUPERVISOR" in roles:
-        task_access = True
-    else:
-        row = (await db.execute(
-            select(UserShopAccess.id).where(UserShopAccess.user_id == current_user["user_id"]).limit(1)
-        )).scalar_one_or_none()
-        task_access = row is not None
+    task_access = await has_any_shop_access(db, current_user)
     return templates.TemplateResponse(request, "more/index.html", _ctx(request, current_user, has_task_access=task_access))
 
 

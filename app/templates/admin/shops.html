@@ -24,7 +24,13 @@
           <tr>
             <td class="font-mono text-xs font-medium">{{ s.code }}</td>
             <td class="text-sm">{{ s.name }}</td>
-            <td><button class="btn-outline btn-sm text-xs" onclick="editShop({{ s.id }},'{{ s.code }}','{{ s.name }}')">Edit</button></td>
+            <td>
+              <button
+                class="btn-outline btn-sm text-xs"
+                data-shop='{{ {"id": s.id, "code": s.code, "name": s.name} | tojson | forceescape }}'
+                onclick="editShop(this)"
+              >Edit</button>
+            </td>
           </tr>
         {% endfor %}
         {% if not shops %}
@@ -61,6 +67,7 @@
     <div class="p-5 space-y-3">
       <input type="hidden" id="edit-shop-id"/>
       <div><label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Code</label><input id="edit-shop-code" class="inp w-full h-9 text-sm font-mono bg-surf-50" readonly/></div>
+      <div class="text-[11px] text-surf-400">Code is fixed after creation.</div>
       <div><label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Name *</label><input id="edit-shop-name" class="inp w-full h-9 text-sm"/></div>
       <div class="flex gap-3">
         <button class="btn-outline flex-1" onclick="closeModal('modal-edit-shop')">Cancel</button>
@@ -74,6 +81,9 @@
 {% block scripts %}
 <script>
 var csrf=()=>(document.cookie.match(/csrftoken=([^;]+)/)||[])[1]||'';
+function trimmedValue(id){
+  return (document.getElementById(id).value || '').trim();
+}
 function refreshAdminShops(){
   if (typeof htmx === 'undefined') return;
   htmx.ajax('GET','/admin/shops',{
@@ -85,25 +95,27 @@ function refreshAdminShops(){
 }
 
 function addShop(){
-  var body={code:document.getElementById('add-shop-code').value,name:document.getElementById('add-shop-name').value};
+  var body={code:trimmedValue('add-shop-code'),name:trimmedValue('add-shop-name')};
   if(!body.code||!body.name){showToast('Error','Code and Name required','red');return;}
-  fetch('/api/shops',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(body)})
+  fetch('/api/shops',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(body)})
     .then(r=>{if(!r.ok)return r.json().then(e=>{throw e});return r.json()})
     .then(()=>{closeModal('modal-add-shop');showToast('Created','Shop added','green');refreshAdminShops();})
     .catch(e=>showToast('Error',(e&&e.detail)||'Failed','red'));
 }
 
-function editShop(id,code,name){
-  document.getElementById('edit-shop-id').value=id;
-  document.getElementById('edit-shop-code').value=code;
-  document.getElementById('edit-shop-name').value=name;
+function editShop(button){
+  var shop = JSON.parse(button.dataset.shop);
+  document.getElementById('edit-shop-id').value=shop.id;
+  document.getElementById('edit-shop-code').value=shop.code;
+  document.getElementById('edit-shop-name').value=shop.name;
   showModal('modal-edit-shop');
 }
 
 function saveShop(){
   var id=document.getElementById('edit-shop-id').value;
-  var body={name:document.getElementById('edit-shop-name').value};
-  fetch('/api/shops/'+id,{method:'PATCH',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(body)})
+  var body={name:trimmedValue('edit-shop-name')};
+  if(!body.name){showToast('Error','Name required','red');return;}
+  fetch('/api/shops/'+id,{method:'PATCH',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRFToken':csrf()},body:JSON.stringify(body)})
     .then(r=>{if(!r.ok)return r.json().then(e=>{throw e});return r.json()})
     .then(()=>{closeModal('modal-edit-shop');showToast('Updated','Shop saved','green');refreshAdminShops();})
     .catch(e=>showToast('Error',(e&&e.detail)||'Failed','red'));
