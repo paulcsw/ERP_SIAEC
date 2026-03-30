@@ -3,10 +3,14 @@
 {% block breadcrumb %}<a href="{{ back_href or '/ot' }}" class="text-surf-400 hover:text-navy-700">OT Requests</a> <span class="text-surf-300 mx-1">/</span> {% if ot %}OT-{{ '%03d' % ot.id }}{% else %}Not Found{% endif %}{% endblock %}
 
 {% block content %}
-<div id="ot-content" class="p-4 lg:p-5 flex flex-col h-full w-full overflow-y-auto">
+<div id="ot-content" class="p-4 lg:p-5 flex flex-col h-full w-full overflow-y-auto"
+     data-detail-href="{{ detail_href or back_href or '/ot' }}">
   {% if not ot %}
   <div class="card p-8 text-center">
-    <div class="text-surf-400 text-lg mb-2">OT request not found</div>
+    <div class="text-surf-400 text-lg mb-2">{{ error_title or 'OT request not found' }}</div>
+    {% if error_message %}
+    <div class="text-sm text-surf-400 mb-4">{{ error_message }}</div>
+    {% endif %}
     <a href="{{ back_href or '/ot' }}" class="btn-outline"
        hx-get="{{ back_href or '/ot' }}" hx-target="#ot-content" hx-select="#ot-content > *" hx-swap="innerHTML" hx-push-url="true">Back to OT List</a>
   </div>
@@ -121,16 +125,16 @@
 
       {# Actions #}
       <div class="flex gap-3">
-        <a href="/ot" class="btn-outline"
-           hx-get="/ot" hx-target="#ot-content" hx-select="#ot-content > *" hx-swap="innerHTML" hx-push-url="true">Back to List</a>
-        {% if ot.status == 'PENDING' and ot.user_id == current_user.user_id %}
+        <a href="{{ back_href or '/ot' }}" class="btn-outline"
+           hx-get="{{ back_href or '/ot' }}" hx-target="#ot-content" hx-select="#ot-content > *" hx-swap="innerHTML" hx-push-url="true">Back to List</a>
+        {% if can_cancel %}
         <button type="button" onclick="cancelOt({{ ot.id }}, this)" class="btn-outline" style="color:#b93a3a;border-color:#b93a3a">Cancel Request</button>
         {% endif %}
-        {% if ot.status == 'PENDING' and 'SUPERVISOR' in current_user.roles and 'ADMIN' not in current_user.roles and ot.user_id != current_user.user_id %}
+        {% if can_endorse %}
         <button type="button" onclick="endorseOt({{ ot.id }}, 'APPROVE', this)" class="btn-purple">Endorse</button>
         <button type="button" onclick="endorseOt({{ ot.id }}, 'REJECT', this)" class="btn-outline" style="color:#b93a3a;border-color:#b93a3a">Reject</button>
         {% endif %}
-        {% if ot.status == 'ENDORSED' and 'ADMIN' in current_user.roles and ot.user_id != current_user.user_id %}
+        {% if can_approve %}
         <button type="button" onclick="approveOt({{ ot.id }}, 'APPROVE', this)" class="btn-gold">Approve</button>
         <button type="button" onclick="approveOt({{ ot.id }}, 'REJECT', this)" class="btn-outline" style="color:#b93a3a;border-color:#b93a3a">Reject</button>
         {% endif %}
@@ -160,6 +164,7 @@
 {% block scripts %}
 <script>
 const csrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+const otDetailRefreshHref = {{ (detail_href or back_href or '/ot') | tojson }};
 let otDetailActionInFlight = false;
 
 function getOtErrorMessage(payload, fallback) {
@@ -243,7 +248,7 @@ async function cancelOt(id, button) {
     try {
       await otRequestJson(`/api/ot/${id}/cancel`, { method: 'PATCH' });
       showToast('Cancelled', 'OT request cancelled', 'green');
-      refreshOtDesktop(`/ot/${id}`);
+      refreshOtDesktop(otDetailRefreshHref);
     } catch (err) {
       showToast('Error', err.message || 'Failed', 'red');
     } finally {
@@ -263,7 +268,7 @@ async function endorseOt(id, action, button) {
         json: { action, comment },
       });
       showToast(action === 'APPROVE' ? 'Endorsed' : 'Rejected', `OT-${id} ${action.toLowerCase()}d`, action === 'APPROVE' ? 'green' : 'red');
-      refreshOtDesktop(`/ot/${id}`);
+      refreshOtDesktop(otDetailRefreshHref);
     } catch (err) {
       showToast('Error', err.message || 'Failed', 'red');
     } finally {
@@ -283,7 +288,7 @@ async function approveOt(id, action, button) {
         json: { action, comment },
       });
       showToast(action === 'APPROVE' ? 'Approved' : 'Rejected', `OT-${id} ${action.toLowerCase()}d`, action === 'APPROVE' ? 'green' : 'red');
-      refreshOtDesktop(`/ot/${id}`);
+      refreshOtDesktop(otDetailRefreshHref);
     } catch (err) {
       showToast('Error', err.message || 'Failed', 'red');
     } finally {

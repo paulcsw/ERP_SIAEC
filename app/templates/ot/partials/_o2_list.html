@@ -13,7 +13,7 @@
   {# OT cards #}
   {% for ot in items %}
   <div class="card p-4 {% if ot.status == 'REJECTED' %}opacity-60{% endif %}"
-       hx-get="/ot/detail/{{ ot.id }}" hx-target="#ot-stage" hx-swap="innerHTML" hx-push-url="true"
+       hx-get="{{ ot.detail_href }}" hx-target="#ot-stage" hx-swap="innerHTML"
        style="cursor:pointer">
     <div class="flex items-center justify-between mb-1">
       <span class="text-sm font-medium text-navy-900">{{ ot.date.strftime('%b %d') if ot.date else '' }} &middot; {{ ot.start_time.strftime('%H:%M') if ot.start_time else '' }}&ndash;{{ ot.end_time.strftime('%H:%M') if ot.end_time else '' }}</span>
@@ -53,5 +53,25 @@
 
   {% if not items %}
   <div class="text-center py-8 text-surf-400 text-sm">No OT requests found</div>
+  {% endif %}
+
+  {% if total_pages > 1 %}
+  <div class="card p-3 flex items-center justify-between text-xs text-surf-400">
+    <span>Page {{ page }} of {{ total_pages }}</span>
+    <div class="flex items-center gap-2">
+      {% if page > 1 %}
+      <button class="btn-outline btn-sm h-8 px-3"
+              hx-get="/ot/segment/o2?page={{ page - 1 }}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+              hx-target="#ot-stage"
+              hx-swap="innerHTML">Prev</button>
+      {% endif %}
+      {% if page < total_pages %}
+      <button class="btn-outline btn-sm h-8 px-3"
+              hx-get="/ot/segment/o2?page={{ page + 1 }}{% if status_filter %}&status={{ status_filter }}{% endif %}"
+              hx-target="#ot-stage"
+              hx-swap="innerHTML">Next</button>
+      {% endif %}
+    </div>
+  </div>
   {% endif %}
 </div>

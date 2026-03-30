@@ -3,6 +3,7 @@ from datetime import date, datetime, timezone
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,44 +34,36 @@ STATUS_BADGES = {
     "REJECTED": ("badge-rejected", "REJECTED"),
     "CANCELLED": ("badge-cancelled", "CANCELLED"),
 }
+MOBILE_O2_PER_PAGE = 20
 
 
 async def _team_users_with_hours(
     db: AsyncSession,
     team: str | None,
     month: date,
-    include_all_if_empty: bool = False,
+    scope: str = "team",
 ) -> list[dict]:
-    """Get worker roster with monthly OT usage. Optionally fall back to all teams."""
-    users = []
-    if team:
-        users = (
-            await db.execute(
-                select(User)
-                .join(user_roles, User.id == user_roles.c.user_id)
-                .join(Role, Role.id == user_roles.c.role_id)
-                .where(
-                    User.team == team,
-                    User.is_active == True,  # noqa: E712
-                    Role.name == "WORKER",
-                )
-                .order_by(User.name.asc())
-            )
-        ).scalars().unique().all()
+    """Get a worker roster with monthly OT usage."""
+    q = (
+        select(User)
+        .join(user_roles, User.id == user_roles.c.user_id)
+        .join(Role, Role.id == user_roles.c.role_id)
+        .where(
+            User.is_active == True,  # noqa: E712
+            Role.name == "WORKER",
+        )
+        .order_by(User.name.asc())
+    )
+    if scope == "team":
+        if not team:
+            users = []
+        else:
+            users = (
+                await db.execute(q.where(User.team == team))
+            ).scalars().unique().all()
+    else:
+        users = (await db.execute(q)).scalars().unique().all()
 
-    if include_all_if_empty and not users:
-        users = (
-            await db.execute(
-                select(User)
-                .join(user_roles, User.id == user_roles.c.user_id)
-                .join(Role, Role.id == user_roles.c.role_id)
-                .where(
-                    User.is_active == True,  # noqa: E712
-                    Role.name == "WORKER",
-                )
-                .order_by(User.name.asc())
-            )
-        ).scalars().unique().all()
 
     result = []
     for u in users:
@@ -90,17 +83,111 @@ async def _team_users_with_hours(
     return result
 
 
+async def _can_view_ot_request(
+    db: AsyncSession,
+    current_user: dict,
+    ot: OtRequest,
+) -> bool:
+    """Return whether the current user can view the OT request detail."""
+    roles = current_user.get("roles", [])
+    if "ADMIN" in roles:
+        return True
+    if ot.user_id == current_user["user_id"]:
+        return True
+    if "SUPERVISOR" in roles:
+        ot_user_team = (
+            await db.execute(select(User.team).where(User.id == ot.user_id))
+        ).scalar_one_or_none()
+        return ot_user_team == current_user.get("team")
+    return False
+
+
+def _build_ot_list_state_params(
+    *,
+    status: str | None = None,
+    search: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    page: int | None = None,
+) -> dict:
+    return {
+        "status": status or None,
+        "search": search or None,
+        "date_from": date_from.isoformat() if date_from else None,
+        "date_to": date_to.isoformat() if date_to else None,
+        "page": page if page and page > 1 else None,
+    }
+
+
+def _ot_detail_action_flags(current_user: dict, ot: OtRequest) -> dict:
+    """Return detail action permissions for an already-visible OT request."""
+    roles = current_user.get("roles", [])
+    is_admin = "ADMIN" in roles
+    is_supervisor_only = "SUPERVISOR" in roles and not is_admin
+    return {
+        "can_cancel": ot.status == "PENDING" and ot.user_id == current_user["user_id"],
+        "can_endorse": (
+            ot.status == "PENDING"
+            and is_supervisor_only
+            and ot.user_id != current_user["user_id"]
+        ),
+        "can_approve": (
+            ot.status == "ENDORSED"
+            and is_admin
+            and ot.user_id != current_user["user_id"]
+        ),
+    }
+
+
+def _ot_detail_back_href(
+    *,
+    status: str | None = None,
+    search: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    page: int | None = None,
+) -> str:
+    return _build_href(
+        "/ot",
+        **_build_ot_list_state_params(
+            status=status,
+            search=search,
+            date_from=date_from,
+            date_to=date_to,
+            page=page,
+        ),
+    )
+
+
+def _ot_mobile_history_href(
+    status: str | None = None,
+    page: int | None = None,
+) -> str:
+    return _build_href(
+        "/ot/segment/o2",
+        status=status or None,
+        page=page if page and page > 1 else None,
+    )
+
+
 async def _enrich_ot_list(db: AsyncSession, rows: list) -> list[dict]:
     """Enrich OT rows with user names and approval info."""
     user_ids = set()
+    wp_ids = set()
     for r in rows:
         user_ids.add(r.user_id)
         if r.submitted_by:
             user_ids.add(r.submitted_by)
+        if r.work_package_id:
+            wp_ids.add(r.work_package_id)
     users_map = {}
+    work_packages_map = {}
     if user_ids:
         us = (await db.execute(select(User).where(User.id.in_(user_ids)))).scalars().all()
         users_map = {u.id: u for u in us}
+    if wp_ids:
+        wps = (await db.execute(select(WorkPackage).where(WorkPackage.id.in_(wp_ids)))).scalars().all()
+        work_packages_map = {wp.id: wp for wp in wps}
 
     ot_ids = [r.id for r in rows]
     approvals_map: dict[int, list] = {}
@@ -119,6 +206,7 @@ async def _enrich_ot_list(db: AsyncSession, rows: list) -> list[dict]:
     for r in rows:
         user = users_map.get(r.user_id)
         sub_user = users_map.get(r.submitted_by) if r.submitted_by else None
+        wp = work_packages_map.get(r.work_package_id)
         apps = approvals_map.get(r.id, [])
         endorse = next((a for a in apps if a.stage == "ENDORSE"), None)
         approve = next((a for a in apps if a.stage == "APPROVE"), None)
@@ -142,6 +230,7 @@ async def _enrich_ot_list(db: AsyncSession, rows: list) -> list[dict]:
             "reason_code": r.reason_code,
             "reason_text": r.reason_text,
             "work_package_id": r.work_package_id,
+            "work_package_rfo_no": wp.rfo_no if wp else None,
             "status": r.status,
             "badge_cls": badge_cls,
             "badge_text": badge_text,
@@ -160,6 +249,61 @@ async def _enrich_ot_list(db: AsyncSession, rows: list) -> list[dict]:
             } if approve else None,
         })
     return items
+
+
+async def _add_monthly_usage_to_ot_items(
+    db: AsyncSession,
+    items: list[dict],
+) -> list[dict]:
+    for item in items:
+        used = await _monthly_used_minutes(db, item["user_id"], item["date"])
+        item["monthly_used_hours"] = round(used / 60, 1)
+        item["monthly_limit_hours"] = round(MONTHLY_LIMIT_MINUTES / 60, 1)
+        item["monthly_pct"] = round(used / MONTHLY_LIMIT_MINUTES * 100, 1)
+        item["monthly_bar_color"] = (
+            "#b93a3a" if item["monthly_pct"] >= 100
+            else "#c8850a" if item["monthly_pct"] >= 70
+            else "#2e5a8a"
+        )
+    return items
+
+
+async def _load_admin_ot_approve_items(
+    db: AsyncSession,
+    current_user: dict,
+) -> list[dict]:
+    rows = (await db.execute(
+        select(OtRequest)
+        .where(
+            OtRequest.status == "ENDORSED",
+            OtRequest.user_id != current_user["user_id"],
+        )
+        .order_by(OtRequest.created_at.desc(), OtRequest.id.desc())
+    )).scalars().all()
+    items = await _enrich_ot_list(db, rows)
+    return await _add_monthly_usage_to_ot_items(db, items)
+
+
+async def _load_supervisor_ot_endorse_items(
+    db: AsyncSession,
+    current_user: dict,
+) -> list[dict]:
+    team = current_user.get("team")
+    if not team:
+        return []
+
+    rows = (await db.execute(
+        select(OtRequest)
+        .join(User, OtRequest.user_id == User.id)
+        .where(
+            OtRequest.status == "PENDING",
+            OtRequest.user_id != current_user["user_id"],
+            User.team == team,
+        )
+        .order_by(OtRequest.created_at.desc(), OtRequest.id.desc())
+    )).scalars().all()
+    items = await _enrich_ot_list(db, rows)
+    return await _add_monthly_usage_to_ot_items(db, items)
 
 
 async def _has_task_access(db: AsyncSession, user: dict) -> bool:
@@ -203,6 +347,10 @@ def _build_href(path: str, **params) -> str:
     return f"{path}?{urlencode(filtered)}"
 
 
+def _is_htmx_request(request: Request) -> bool:
+    return request.headers.get("HX-Request") == "true"
+
+
 # ?? Desktop: /ot/new ??Submit form ??????????????????????????????????
 
 @router.get("/ot/new")
@@ -220,13 +368,14 @@ async def ot_submit_page(
     team_users = []
     roster_scope_label = current_user.get("team") or "All Teams"
     if is_sup_or_admin:
+        roster_scope = "all" if is_admin else "team"
         team_users = await _team_users_with_hours(
             db,
             current_user.get("team"),
             today,
-            include_all_if_empty=is_admin,
+            scope=roster_scope,
         )
-        if is_admin and team_users and any(u.get("team") != current_user.get("team") for u in team_users):
+        if is_admin:
             roster_scope_label = "All Teams"
 
     # Work packages for RFO dropdown
@@ -302,11 +451,13 @@ async def ot_list_page(
     for item in items:
         item["detail_href"] = _build_href(
             f"/ot/{item['id']}",
-            status=status or None,
-            search=search_filter or None,
-            date_from=date_from.isoformat() if date_from else None,
-            date_to=date_to.isoformat() if date_to else None,
-            page=page if page > 1 else None,
+            **_build_ot_list_state_params(
+                status=status,
+                search=search_filter,
+                date_from=date_from,
+                date_to=date_to,
+                page=page,
+            ),
         )
     total_pages = max(1, (total + per_page - 1) // per_page)
 
@@ -315,11 +466,12 @@ async def ot_list_page(
     my_used = await _monthly_used_minutes(db, current_user["user_id"], today)
     team_users = []
     if "SUPERVISOR" in roles or "ADMIN" in roles:
+        roster_scope = "all" if "ADMIN" in roles else "team"
         team_users = await _team_users_with_hours(
             db,
             current_user.get("team"),
             today,
-            include_all_if_empty="ADMIN" in roles,
+            scope=roster_scope,
         )
 
     # Work packages for RFO dropdown (mobile O1)
@@ -349,6 +501,7 @@ async def ot_list_page(
         rfo_options=rfo_options,
         today=today.isoformat(),
         has_task_access=task_access,
+        can_export_csv="SUPERVISOR" in roles or "ADMIN" in roles,
     ))
 
 
@@ -367,13 +520,22 @@ async def ot_detail_page(
     db: AsyncSession = Depends(get_db),
 ):
     search_filter = normalize_ot_search(search)
-    back_href = _build_href(
-        "/ot",
-        status=status or None,
-        search=search_filter or None,
-        date_from=date_from.isoformat() if date_from else None,
-        date_to=date_to.isoformat() if date_to else None,
-        page=page if page and page > 1 else None,
+    back_href = _ot_detail_back_href(
+        status=status,
+        search=search_filter,
+        date_from=date_from,
+        date_to=date_to,
+        page=page,
+    )
+    detail_href = _build_href(
+        f"/ot/{ot_id}",
+        **_build_ot_list_state_params(
+            status=status,
+            search=search_filter,
+            date_from=date_from,
+            date_to=date_to,
+            page=page,
+        ),
     )
     ot = (await db.execute(select(OtRequest).where(OtRequest.id == ot_id))).scalar_one_or_none()
     if not ot:
@@ -382,24 +544,48 @@ async def ot_detail_page(
             current_user,
             active_page="ot_list",
             ot=None,
-            error="OT request not found",
+            error_title="OT request not found",
+            error_message="The OT request you are looking for does not exist.",
             back_href=back_href,
+            detail_href=detail_href,
+            can_cancel=False,
+            can_endorse=False,
+            can_approve=False,
         ), status_code=404)
+
+    can_view = await _can_view_ot_request(db, current_user, ot)
+    if not can_view:
+        return templates.TemplateResponse(request, "ot/detail.html", _ctx(
+            request,
+            current_user,
+            active_page="ot_list",
+            ot=None,
+            error_title="Access denied",
+            error_message="You do not have permission to view this OT request.",
+            back_href=back_href,
+            detail_href=detail_href,
+            can_cancel=False,
+            can_endorse=False,
+            can_approve=False,
+        ), status_code=403)
 
     items = await _enrich_ot_list(db, [ot])
     item = items[0] if items else None
 
     # Get user monthly hours
     used = await _monthly_used_minutes(db, ot.user_id, ot.date)
+    action_flags = _ot_detail_action_flags(current_user, ot)
 
     return templates.TemplateResponse(request, "ot/detail.html", _ctx(
         request, current_user,
         active_page="ot_list",
         ot=item,
         back_href=back_href,
+        detail_href=detail_href,
         used_hours=round(used / 60, 1),
         limit_hours=round(MONTHLY_LIMIT_MINUTES / 60, 1),
         used_pct=round(used / MONTHLY_LIMIT_MINUTES * 100, 1),
+        **action_flags,
     ))
 
 
@@ -411,25 +597,7 @@ async def ot_approve_page(
     current_user: dict = Depends(require_role("ADMIN")),
     db: AsyncSession = Depends(get_db),
 ):
-    rows = (await db.execute(
-        select(OtRequest)
-        .where(OtRequest.status == "ENDORSED")
-        .order_by(OtRequest.created_at.desc())
-    )).scalars().all()
-
-    items = await _enrich_ot_list(db, rows)
-
-    # Add monthly hours for each user
-    for item in items:
-        used = await _monthly_used_minutes(db, item["user_id"], item["date"])
-        item["monthly_used_hours"] = round(used / 60, 1)
-        item["monthly_limit_hours"] = round(MONTHLY_LIMIT_MINUTES / 60, 1)
-        item["monthly_pct"] = round(used / MONTHLY_LIMIT_MINUTES * 100, 1)
-        item["monthly_bar_color"] = (
-            "#b93a3a" if item["monthly_pct"] >= 100
-            else "#c8850a" if item["monthly_pct"] >= 70
-            else "#2e5a8a"
-        )
+    items = await _load_admin_ot_approve_items(db, current_user)
 
     return templates.TemplateResponse(request, "ot/approve.html", _ctx(
         request, current_user,
@@ -446,9 +614,13 @@ async def ot_segment(
     request: Request,
     segment: str,
     status: str | None = Query(None),
+    page: int = Query(1, ge=1),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if not _is_htmx_request(request):
+        return RedirectResponse("/ot", status_code=302)
+
     today = date.today()
     roles = current_user.get("roles", [])
 
@@ -456,11 +628,12 @@ async def ot_segment(
         my_used = await _monthly_used_minutes(db, current_user["user_id"], today)
         team_users = []
         if "SUPERVISOR" in roles or "ADMIN" in roles:
+            roster_scope = "all" if "ADMIN" in roles else "team"
             team_users = await _team_users_with_hours(
                 db,
                 current_user.get("team"),
                 today,
-                include_all_if_empty="ADMIN" in roles,
+                scope=roster_scope,
             )
         wps = (await db.execute(select(WorkPackage))).scalars().all()
         rfo_options = [{"id": wp.id, "rfo_no": wp.rfo_no or f"WP-{wp.id}"} for wp in wps]
@@ -480,73 +653,48 @@ async def ot_segment(
         })
 
     elif segment == "o2":
-        q = select(OtRequest)
-        if "ADMIN" not in roles:
-            if "SUPERVISOR" in roles:
-                team_uids = (await db.execute(
-                    select(User.id).where(User.team == current_user.get("team"))
-                )).scalars().all()
-                q = q.where(OtRequest.user_id.in_(team_uids))
-            else:
-                q = q.where(OtRequest.user_id == current_user["user_id"])
+        visible_user_ids = await get_visible_ot_user_ids(db, current_user)
+        q = apply_ot_role_scope(select(OtRequest), visible_user_ids)
+        cq = apply_ot_role_scope(select(func.count()).select_from(OtRequest), visible_user_ids)
         if status:
             q = q.where(OtRequest.status == status)
-        rows = (await db.execute(q.order_by(OtRequest.created_at.desc()).limit(50))).scalars().all()
+            cq = cq.where(OtRequest.status == status)
+
+        total = (await db.execute(cq)).scalar() or 0
+        total_pages = max(1, (total + MOBILE_O2_PER_PAGE - 1) // MOBILE_O2_PER_PAGE)
+        current_page = min(page, total_pages)
+        offset = (current_page - 1) * MOBILE_O2_PER_PAGE
+        rows = (await db.execute(
+            q.order_by(OtRequest.created_at.desc(), OtRequest.id.desc())
+            .offset(offset)
+            .limit(MOBILE_O2_PER_PAGE)
+        )).scalars().all()
         items = await _enrich_ot_list(db, rows)
+        for item in items:
+            item["detail_href"] = _build_href(
+                f"/ot/detail/{item['id']}",
+                status=status or None,
+                page=current_page if current_page > 1 else None,
+            )
 
         return templates.TemplateResponse(request, "ot/partials/_o2_list.html", {
             "request": request,
             "current_user": {"user_id": current_user["user_id"], "roles": roles},
             "items": items,
             "status_filter": status or "",
+            "page": current_page,
+            "total": total,
+            "total_pages": total_pages,
         })
 
     elif segment == "o3":
         # Supervisor sees PENDING (not own), Admin sees ENDORSED (not own)
         approve_items = []
         if "SUPERVISOR" in roles and "ADMIN" not in roles:
-            rows = (await db.execute(
-                select(OtRequest).where(
-                    OtRequest.status == "PENDING",
-                    OtRequest.user_id != current_user["user_id"],
-                ).order_by(OtRequest.created_at.desc())
-            )).scalars().all()
-            # Filter to same team
-            filtered = []
-            for r in rows:
-                u = (await db.execute(select(User).where(User.id == r.user_id))).scalar_one_or_none()
-                if u and u.team == current_user.get("team"):
-                    filtered.append(r)
-            approve_items = await _enrich_ot_list(db, filtered)
-            for item in approve_items:
-                used = await _monthly_used_minutes(db, item["user_id"], item["date"])
-                item["monthly_used_hours"] = round(used / 60, 1)
-                item["monthly_limit_hours"] = round(MONTHLY_LIMIT_MINUTES / 60, 1)
-                item["monthly_pct"] = round(used / MONTHLY_LIMIT_MINUTES * 100, 1)
-                item["monthly_bar_color"] = (
-                    "#b93a3a" if item["monthly_pct"] >= 100
-                    else "#c8850a" if item["monthly_pct"] >= 70
-                    else "#2e5a8a"
-                )
+            approve_items = await _load_supervisor_ot_endorse_items(db, current_user)
 
         elif "ADMIN" in roles:
-            rows = (await db.execute(
-                select(OtRequest).where(
-                    OtRequest.status == "ENDORSED",
-                    OtRequest.user_id != current_user["user_id"],
-                ).order_by(OtRequest.created_at.desc())
-            )).scalars().all()
-            approve_items = await _enrich_ot_list(db, rows)
-            for item in approve_items:
-                used = await _monthly_used_minutes(db, item["user_id"], item["date"])
-                item["monthly_used_hours"] = round(used / 60, 1)
-                item["monthly_limit_hours"] = round(MONTHLY_LIMIT_MINUTES / 60, 1)
-                item["monthly_pct"] = round(used / MONTHLY_LIMIT_MINUTES * 100, 1)
-                item["monthly_bar_color"] = (
-                    "#b93a3a" if item["monthly_pct"] >= 100
-                    else "#c8850a" if item["monthly_pct"] >= 70
-                    else "#2e5a8a"
-                )
+            approve_items = await _load_admin_ot_approve_items(db, current_user)
 
         return templates.TemplateResponse(request, "ot/partials/_o3_approve.html", {
             "request": request,
@@ -568,23 +716,57 @@ async def ot_segment(
 async def ot_mobile_detail(
     request: Request,
     ot_id: int,
+    status: str | None = Query(None),
+    page: int = Query(1, ge=1),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if not _is_htmx_request(request):
+        return RedirectResponse("/ot", status_code=302)
+
+    back_href = _ot_mobile_history_href(status, page)
+    detail_href = _build_href(
+        f"/ot/detail/{ot_id}",
+        status=status or None,
+        page=page if page > 1 else None,
+    )
     ot = (await db.execute(select(OtRequest).where(OtRequest.id == ot_id))).scalar_one_or_none()
     if not ot:
         return templates.TemplateResponse(request, "ot/partials/_o2_detail.html", {
-            "request": request, "ot": None, "current_user": {"user_id": current_user["user_id"], "roles": current_user.get("roles", [])},
-        })
+            "request": request,
+            "ot": None,
+            "error_title": "OT request not found",
+            "error_message": "The OT request you are looking for does not exist.",
+            "back_href": back_href,
+            "detail_href": detail_href,
+            "can_cancel": False,
+            "current_user": {"user_id": current_user["user_id"], "roles": current_user.get("roles", [])},
+        }, status_code=404)
+    can_view = await _can_view_ot_request(db, current_user, ot)
+    if not can_view:
+        return templates.TemplateResponse(request, "ot/partials/_o2_detail.html", {
+            "request": request,
+            "ot": None,
+            "error_title": "Access denied",
+            "error_message": "You do not have permission to view this OT request.",
+            "back_href": back_href,
+            "detail_href": detail_href,
+            "can_cancel": False,
+            "current_user": {"user_id": current_user["user_id"], "roles": current_user.get("roles", [])},
+        }, status_code=403)
     items = await _enrich_ot_list(db, [ot])
     item = items[0]
     used = await _monthly_used_minutes(db, ot.user_id, ot.date)
     item["monthly_used_hours"] = round(used / 60, 1)
     item["monthly_limit_hours"] = round(MONTHLY_LIMIT_MINUTES / 60, 1)
     item["monthly_pct"] = round(used / MONTHLY_LIMIT_MINUTES * 100, 1)
+    action_flags = _ot_detail_action_flags(current_user, ot)
 
     return templates.TemplateResponse(request, "ot/partials/_o2_detail.html", {
         "request": request,
         "ot": item,
+        "back_href": back_href,
+        "detail_href": detail_href,
         "current_user": {"user_id": current_user["user_id"], "roles": current_user.get("roles", [])},
+        **action_flags,
     })

@@ -8,6 +8,7 @@ from tests.conftest import CSRF_HEADERS
 # ── Helpers ─────────────────────────────────────────────────────────────
 
 NOW = datetime.now(timezone.utc)
+HTMX_HEADERS = {"HX-Request": "true"}
 
 
 async def _seed_ot(db_factory, *, user_id=1, wp_id=None, dt="2026-03-11",
@@ -1289,6 +1290,354 @@ async def test_ot_detail_back_link_preserves_list_state(async_client, db):
     assert resp.status_code == 200
     body = resp.text
     assert 'href="/ot?status=PENDING&amp;search=Hydraulic&amp;date_from=2026-03-09&amp;date_to=2026-03-12&amp;page=3"' in body
+
+
+async def test_ot_list_export_button_visibility_matches_role(async_client, worker_client, sup_client, db):
+    """Desktop OT list should only show CSV export to SUPERVISOR+ roles."""
+    worker_resp = await worker_client.get("/ot")
+    assert worker_resp.status_code == 200
+    assert "Export CSV" not in worker_resp.text
+
+    sup_resp = await sup_client.get("/ot")
+    assert sup_resp.status_code == 200
+    assert "Export CSV" in sup_resp.text
+
+    admin_resp = await async_client.get("/ot")
+    assert admin_resp.status_code == 200
+    assert "Export CSV" in admin_resp.text
+
+
+async def test_ot_detail_refresh_target_preserves_list_state(async_client, db):
+    """OT detail actions should refresh the same filtered detail URL, not drop back to a bare OT detail route."""
+    ot_id = await _seed_ot(
+        db,
+        user_id=1,
+        dt="2026-03-10",
+        reason="OTHER",
+        status="PENDING",
+        minutes=60,
+    )
+
+    resp = await async_client.get(
+        f"/ot/{ot_id}?status=PENDING&search=Hydraulic&date_from=2026-03-09&date_to=2026-03-12&page=3"
+    )
+    assert resp.status_code == 200
+    body = resp.text
+    assert (
+        f'data-detail-href="/ot/{ot_id}?status=PENDING&amp;search=Hydraulic&amp;date_from=2026-03-09&amp;date_to=2026-03-12&amp;page=3"'
+        in body
+    )
+    assert "const otDetailRefreshHref =" in body
+    assert "refreshOtDesktop(otDetailRefreshHref);" in body
+
+
+async def test_ot_detail_worker_forbidden_outside_scope(worker_client, db):
+    """Worker SSR OT detail should return an explicit 403 screen for someone else's request."""
+    ot_id = await _seed_ot(
+        db,
+        user_id=4,
+        dt="2026-03-10",
+        reason="OTHER",
+        status="PENDING",
+        minutes=60,
+    )
+
+    resp = await worker_client.get(f"/ot/{ot_id}")
+    assert resp.status_code == 403
+    body = resp.text
+    assert "Access denied" in body
+    assert "You do not have permission to view this OT request." in body
+    assert "Other Team Worker" not in body
+    assert "Cancel Request" not in body
+    assert 'onclick="endorseOt(' not in body
+    assert 'onclick="approveOt(' not in body
+
+
+async def test_ot_detail_cross_team_supervisor_forbidden_outside_scope(sup_client, db):
+    """Cross-team supervisor SSR OT detail should return an explicit 403 screen."""
+    ot_id = await _seed_ot(
+        db,
+        user_id=4,
+        dt="2026-03-10",
+        reason="OTHER",
+        status="PENDING",
+        minutes=60,
+    )
+
+    resp = await sup_client.get(f"/ot/{ot_id}")
+    assert resp.status_code == 403
+    body = resp.text
+    assert "Access denied" in body
+    assert "Other Team Worker" not in body
+    assert 'onclick="endorseOt(' not in body
+
+
+async def test_ot_mobile_detail_worker_forbidden_outside_scope(worker_client, db):
+    """Worker HTMX mobile OT detail should return an explicit 403 screen for someone else's request."""
+    ot_id = await _seed_ot(
+        db,
+        user_id=4,
+        dt="2026-03-10",
+        reason="OTHER",
+        status="PENDING",
+        minutes=60,
+    )
+
+    resp = await worker_client.get(f"/ot/detail/{ot_id}", headers=HTMX_HEADERS)
+    assert resp.status_code == 403
+    body = resp.text
+    assert "Access denied" in body
+    assert "Other Team Worker" not in body
+    assert "Cancel Request" not in body
+
+
+async def test_ot_mobile_detail_cross_team_supervisor_forbidden_outside_scope(sup_client, db):
+    """Cross-team supervisor HTMX mobile OT detail should return an explicit 403 screen."""
+    ot_id = await _seed_ot(
+        db,
+        user_id=4,
+        dt="2026-03-10",
+        reason="OTHER",
+        status="PENDING",
+        minutes=60,
+    )
+
+    resp = await sup_client.get(f"/ot/detail/{ot_id}", headers=HTMX_HEADERS)
+    assert resp.status_code == 403
+    body = resp.text
+    assert "Access denied" in body
+    assert "Other Team Worker" not in body
+
+
+async def test_ot_submit_admin_roster_includes_all_workers(async_client, db):
+    """Admin OT submit roster should include workers across all teams in desktop and mobile submit views."""
+    resp = await async_client.get("/ot/new")
+    assert resp.status_code == 200
+    assert "All Teams" in resp.text
+    assert "Test Worker" in resp.text
+    assert "Other Team Worker" in resp.text
+
+    mobile_resp = await async_client.get("/ot/segment/o1", headers=HTMX_HEADERS)
+    assert mobile_resp.status_code == 200
+    assert "Test Worker" in mobile_resp.text
+    assert "Other Team Worker" in mobile_resp.text
+
+
+async def test_ot_submit_supervisor_roster_stays_team_scoped(sup_client, db):
+    """Supervisor OT submit roster should remain scoped to the supervisor's own team."""
+    resp = await sup_client.get("/ot/new")
+    assert resp.status_code == 200
+    assert "Test Worker" in resp.text
+    assert "Other Team Worker" not in resp.text
+
+    mobile_resp = await sup_client.get("/ot/segment/o1", headers=HTMX_HEADERS)
+    assert mobile_resp.status_code == 200
+    assert "Test Worker" in mobile_resp.text
+    assert "Other Team Worker" not in mobile_resp.text
+
+
+async def test_ot_mobile_history_detail_and_back_preserve_status_filter(async_client, db):
+    """Mobile OT history should carry the selected status filter into detail and back/cancel paths."""
+    ot_id = await _seed_ot(
+        db,
+        user_id=1,
+        dt="2026-03-10",
+        reason="OTHER",
+        status="PENDING",
+        minutes=60,
+    )
+
+    list_resp = await async_client.get("/ot/segment/o2?status=PENDING", headers=HTMX_HEADERS)
+    assert list_resp.status_code == 200
+    assert f'hx-get="/ot/detail/{ot_id}?status=PENDING"' in list_resp.text
+    assert 'hx-push-url="true"' not in list_resp.text
+
+    detail_resp = await async_client.get(f"/ot/detail/{ot_id}?status=PENDING", headers=HTMX_HEADERS)
+    assert detail_resp.status_code == 200
+    body = detail_resp.text
+    assert 'data-back-href="/ot/segment/o2?status=PENDING"' in body
+    assert 'hx-get="/ot/segment/o2?status=PENDING"' in body
+    assert "refreshMobOtHistory()" in body
+    assert 'hx-push-url="true"' not in body
+
+
+async def test_ot_mobile_history_paginates_and_preserves_page_state(async_client, db):
+    """Mobile OT history should paginate beyond 50 items and preserve page/status on detail back paths."""
+    ot_ids = []
+    for _ in range(55):
+        ot_ids.append(
+            await _seed_ot(
+                db,
+                user_id=1,
+                dt="2026-03-10",
+                reason="OTHER",
+                status="PENDING",
+                minutes=60,
+            )
+        )
+
+    newest_ot_id = ot_ids[-1]
+    oldest_ot_id = ot_ids[0]
+
+    first_page = await async_client.get("/ot/segment/o2?status=PENDING", headers=HTMX_HEADERS)
+    assert first_page.status_code == 200
+    assert f'hx-get="/ot/detail/{newest_ot_id}?status=PENDING"' in first_page.text
+    assert f'hx-get="/ot/detail/{oldest_ot_id}?status=PENDING"' not in first_page.text
+    assert "Page 1 of 3" in first_page.text
+    assert '/ot/segment/o2?page=2' in first_page.text
+    assert 'status=PENDING' in first_page.text
+
+    third_page = await async_client.get("/ot/segment/o2?status=PENDING&page=3", headers=HTMX_HEADERS)
+    assert third_page.status_code == 200
+    assert f'hx-get="/ot/detail/{oldest_ot_id}?status=PENDING&amp;page=3"' in third_page.text
+    assert f'hx-get="/ot/detail/{newest_ot_id}?status=PENDING"' not in third_page.text
+    assert "Page 3 of 3" in third_page.text
+    assert '/ot/segment/o2?page=2' in third_page.text
+    assert 'status=PENDING' in third_page.text
+    assert f'hx-get="/ot/detail/{oldest_ot_id}?status=PENDING&amp;page=3"' in third_page.text
+
+    detail_resp = await async_client.get(
+        f"/ot/detail/{oldest_ot_id}?status=PENDING&page=3",
+        headers=HTMX_HEADERS,
+    )
+    assert detail_resp.status_code == 200
+    body = detail_resp.text
+    assert 'data-back-href="/ot/segment/o2?status=PENDING&amp;page=3"' in body
+    assert 'hx-get="/ot/segment/o2?status=PENDING&amp;page=3"' in body
+    assert 'var mobOtBackHref = "/ot/segment/o2?status=PENDING\\u0026page=3";' in body
+
+
+async def test_ot_mobile_fragment_routes_redirect_without_htmx(async_client, db):
+    """Direct non-HTMX access to OT mobile partial routes should redirect to the OT shell."""
+    ot_id = await _seed_ot(
+        db,
+        user_id=1,
+        dt="2026-03-10",
+        reason="OTHER",
+        status="PENDING",
+        minutes=60,
+    )
+
+    segment_resp = await async_client.get("/ot/segment/o2?status=PENDING")
+    assert segment_resp.status_code == 302
+    assert segment_resp.headers["location"] == "/ot"
+
+    detail_resp = await async_client.get(f"/ot/detail/{ot_id}?status=PENDING&page=2")
+    assert detail_resp.status_code == 302
+    assert detail_resp.headers["location"] == "/ot"
+
+
+async def test_ot_approve_queue_excludes_admin_owned_endorsed_requests(async_client, db):
+    """Admin approve queues should exclude the admin's own ENDORSED OT on desktop and mobile."""
+    own_ot_id = await _seed_ot(
+        db,
+        user_id=1,
+        dt="2026-03-10",
+        reason="OTHER",
+        status="ENDORSED",
+        minutes=60,
+    )
+    other_ot_id = await _seed_ot(
+        db,
+        user_id=3,
+        dt="2026-03-10",
+        reason="OTHER",
+        status="ENDORSED",
+        minutes=60,
+    )
+    await _seed_approval(db, own_ot_id, stage="ENDORSE", action="APPROVE", approver_id=2)
+    await _seed_approval(db, other_ot_id, stage="ENDORSE", action="APPROVE", approver_id=2)
+
+    desktop_resp = await async_client.get("/admin/ot-approve")
+    assert desktop_resp.status_code == 200
+    desktop_body = desktop_resp.text
+    assert f"OT-{other_ot_id:03d}" in desktop_body
+    assert f"OT-{own_ot_id:03d}" not in desktop_body
+    assert "1 awaiting approval" in desktop_body
+
+    mobile_resp = await async_client.get("/ot/segment/o3", headers=HTMX_HEADERS)
+    assert mobile_resp.status_code == 200
+    mobile_body = mobile_resp.text
+    assert f"OT-{other_ot_id:03d}" in mobile_body
+    assert f"OT-{own_ot_id:03d}" not in mobile_body
+    assert "1 endorsed request awaiting final approval" in mobile_body
+
+
+async def test_ot_mobile_o3_cards_include_context_and_approval_metadata(async_client, sup_client, db):
+    """Mobile O3 cards should include OT context, justification, and approval metadata."""
+    from sqlalchemy import select
+
+    from app.models.ot import OtRequest
+
+    wp_id = await _seed_wp(db)
+    pending_ot_id = await _seed_ot(
+        db,
+        user_id=3,
+        wp_id=wp_id,
+        dt="2026-03-10",
+        reason="OTHER",
+        status="PENDING",
+        minutes=90,
+    )
+    endorsed_ot_id = await _seed_ot(
+        db,
+        user_id=3,
+        wp_id=wp_id,
+        dt="2026-03-11",
+        reason="OTHER",
+        status="ENDORSED",
+        minutes=120,
+    )
+    await _seed_approval(
+        db,
+        endorsed_ot_id,
+        stage="ENDORSE",
+        action="APPROVE",
+        approver_id=2,
+        acted_at=datetime(2026, 3, 11, 8, 30, tzinfo=timezone.utc),
+    )
+
+    async with db() as s:
+        pending_ot = (await s.execute(select(OtRequest).where(OtRequest.id == pending_ot_id))).scalar_one()
+        endorsed_ot = (await s.execute(select(OtRequest).where(OtRequest.id == endorsed_ot_id))).scalar_one()
+        pending_ot.reason_text = "Weekend coverage for line recovery"
+        endorsed_ot.reason_text = "Weekend engine run extension"
+        await s.commit()
+
+    sup_resp = await sup_client.get("/ot/segment/o3", headers=HTMX_HEADERS)
+    assert sup_resp.status_code == 200
+    sup_body = sup_resp.text
+    assert f"OT-{pending_ot_id:03d}" in sup_body
+    assert "Test Worker (E003)" in sup_body
+    assert "Sheet Metal" in sup_body
+    assert "Weekend coverage for line recovery" in sup_body
+    assert "RFO-001" in sup_body
+
+    admin_resp = await async_client.get("/ot/segment/o3", headers=HTMX_HEADERS)
+    assert admin_resp.status_code == 200
+    admin_body = admin_resp.text
+    assert f"OT-{endorsed_ot_id:03d}" in admin_body
+    assert "Test Worker (E003)" in admin_body
+    assert "Sheet Metal" in admin_body
+    assert "Weekend engine run extension" in admin_body
+    assert "RFO-001" in admin_body
+    assert "Test Supervisor" in admin_body
+    assert "08:30" in admin_body
+
+
+async def test_ot_approve_templates_refresh_queue_on_stale_errors(async_client, db):
+    """Desktop and mobile approve UIs should refresh the queue after 403/409 stale action errors."""
+    desktop_resp = await async_client.get("/admin/ot-approve")
+    assert desktop_resp.status_code == 200
+    desktop_body = desktop_resp.text
+    assert "function shouldRefreshOtApproveQueue(err)" in desktop_body
+    assert "if (shouldRefreshOtApproveQueue(err)) refreshOtApprove();" in desktop_body
+
+    mobile_resp = await async_client.get("/ot/segment/o3", headers=HTMX_HEADERS)
+    assert mobile_resp.status_code == 200
+    mobile_body = mobile_resp.text
+    assert "function shouldRefreshMobOtApproveSegment(err)" in mobile_body
+    assert "if (shouldRefreshMobOtApproveSegment(err)) refreshMobOtApproveSegment();" in mobile_body
 
 
 async def test_ot_new_page_contains_mobile_responsive_submit_layout(async_client, db):

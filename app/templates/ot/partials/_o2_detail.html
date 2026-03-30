@@ -1,13 +1,18 @@
 {# O2 Detail: Mobile OT detail view #}
-<div class="p-4 space-y-4" id="ot-o2-detail">
+<div class="p-4 space-y-4" id="ot-o2-detail" data-back-href="{{ back_href or '/ot/segment/o2' }}">
   <button class="flex items-center gap-1 text-sm text-navy-700 font-medium mb-2"
-          hx-get="/ot/segment/o2" hx-target="#ot-stage" hx-swap="innerHTML">
+          hx-get="{{ back_href or '/ot/segment/o2' }}" hx-target="#ot-stage" hx-swap="innerHTML">
     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
     Back to History
   </button>
 
   {% if not ot %}
-  <div class="card p-6 text-center text-surf-400">OT request not found</div>
+  <div class="card p-6 text-center">
+    <div class="text-surf-400 text-base font-medium">{{ error_title or 'OT request not found' }}</div>
+    {% if error_message %}
+    <div class="text-sm text-surf-400 mt-2">{{ error_message }}</div>
+    {% endif %}
+  </div>
   {% else %}
   <div class="card p-4 space-y-3">
     <div class="flex items-center justify-between">
@@ -62,7 +67,7 @@
   </div>
 
   {# Cancel action #}
-  {% if ot.status == 'PENDING' and ot.user_id == current_user.user_id %}
+  {% if can_cancel %}
   <button type="button" onclick="mobCancelOt({{ ot.id }}, this)" class="btn-outline w-full h-12 text-base" style="color:#b93a3a;border-color:#b93a3a">Cancel Request</button>
   {% endif %}
   {% endif %}
@@ -70,6 +75,7 @@
 
 <script>
 var mobOtDetailCsrf = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+var mobOtBackHref = {{ (back_href or '/ot/segment/o2') | tojson }};
 let mobOtDetailActionInFlight = false;
 
 function getMobOtErrorMessage(payload, fallback) {
@@ -129,7 +135,7 @@ async function mobOtRequestJson(url, options = {}) {
 
 function refreshMobOtHistory() {
   if (typeof htmx === 'undefined') return;
-  htmx.ajax('GET', '/ot/segment/o2', { target: '#ot-stage', swap: 'innerHTML' });
+  htmx.ajax('GET', mobOtBackHref, { target: '#ot-stage', swap: 'innerHTML' });
 }
 
 async function runMobOtDetailAction(actionFn) {

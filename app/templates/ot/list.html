@@ -39,7 +39,9 @@
         <option value="REJECTED" {% if status_filter == 'REJECTED' %}selected{% endif %}>REJECTED</option>
         <option value="CANCELLED" {% if status_filter == 'CANCELLED' %}selected{% endif %}>CANCELLED</option>
       </select>
+      {% if can_export_csv %}
       <button type="button" class="btn-outline btn-sm text-xs flex items-center" onclick="exportOtCsv(this)">Export CSV</button>
+      {% endif %}
     </div>
   </div>
 

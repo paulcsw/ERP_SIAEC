@@ -129,6 +129,11 @@ function refreshOtApprove() {
     pushURL: true,
   });
 }
+
+function shouldRefreshOtApproveQueue(err) {
+  return !!err && (err.status === 403 || err.status === 409);
+}
+
 async function runOtApproveAction(actionFn) {
   if (otApproveActionInFlight) return;
   otApproveActionInFlight = true;
@@ -155,6 +160,7 @@ async function approveAction(id, action, button) {
       refreshOtApprove();
     } catch (err) {
       showToast('Error', err.message || 'Action failed', 'red');
+      if (shouldRefreshOtApproveQueue(err)) refreshOtApprove();
     } finally {
       setOtButtonBusy(button, false);
     }

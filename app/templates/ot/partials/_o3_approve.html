@@ -9,12 +9,20 @@
     <div class="text-sm text-surf-400 mb-3">{{ count }} request{{ 's' if count != 1 }} pending your endorsement</div>
     {% for ot in items %}
     <div class="card p-4 space-y-3" id="mob-approve-{{ ot.id }}">
-      <div class="flex items-center justify-between">
-        <span class="text-base font-semibold text-navy-900">{{ ot.user_name }}</span>
+      <div class="flex items-center justify-between gap-3">
+        <span class="font-mono text-xs font-medium text-navy-900">OT-{{ '%03d' % ot.id }}</span>
         <span class="badge badge-pending">PENDING</span>
       </div>
-      <div class="text-sm text-surf-400">{{ ot.date.strftime('%b %d') if ot.date else '' }} &middot; {{ ot.start_time.strftime('%H:%M') if ot.start_time else '' }}&ndash;{{ ot.end_time.strftime('%H:%M') if ot.end_time else '' }} &middot; {{ ot.hours }} hrs</div>
-      <div class="text-sm text-surf-400">{{ ot.reason_code | replace('_', ' ') | title }}{% if ot.work_package_id %} &middot; RFO{% endif %}</div>
+      <div class="text-sm font-medium text-navy-900">{{ ot.user_name }} ({{ ot.user_employee_no }}) &middot; {{ ot.user_team }}</div>
+      <div class="grid grid-cols-2 gap-3 text-sm">
+        <div><span class="text-surf-400 text-xs">Date</span><div class="font-medium">{{ ot.date.strftime('%b %d, %Y') if ot.date else '' }}</div></div>
+        <div><span class="text-surf-400 text-xs">Time</span><div class="font-mono">{{ ot.start_time.strftime('%H:%M') if ot.start_time else '' }}&ndash;{{ ot.end_time.strftime('%H:%M') if ot.end_time else '' }}</div></div>
+        <div><span class="text-surf-400 text-xs">Duration</span><div class="font-bold text-navy-700">{{ ot.hours }} hrs</div></div>
+        <div><span class="text-surf-400 text-xs">Reason</span><div>{{ ot.reason_code | replace('_', ' ') | title }}{% if ot.work_package_rfo_no %} &middot; {{ ot.work_package_rfo_no }}{% elif ot.work_package_id %} &middot; WP-{{ ot.work_package_id }}{% endif %}</div></div>
+      </div>
+      {% if ot.reason_text %}
+      <div class="text-sm"><span class="text-surf-400">Justification:</span> {{ ot.reason_text }}</div>
+      {% endif %}
       <div class="flex items-center gap-2 text-sm">
         <span class="text-surf-400">This month:</span>
         <span class="font-mono text-navy-700">{{ ot.monthly_used_hours }}h / {{ ot.monthly_limit_hours }}h</span>
@@ -38,12 +46,26 @@
     <div class="text-sm text-surf-400 mb-3">{{ count }} endorsed request{{ 's' if count != 1 }} awaiting final approval</div>
     {% for ot in items %}
     <div class="card p-4 space-y-3" id="mob-approve-{{ ot.id }}">
-      <div class="flex items-center justify-between">
-        <span class="text-base font-semibold text-navy-900">{{ ot.user_name }}</span>
+      <div class="flex items-center justify-between gap-3">
+        <span class="font-mono text-xs font-medium text-navy-900">OT-{{ '%03d' % ot.id }}</span>
         <span class="badge badge-endorsed">ENDORSED</span>
       </div>
-      <div class="text-sm text-surf-400">{{ ot.date.strftime('%b %d') if ot.date else '' }} &middot; {{ ot.start_time.strftime('%H:%M') if ot.start_time else '' }}&ndash;{{ ot.end_time.strftime('%H:%M') if ot.end_time else '' }} &middot; {{ ot.hours }} hrs</div>
-      <div class="text-sm text-surf-400">{{ ot.reason_code | replace('_', ' ') | title }}{% if ot.endorse %} &middot; Endorsed by {{ ot.endorse.approver_name }}{% endif %}</div>
+      <div class="text-sm font-medium text-navy-900">{{ ot.user_name }} ({{ ot.user_employee_no }}) &middot; {{ ot.user_team }}</div>
+      <div class="grid grid-cols-2 gap-3 text-sm">
+        <div><span class="text-surf-400 text-xs">Date</span><div class="font-medium">{{ ot.date.strftime('%b %d, %Y') if ot.date else '' }}</div></div>
+        <div><span class="text-surf-400 text-xs">Time</span><div class="font-mono">{{ ot.start_time.strftime('%H:%M') if ot.start_time else '' }}&ndash;{{ ot.end_time.strftime('%H:%M') if ot.end_time else '' }}</div></div>
+        <div><span class="text-surf-400 text-xs">Duration</span><div class="font-bold text-navy-700">{{ ot.hours }} hrs</div></div>
+        <div><span class="text-surf-400 text-xs">Reason</span><div>{{ ot.reason_code | replace('_', ' ') | title }}{% if ot.work_package_rfo_no %} &middot; {{ ot.work_package_rfo_no }}{% elif ot.work_package_id %} &middot; WP-{{ ot.work_package_id }}{% endif %}</div></div>
+      </div>
+      {% if ot.reason_text %}
+      <div class="text-sm"><span class="text-surf-400">Justification:</span> {{ ot.reason_text }}</div>
+      {% endif %}
+      {% if ot.endorse %}
+      <div class="text-sm text-surf-400">
+        1st approval: <span class="text-st-green font-medium">{{ ot.endorse.approver_name }}</span>
+        {% if ot.endorse.acted_at %}&middot; {{ ot.endorse.acted_at.strftime('%b %d, %H:%M') }}{% endif %}
+      </div>
+      {% endif %}
       <div class="flex items-center gap-2 text-sm">
         <span class="text-surf-400">This month:</span>
         <span class="font-mono text-navy-700">{{ ot.monthly_used_hours }}h / {{ ot.monthly_limit_hours }}h</span>
@@ -127,6 +149,10 @@ function refreshMobOtApproveSegment() {
   htmx.ajax('GET', '/ot/segment/o3', { target: '#ot-stage', swap: 'innerHTML' });
 }
 
+function shouldRefreshMobOtApproveSegment(err) {
+  return !!err && (err.status === 403 || err.status === 409);
+}
+
 async function runMobOtApproveAction(actionFn) {
   if (mobOtApproveActionInFlight) return;
   mobOtApproveActionInFlight = true;
@@ -157,6 +183,7 @@ async function mobEndorse(id, action, button) {
       refreshMobOtApproveSegment();
     } catch (err) {
       showToast('Error', err.message || 'Failed', 'red');
+      if (shouldRefreshMobOtApproveSegment(err)) refreshMobOtApproveSegment();
     } finally {
       setMobOtButtonBusy(button, false);
     }
@@ -183,6 +210,7 @@ async function mobApprove(id, action, button) {
       refreshMobOtApproveSegment();
     } catch (err) {
       showToast('Error', err.message || 'Failed', 'red');
+      if (shouldRefreshMobOtApproveSegment(err)) refreshMobOtApproveSegment();
     } finally {
       setMobOtButtonBusy(button, false);
     }
