@@ -143,7 +143,9 @@
         <h3 class="text-lg font-semibold text-navy-900">{{ selected_ac }}</h3>
         <p class="text-xs text-surf-400">{{ selected_rfo or 'All RFOs' }} &middot; {{ meeting_date or 'Current Week' }} &middot; {{ tasks | length if tasks else 0 }} tasks</p>
       </div>
+      {% if can_create_tasks %}
       <button class="btn-primary btn-sm" onclick="showModal('modal-entry-task')">Add Task</button>
+      {% endif %}
     </div>
     {% endif %}
 
@@ -153,15 +155,18 @@
       <div class="space-y-3" id="taskCardList">
         {% for task in tasks %}
         <div class="task-card-stack{% if editing_task_id == task.task_id %} editing-stack{% endif %}" id="task-stack-{{ task.task_id }}">
-          <div class="task-card {% if editing_task_id == task.task_id %}editing{% endif %}"
+          <div class="task-card {% if editing_task_id == task.task_id %}editing{% endif %}{% if not task.can_edit %} cursor-default{% endif %}"
                id="task-card-{{ task.task_id }}"
                data-task-id="{{ task.task_id }}"
                data-status="{{ task.status }}"
                data-is-new="{{ 'true' if task.is_new else 'false' }}"
                data-needs-update="{{ 'true' if task.needs_update else 'false' }}"
                data-has-issue="{{ 'true' if task.has_issue else 'false' }}"
+               data-assigned-worker="{{ task.assigned_worker or '' }}"
                data-is-editing="{{ 'true' if editing_task_id == task.task_id else 'false' }}"
+               {% if task.can_edit %}
                onclick="toggleDesktopTaskEditor('{{ selected_ac }}', {{ task.task_id }}, this.dataset.isEditing === 'true')">
+               {% endif %}>
             <div class="flex items-start justify-between gap-3">
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-1" data-role="task-badges">
@@ -191,6 +196,11 @@
                   <span>{{ task.assigned_worker }}</span>
                   {% endif %}
                 </div>
+                {% if not task.can_edit %}
+                <div class="mt-3">
+                  <a href="{{ task.detail_url }}" class="text-xs font-medium text-navy-600 underline underline-offset-2" onclick="event.stopPropagation()">View Task Detail</a>
+                </div>
+                {% endif %}
               </div>
               <div data-role="task-issue-slot">
                 {% if task.has_issue %}
@@ -244,7 +254,7 @@
                     <label class="text-xs font-medium text-surf-400 block mb-1.5">Worker Assignment</label>
                     <select name="assigned_worker_id" class="inp w-full text-sm">
                       <option value="">Unassigned</option>
-                      {% for w in workers %}
+                      {% for w in editing_workers %}
                       <option value="{{ w.id }}" {% if editing_task.assigned_worker_id == w.id %}selected{% endif %}>{{ w.name }}</option>
                       {% endfor %}
                     </select>
@@ -295,7 +305,9 @@
       <div class="text-center py-16 text-surf-400">
         <svg class="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
         <p class="text-sm">No tasks found for {{ selected_ac }}.</p>
+        {% if can_create_tasks %}
         <button class="btn-primary btn-sm mt-3" onclick="showModal('modal-entry-task')">Add Task</button>
+        {% endif %}
       </div>
       {% else %}
       <div class="text-center py-16 text-surf-400">
@@ -308,6 +320,7 @@
 </div>
 
 {# ???? Add Task Modal (modal-overlay pattern) ???? #}
+{% if can_create_tasks %}
 <div class="modal-overlay" id="modal-entry-task">
   <div class="card w-full sm:w-[420px] modal-entry-task-card" onclick="event.stopPropagation()">
     <div class="px-5 py-4 border-b border-surf-100 flex items-center justify-between shrink-0">
@@ -329,9 +342,7 @@
         {% if selected_ac_id %}
         <input type="hidden" name="aircraft_id" value="{{ selected_ac_id }}">
         {% endif %}
-        <input type="hidden" name="meeting_date" value="{{ meeting_date or selected_meeting_date or '' }}">
-        <input type="hidden" name="shop_id" value="{{ selected_shop_id or '' }}">
-        <input type="hidden" name="work_package_id" value="{{ selected_work_package_id or '' }}">
+        <input type="hidden" name="meeting_date" value="{{ meeting_date or '' }}">
         <div class="space-y-3">
           <div>
             <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Task Description *</label>
@@ -347,16 +358,40 @@
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
+              <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Shop *</label>
+              <select name="shop_id" class="inp w-full h-9 text-sm" required onchange="syncDesktopCreateWorkerOptions()">
+                <option value="">Select shop</option>
+                {% for shop in shop_options %}
+                <option value="{{ shop.id }}" {% if create_shop_id == shop.id %}selected{% endif %}>{{ shop.code }}{% if shop.name %} - {{ shop.name }}{% endif %}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">RFO</label>
+              <select name="work_package_id" class="inp w-full h-9 text-sm">
+                <option value="">-- Optional --</option>
+                {% for wp in work_package_options %}
+                <option value="{{ wp.id }}" {% if create_work_package_id == wp.id %}selected{% endif %}>{{ wp.rfo_no or 'No RFO' }}{% if wp.title %} - {{ wp.title }}{% endif %}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
               <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Estimated MH</label>
               <input type="number" name="planned_mh" class="inp w-full h-9 text-sm font-mono" step="0.5" min="0" placeholder="0.0">
             </div>
             <div>
               <label class="text-[10px] text-surf-400 uppercase tracking-wider font-medium mb-1 block">Assign Worker</label>
-              <select name="assigned_worker_id" class="inp w-full h-9 text-sm">
+              <select name="assigned_worker_id" class="inp w-full h-9 text-sm" {% if create_shop_id is none %}disabled{% endif %}>
+                {% if create_shop_id is none %}
+                <option value="">Select shop first</option>
+                {% else %}
                 <option value="">-- Unassigned --</option>
-                {% for w in workers %}
+                {% for w in workers_by_shop.get(create_shop_id, []) %}
                 <option value="{{ w.id }}">{{ w.name }}</option>
                 {% endfor %}
+                {% endif %}
               </select>
             </div>
           </div>
@@ -376,6 +411,7 @@
     </div>
   </div>
 </div>
+{% endif %}
 
 {% endblock %}
 
@@ -394,6 +430,7 @@
 {% block scripts %}
 <script>
 const TASK_ENTRY_CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+const TASK_ENTRY_WORKERS_BY_SHOP = {{ workers_by_shop | tojson }};
 let taskEntryActionInFlight = false;
 
 function setTaskEntryButtonBusy(button, busy, busyText) {
@@ -434,7 +471,7 @@ async function taskEntryRequestJson(url, options = {}) {
     body = JSON.stringify(json);
   }
 
-  const res = await fetch(url, { method, headers: reqHeaders, body });
+  const res = await fetch(url, { method, headers: reqHeaders, body, credentials: 'same-origin' });
   const raw = await res.text();
   let data = {};
   if (raw) {
@@ -559,6 +596,49 @@ function toOptionalInt(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+function getTaskEntryWorkersForShop(shopId) {
+  if (shopId === '' || shopId === null || shopId === undefined) return [];
+  return TASK_ENTRY_WORKERS_BY_SHOP[String(shopId)] || TASK_ENTRY_WORKERS_BY_SHOP[shopId] || [];
+}
+
+function setTaskEntryWorkerSelectOptions(selectEl, workers, selectedValue, emptyLabel) {
+  if (!selectEl) return;
+  const currentValue = selectedValue ?? selectEl.value ?? '';
+  selectEl.innerHTML = '';
+  const emptyOption = document.createElement('option');
+  emptyOption.value = '';
+  emptyOption.textContent = emptyLabel;
+  selectEl.appendChild(emptyOption);
+  workers.forEach((worker) => {
+    const opt = document.createElement('option');
+    opt.value = String(worker.id);
+    opt.textContent = worker.name;
+    if (String(worker.id) === String(currentValue)) opt.selected = true;
+    selectEl.appendChild(opt);
+  });
+}
+
+function syncDesktopCreateWorkerOptions() {
+  const form = document.getElementById('entryTaskForm');
+  if (!form) return;
+  const shopId = form.elements['shop_id']?.value || '';
+  const workerSelect = form.elements['assigned_worker_id'];
+  if (!workerSelect) return;
+  const currentValue = workerSelect.value || '';
+  if (!shopId) {
+    workerSelect.disabled = true;
+    setTaskEntryWorkerSelectOptions(workerSelect, [], '', 'Select shop first');
+    return;
+  }
+  workerSelect.disabled = false;
+  setTaskEntryWorkerSelectOptions(
+    workerSelect,
+    getTaskEntryWorkersForShop(shopId),
+    currentValue,
+    '-- Unassigned --',
+  );
+}
+
 function escapeTaskEntryHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -617,6 +697,10 @@ function updateDesktopTaskCard(taskId, snapshotResult, workerName) {
   card.dataset.isNew = 'false';
   card.dataset.needsUpdate = 'false';
   card.dataset.hasIssue = snapshotResult.has_issue ? 'true' : 'false';
+  const nextWorkerName = typeof workerName === 'string'
+    ? workerName
+    : (card.dataset.assignedWorker || '');
+  card.dataset.assignedWorker = nextWorkerName;
 
   if (badgeWrap) {
     badgeWrap.innerHTML = renderDesktopStatusBadge(snapshotResult.status);
@@ -628,8 +712,8 @@ function updateDesktopTaskCard(taskId, snapshotResult, workerName) {
     if (snapshotResult.deadline_date) {
       parts.push(`Due: ${escapeTaskEntryHtml(snapshotResult.deadline_date)}`);
     }
-    if (workerName) {
-      parts.push(escapeTaskEntryHtml(workerName));
+    if (nextWorkerName) {
+      parts.push(escapeTaskEntryHtml(nextWorkerName));
     }
     metaWrap.innerHTML = parts.map((part) => `<span>${part}</span>`).join('');
   }
@@ -694,14 +778,20 @@ function submitDesktopQuickUpdate(event) {
           has_issue: !!form.elements['has_issue']?.checked,
         },
       });
-
-      await taskEntryRequestJson('/api/tasks/' + taskId + '/assign-worker', {
-        method: 'PATCH',
-        json: { assigned_worker_id: workerId },
-      });
-
-      updateDesktopTaskCard(taskId, snapshotResult, workerName);
+      updateDesktopTaskCard(taskId, snapshotResult);
       syncDesktopQuickUpdateState(snapshotResult);
+
+      try {
+        await taskEntryRequestJson('/api/tasks/' + taskId + '/assign-worker', {
+          method: 'PATCH',
+          json: { assigned_worker_id: workerId },
+        });
+        updateDesktopTaskCard(taskId, snapshotResult, workerName);
+      } catch (assignErr) {
+        showToast('Partial Success', 'Task updated, worker assign failed: ' + (assignErr.message || 'Unknown error'), 'red');
+        refreshTaskEntry({}, { resetEdit: false });
+        return;
+      }
 
       if (mode === 'next') {
         closeDesktopEditor();
@@ -799,11 +889,16 @@ function submitDesktopCreateTask(event) {
   return false;
 }
 
-focusEditingTaskCard();
+function initTaskEntryDesktopState() {
+  focusEditingTaskCard();
+  syncDesktopCreateWorkerOptions();
+}
+
+initTaskEntryDesktopState();
 
 document.body.addEventListener('htmx:afterSwap', (evt) => {
   if (!evt.target || evt.target.id !== 'task-entry-content') return;
-  focusEditingTaskCard();
+  initTaskEntryDesktopState();
 });
 </script>
 {% endblock %}

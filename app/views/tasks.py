@@ -1,5 +1,6 @@
 """Task Manager + Data Entry + Detail + Mobile SSR views."""
 from datetime import date, datetime, timedelta, timezone
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, or_, select
@@ -101,6 +102,23 @@ async def _get_max_access_level(db: AsyncSession, user: dict) -> str | None:
     return best
 
 
+async def _get_entry_editable_shop_ids(db: AsyncSession, user: dict) -> set[int] | None:
+    """Return explicit EDIT/MANAGE shop ids for Data Entry mutations."""
+    if "ADMIN" in user.get("roles", []):
+        return None
+    rows = (
+        await db.execute(
+            select(UserShopAccess.shop_id, UserShopAccess.access).where(
+                UserShopAccess.user_id == user["user_id"]
+            )
+        )
+    ).all()
+    return {
+        row.shop_id for row in rows
+        if row.access in ("EDIT", "MANAGE")
+    }
+
+
 def _entry_visibility_clause(
     user: dict,
     allowed_shop_ids: set[int] | None,
@@ -127,6 +145,16 @@ def _can_view_task_item(user: dict, allowed_shop_ids: set[int] | None, task: Tas
     if task.assigned_supervisor_id == uid or task.assigned_worker_id == uid:
         return True
     return False
+
+
+def _can_edit_task_item(
+    user: dict,
+    editable_shop_ids: set[int] | None,
+    task: TaskItem,
+) -> bool:
+    if "ADMIN" in user.get("roles", []):
+        return True
+    return bool(editable_shop_ids and task.shop_id in editable_shop_ids)
 
 
 def _normalize_entry_search(value: str | None) -> str:
@@ -207,6 +235,121 @@ def _apply_entry_filters(
     return base_q
 
 
+async def _get_entry_aircraft_by_reg(
+    db: AsyncSession,
+    ac_reg: str | None,
+) -> Aircraft | None:
+    if not ac_reg:
+        return None
+    return (
+        await db.execute(select(Aircraft).where(Aircraft.ac_reg == ac_reg))
+    ).scalar_one_or_none()
+
+
+async def _get_entry_aircraft_by_id(
+    db: AsyncSession,
+    aircraft_id: int | None,
+) -> Aircraft | None:
+    if aircraft_id is None:
+        return None
+    return (
+        await db.execute(select(Aircraft).where(Aircraft.id == aircraft_id))
+    ).scalar_one_or_none()
+
+
+async def _get_entry_workers_by_shop(
+    db: AsyncSession,
+    shop_ids: set[int] | None = None,
+) -> dict[int, list[dict]]:
+    if shop_ids is not None and not shop_ids:
+        return {}
+    q = (
+        select(UserShopAccess.shop_id, User.id, User.name)
+        .join(User, User.id == UserShopAccess.user_id)
+        .where(User.is_active == True)
+        .order_by(UserShopAccess.shop_id, User.name)
+    )
+    if shop_ids is not None:
+        q = q.where(UserShopAccess.shop_id.in_(shop_ids))
+    rows = (await db.execute(q)).all()
+    workers_by_shop: dict[int, list[dict]] = {}
+    for shop_id, user_id, user_name in rows:
+        shop_workers = workers_by_shop.setdefault(shop_id, [])
+        if any(existing["id"] == user_id for existing in shop_workers):
+            continue
+        shop_workers.append({
+            "id": user_id,
+            "name": user_name,
+        })
+    return workers_by_shop
+
+
+async def _build_entry_create_context(
+    db: AsyncSession,
+    *,
+    current_user: dict,
+    editable_shop_ids: set[int] | None,
+    selected_aircraft: Aircraft | None,
+    default_shop_id: int | None = None,
+    default_work_package_id: int | None = None,
+) -> dict:
+    can_create_tasks = (
+        selected_aircraft is not None
+        and (editable_shop_ids is None or bool(editable_shop_ids))
+    )
+    if not can_create_tasks:
+        return {
+            "can_create_tasks": False,
+            "shop_options": [],
+            "work_package_options": [],
+            "workers_by_shop": {},
+            "create_shop_id": None,
+            "create_work_package_id": None,
+        }
+
+    shops = await _get_shops(db)
+    if editable_shop_ids is not None:
+        shops = [shop for shop in shops if shop.id in editable_shop_ids]
+    shop_options = [
+        {"id": shop.id, "code": shop.code, "name": shop.name}
+        for shop in shops
+    ]
+    allowed_shop_option_ids = {shop["id"] for shop in shop_options}
+    if default_shop_id not in allowed_shop_option_ids:
+        default_shop_id = None
+
+    wp_rows = (
+        await db.execute(
+            select(WorkPackage)
+            .where(
+                WorkPackage.aircraft_id == selected_aircraft.id,
+                WorkPackage.status == "ACTIVE",
+            )
+            .order_by(WorkPackage.rfo_no)
+        )
+    ).scalars().all()
+    work_package_options = [
+        {"id": wp.id, "rfo_no": wp.rfo_no or "", "title": wp.title or ""}
+        for wp in wp_rows
+    ]
+    allowed_wp_ids = {wp["id"] for wp in work_package_options}
+    if default_work_package_id not in allowed_wp_ids:
+        default_work_package_id = None
+    if default_work_package_id is None and len(work_package_options) == 1:
+        default_work_package_id = work_package_options[0]["id"]
+
+    workers_scope = None if editable_shop_ids is None else allowed_shop_option_ids
+    workers_by_shop = await _get_entry_workers_by_shop(db, workers_scope)
+    return {
+        "can_create_tasks": True,
+        "shop_options": shop_options,
+        "work_package_options": work_package_options,
+        "workers_by_shop": workers_by_shop,
+        "create_shop_id": default_shop_id,
+        "create_work_package_id": default_work_package_id,
+    }
+
+
 def _normalize_airline_filter(value: str | None) -> str:
     if not value:
         return ""
@@ -220,6 +363,96 @@ def _normalize_task_manager_view(value: str | None) -> str:
     if value in {"table", "kanban", "rfo"}:
         return value
     return "table"
+
+
+def _parse_iso_date(value: str | None) -> date | None:
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def _apply_task_manager_shop_scope(
+    base_q,
+    allowed_shop_ids: set[int] | None,
+    selected_shop_id: int | None = None,
+):
+    if allowed_shop_ids is not None:
+        if not allowed_shop_ids:
+            return base_q.where(TaskItem.id == -1)
+        if selected_shop_id is not None and selected_shop_id not in allowed_shop_ids:
+            return base_q.where(TaskItem.id == -1)
+        base_q = base_q.where(TaskItem.shop_id.in_(allowed_shop_ids))
+    if selected_shop_id is not None:
+        base_q = base_q.where(TaskItem.shop_id == selected_shop_id)
+    return base_q
+
+
+def _task_manager_search_clause(search: str | None):
+    term = (search or "").strip()
+    if not term:
+        return None
+    pattern = f"%{term}%"
+    return or_(
+        TaskItem.task_text.ilike(pattern),
+        Aircraft.ac_reg.ilike(pattern),
+        WorkPackage.rfo_no.ilike(pattern),
+    )
+
+
+async def _resolve_task_manager_meeting_date(
+    db: AsyncSession,
+    requested_meeting_date: str | None,
+    allowed_shop_ids: set[int] | None,
+    selected_shop_id: int | None = None,
+) -> str:
+    requested = (requested_meeting_date or "").strip()
+    if requested:
+        return requested
+
+    configured = (
+        await db.execute(
+            select(SystemConfig.value).where(SystemConfig.key == "meeting_current_date")
+        )
+    ).scalar_one_or_none()
+    configured_value = (configured or "").strip()
+    configured_date = _parse_iso_date(configured_value)
+
+    visible_dates_q = _apply_task_manager_shop_scope(
+        (
+            select(TaskSnapshot.meeting_date)
+            .select_from(TaskSnapshot)
+            .join(TaskItem, TaskSnapshot.task_id == TaskItem.id)
+            .where(
+                TaskItem.is_active == True,
+                TaskSnapshot.is_deleted == False,
+            )
+        ),
+        allowed_shop_ids,
+        selected_shop_id,
+    )
+
+    if configured_date is not None:
+        configured_row = (
+            await db.execute(
+                visible_dates_q.where(TaskSnapshot.meeting_date == configured_date).limit(1)
+            )
+        ).first()
+        if configured_row:
+            return configured_value
+
+    latest_visible = (
+        await db.execute(
+            visible_dates_q.order_by(TaskSnapshot.meeting_date.desc()).limit(1)
+        )
+    ).scalar_one_or_none()
+    if latest_visible:
+        return latest_visible.isoformat() if hasattr(latest_visible, "isoformat") else str(latest_visible)
+
+    return configured_value
 
 
 async def _compute_mob_badges(db: AsyncSession, user: dict) -> dict:
@@ -276,9 +509,20 @@ async def _get_shops(db: AsyncSession) -> list:
     return (await db.execute(select(Shop).order_by(Shop.code))).scalars().all()
 
 
-async def _get_supervisors(db: AsyncSession) -> list:
+async def _get_supervisors(
+    db: AsyncSession,
+    allowed_shop_ids: set[int] | None = None,
+    selected_shop_id: int | None = None,
+) -> list:
     """Get users who have SUPERVISOR role."""
     from app.models.user import Role, user_roles
+
+    if allowed_shop_ids is not None:
+        if not allowed_shop_ids:
+            return []
+        if selected_shop_id is not None and selected_shop_id not in allowed_shop_ids:
+            return []
+
     q = (
         select(User)
         .join(user_roles, User.id == user_roles.c.user_id)
@@ -286,6 +530,13 @@ async def _get_supervisors(db: AsyncSession) -> list:
         .where(Role.name == "SUPERVISOR", User.is_active == True)
         .order_by(User.name)
     )
+    if allowed_shop_ids is not None or selected_shop_id is not None:
+        q = q.join(UserShopAccess, User.id == UserShopAccess.user_id)
+        if allowed_shop_ids is not None:
+            q = q.where(UserShopAccess.shop_id.in_(allowed_shop_ids))
+        if selected_shop_id is not None:
+            q = q.where(UserShopAccess.shop_id == selected_shop_id)
+        q = q.distinct()
     return (await db.execute(q)).scalars().all()
 
 
@@ -306,6 +557,29 @@ async def _get_work_packages(db: AsyncSession) -> list:
     return (
         await db.execute(select(WorkPackage).where(WorkPackage.status == "ACTIVE").order_by(WorkPackage.rfo_no))
     ).scalars().all()
+
+
+async def _get_task_manager_rfos(
+    db: AsyncSession,
+    allowed_shop_ids: set[int] | None = None,
+    selected_shop_id: int | None = None,
+) -> list:
+    q = _apply_task_manager_shop_scope(
+        (
+            select(WorkPackage.rfo_no, WorkPackage.title)
+            .join(TaskItem, TaskItem.work_package_id == WorkPackage.id)
+            .where(
+                WorkPackage.status == "ACTIVE",
+                WorkPackage.rfo_no.isnot(None),
+                TaskItem.is_active == True,
+            )
+            .distinct()
+            .order_by(WorkPackage.rfo_no)
+        ),
+        allowed_shop_ids,
+        selected_shop_id,
+    )
+    return (await db.execute(q)).all()
 
 
 def _snap_to_dict(snap: TaskSnapshot, task: TaskItem, ac_reg: str | None = None,
@@ -365,20 +639,7 @@ async def task_manager_page(
     is_admin = "ADMIN" in roles
     airline_filter = _normalize_airline_filter(airline)
     current_view = _normalize_task_manager_view(view)
-
-    # Default meeting_date to configured week or latest available snapshot date
-    if not meeting_date:
-        cfg_row = (await db.execute(
-            select(SystemConfig.value).where(SystemConfig.key == "meeting_current_date")
-        )).scalar_one_or_none()
-        if cfg_row:
-            meeting_date = cfg_row
-        else:
-            latest_md = (await db.execute(
-                select(func.max(TaskSnapshot.meeting_date)).where(TaskSnapshot.is_deleted == False)
-            )).scalar()
-            if latest_md:
-                meeting_date = latest_md.isoformat() if hasattr(latest_md, 'isoformat') else str(latest_md)
+    search_filter = (search or "").strip()
 
     allowed_shop_ids: set[int] | None = None
     manageable_shop_ids: set[int] = set()
@@ -390,21 +651,34 @@ async def task_manager_page(
         allowed_shop_ids = {row.shop_id for row in access_rows}
         manageable_shop_ids = {row.shop_id for row in access_rows if row.access == "MANAGE"}
 
+    meeting_date = await _resolve_task_manager_meeting_date(
+        db,
+        meeting_date,
+        allowed_shop_ids,
+        shop_id,
+    )
     can_init_week = is_admin or bool(manageable_shop_ids)
+    search_clause = _task_manager_search_clause(search_filter)
 
     shops = await _get_shops(db)
     if allowed_shop_ids is not None:
         shops = [s for s in shops if s.id in allowed_shop_ids]
-    supervisors = await _get_supervisors(db)
-    aircraft_list = await _get_aircraft(db)
-    work_packages = await _get_work_packages(db)
+    filter_supervisors = await _get_supervisors(
+        db,
+        allowed_shop_ids=allowed_shop_ids,
+        selected_shop_id=shop_id,
+    )
+    supervisors = await _get_supervisors(db) if is_admin else filter_supervisors
+    aircraft_list = await _get_aircraft(db) if is_admin else []
+    work_packages = await _get_work_packages(db) if is_admin else []
+    all_rfos = await _get_task_manager_rfos(
+        db,
+        allowed_shop_ids=allowed_shop_ids,
+        selected_shop_id=shop_id,
+    )
 
     def _apply_shop_scope(base_q):
-        if allowed_shop_ids is None:
-            return base_q
-        if not allowed_shop_ids:
-            return base_q.where(TaskItem.id == -1)
-        return base_q.where(TaskItem.shop_id.in_(allowed_shop_ids))
+        return _apply_task_manager_shop_scope(base_q, allowed_shop_ids, shop_id)
 
     # Build snapshot query with eager-loaded relationships
     q = _apply_shop_scope(
@@ -422,8 +696,6 @@ async def task_manager_page(
     # Filters
     if meeting_date:
         q = q.where(TaskSnapshot.meeting_date == meeting_date)
-    if shop_id:
-        q = q.where(TaskItem.shop_id == shop_id)
     if airline_filter:
         if airline_filter == "SQ":
             q = q.where(Aircraft.airline == "SQ")
@@ -435,16 +707,14 @@ async def task_manager_page(
         q = q.where(TaskSnapshot.status == status)
     if rfo:
         q = q.where(WorkPackage.rfo_no == rfo)
-    if search:
-        q = q.where(TaskItem.task_text.ilike(f"%{search}%"))
+    if search_clause is not None:
+        q = q.where(search_clause)
 
     # Shared filter conditions (applied to count + stats + main query)
     def _apply_filters(base_q):
         base_q = _apply_shop_scope(base_q)
         if meeting_date:
             base_q = base_q.where(TaskSnapshot.meeting_date == meeting_date)
-        if shop_id:
-            base_q = base_q.where(TaskItem.shop_id == shop_id)
         if airline_filter:
             if airline_filter == "SQ":
                 base_q = base_q.where(Aircraft.airline == "SQ")
@@ -456,8 +726,8 @@ async def task_manager_page(
             base_q = base_q.where(TaskSnapshot.status == status)
         if rfo:
             base_q = base_q.where(WorkPackage.rfo_no == rfo)
-        if search:
-            base_q = base_q.where(TaskItem.task_text.ilike(f"%{search}%"))
+        if search_clause is not None:
+            base_q = base_q.where(search_clause)
         return base_q
 
     # Base joins for count/stats queries
@@ -584,13 +854,6 @@ async def task_manager_page(
             "pct_completed": round(grp_status["COMPLETED"] / n * 100),
         })
 
-    # All RFOs for filter dropdown
-    all_rfos = (await db.execute(
-        select(WorkPackage.rfo_no, WorkPackage.title)
-        .where(WorkPackage.status == "ACTIVE", WorkPackage.rfo_no.isnot(None))
-        .order_by(WorkPackage.rfo_no)
-    )).all()
-
     return templates.TemplateResponse(request, "tasks/manager.html", _ctx(
         request, current_user,
         page="tasks",
@@ -602,9 +865,10 @@ async def task_manager_page(
         supervisor_id=supervisor_id,
         status_filter=status or "",
         rfo_filter=rfo or "",
-        search_filter=search or "",
+        search_filter=search_filter,
         current_view=current_view,
         shops=shops,
+        filter_supervisors=filter_supervisors,
         supervisors=supervisors,
         aircraft_list=aircraft_list,
         work_packages=work_packages,
@@ -813,9 +1077,9 @@ async def task_entry_page(
     threshold_hours = int(configs.get("needs_update_threshold_hours", "72"))
     threshold_dt = datetime.now(timezone.utc) - timedelta(hours=threshold_hours)
     allowed_shop_ids = await _get_allowed_shop_ids(db, current_user)
+    editable_shop_ids = await _get_entry_editable_shop_ids(db, current_user)
     max_access = await _get_max_access_level(db, current_user)
     has_task_access = max_access is not None
-    can_edit = max_access in ("EDIT", "MANAGE")
     visibility_clause = _entry_visibility_clause(current_user, allowed_shop_ids)
     search_filter = _normalize_entry_search(search)
     available_meeting_dates = await _get_entry_meeting_dates(db, visibility_clause)
@@ -824,8 +1088,11 @@ async def task_entry_page(
         configs.get("meeting_current_date"),
         available_meeting_dates,
     )
-
-    workers = await _get_workers(db)
+    selected_aircraft = await _get_entry_aircraft_by_reg(db, ac)
+    workers_by_shop = await _get_entry_workers_by_shop(
+        db,
+        None if editable_shop_ids is None else editable_shop_ids,
+    )
 
     # Build aircraft groups with task counts and badge indicators
     ac_q = (
@@ -920,13 +1187,12 @@ async def task_entry_page(
     # Load tasks for selected aircraft
     tasks = []
     editing_task = None
-    selected_ac_id = None
-    selected_rfo = None
-    selected_shop_id = None
-    selected_meeting_date = None
-    selected_work_package_id = None
+    editing_workers = []
+    selected_ac_id = selected_aircraft.id if selected_aircraft else None
+    visible_rfo_values: set[str] = set()
+    visible_editable_shop_ids: set[int] = set()
 
-    if ac:
+    if ac and selected_aircraft:
         task_q = (
             select(TaskSnapshot, TaskItem, Aircraft, WorkPackage, User)
             .join(TaskItem, TaskSnapshot.task_id == TaskItem.id)
@@ -948,6 +1214,7 @@ async def task_entry_page(
         task_rows = (await db.execute(task_q)).all()
 
         for snap, task, aircraft, wp, worker in task_rows:
+            task_can_edit = _can_edit_task_item(current_user, editable_shop_ids, task)
             is_new = bool(task.distributed_at and snap.supervisor_updated_at is None)
             needs_update = bool(
                 snap.supervisor_updated_at
@@ -967,25 +1234,38 @@ async def task_entry_page(
                 "version": snap.version,
                 "assigned_worker": worker.name if worker else None,
                 "assigned_worker_id": task.assigned_worker_id,
+                "shop_id": task.shop_id,
+                "work_package_id": task.work_package_id,
                 "is_new": is_new,
                 "needs_update": needs_update,
+                "can_edit": task_can_edit,
+                "detail_url": f"/tasks/{task.id}",
             }
             tasks.append(d)
 
-            if selected_ac_id is None:
-                selected_ac_id = aircraft.id
-            if selected_shop_id is None:
-                selected_shop_id = task.shop_id
-            if selected_meeting_date is None and snap.meeting_date:
-                selected_meeting_date = snap.meeting_date.isoformat()
-            if selected_work_package_id is None:
-                selected_work_package_id = task.work_package_id
             if wp and wp.rfo_no:
-                selected_rfo = wp.rfo_no
+                visible_rfo_values.add(wp.rfo_no)
+            if task_can_edit:
+                visible_editable_shop_ids.add(task.shop_id)
 
             # Load editing task details
-            if edit and task.id == edit:
+            if edit and task.id == edit and task_can_edit:
                 editing_task = d
+                editing_workers = workers_by_shop.get(task.shop_id, [])
+
+    selected_rfo = next(iter(visible_rfo_values)) if len(visible_rfo_values) == 1 else None
+    default_create_shop_id = (
+        next(iter(visible_editable_shop_ids))
+        if len(visible_editable_shop_ids) == 1
+        else None
+    )
+    create_context = await _build_entry_create_context(
+        db,
+        current_user=current_user,
+        editable_shop_ids=editable_shop_ids,
+        selected_aircraft=selected_aircraft,
+        default_shop_id=default_create_shop_id,
+    )
 
     # Mobile badge counts
     badges = await _compute_mob_badges(db, current_user)
@@ -998,20 +1278,17 @@ async def task_entry_page(
         search_filter=search_filter,
         status_filter=status or "",
         quick_filter=quick or "",
-        selected_ac=ac or "",
+        selected_ac=selected_aircraft.ac_reg if selected_aircraft else (ac or ""),
         selected_ac_id=selected_ac_id,
-        selected_shop_id=selected_shop_id,
-        selected_meeting_date=selected_meeting_date or "",
-        selected_work_package_id=selected_work_package_id,
         selected_rfo=selected_rfo,
         ac_groups=ac_groups,
         tasks=tasks,
         editing_task=editing_task,
-        editing_task_id=edit,
-        workers=workers,
+        editing_task_id=editing_task["task_id"] if editing_task else None,
+        editing_workers=editing_workers,
         shop_context=current_user.get("team", "All Shops"),
         has_task_access=has_task_access,
-        can_edit=can_edit,
+        **create_context,
         **badges,
     ))
 
@@ -1285,8 +1562,8 @@ async def mobile_m2(
     threshold_hours = int(configs.get("needs_update_threshold_hours", "72"))
     threshold_dt = datetime.now(timezone.utc) - timedelta(hours=threshold_hours)
     allowed_shop_ids = await _get_allowed_shop_ids(db, current_user)
+    editable_shop_ids = await _get_entry_editable_shop_ids(db, current_user)
     visibility_clause = _entry_visibility_clause(current_user, allowed_shop_ids)
-    workers = await _get_workers(db)
     search_filter = _normalize_entry_search(search)
     available_meeting_dates = await _get_entry_meeting_dates(db, visibility_clause)
     effective_meeting_date = _resolve_entry_meeting_date(
@@ -1294,6 +1571,7 @@ async def mobile_m2(
         configs.get("meeting_current_date"),
         available_meeting_dates,
     )
+    selected_aircraft = await _get_entry_aircraft_by_reg(db, ac)
 
     task_q = (
         select(TaskSnapshot, TaskItem, Aircraft, WorkPackage, User)
@@ -1315,26 +1593,19 @@ async def mobile_m2(
     task_rows = (await db.execute(task_q)).all()
 
     tasks = []
-    selected_ac_id = None
-    selected_shop_id = None
-    selected_work_package_id = None
-    selected_meeting_date = None
-    rfo_no = None
+    selected_ac_id = selected_aircraft.id if selected_aircraft else None
+    visible_rfo_values: set[str] = set()
+    visible_editable_shop_ids: set[int] = set()
     total_mh = 0.0
     for snap, task, aircraft, wp, worker in task_rows:
+        task_can_edit = _can_edit_task_item(current_user, editable_shop_ids, task)
         is_new = bool(task.distributed_at and snap.supervisor_updated_at is None)
         needs_update = bool(snap.supervisor_updated_at and snap.supervisor_updated_at < threshold_dt)
 
-        if selected_ac_id is None:
-            selected_ac_id = aircraft.id
-        if selected_shop_id is None:
-            selected_shop_id = task.shop_id
-        if selected_work_package_id is None:
-            selected_work_package_id = task.work_package_id
-        if selected_meeting_date is None:
-            selected_meeting_date = snap.meeting_date
         if wp and wp.rfo_no:
-            rfo_no = wp.rfo_no
+            visible_rfo_values.add(wp.rfo_no)
+        if task_can_edit:
+            visible_editable_shop_ids.add(task.shop_id)
 
         last_upd = ""
         if snap.supervisor_updated_at:
@@ -1349,10 +1620,24 @@ async def mobile_m2(
             "critical_issue": snap.critical_issue, "version": snap.version,
             "assigned_worker": worker.name if worker else None,
             "assigned_worker_id": task.assigned_worker_id,
+            "can_edit": task_can_edit,
             "is_new": is_new, "needs_update": needs_update,
             "last_updated_display": last_upd,
         })
         total_mh += float(snap.mh_incurred_hours)
+
+    create_context = await _build_entry_create_context(
+        db,
+        current_user=current_user,
+        editable_shop_ids=editable_shop_ids,
+        selected_aircraft=selected_aircraft,
+        default_shop_id=(
+            next(iter(visible_editable_shop_ids))
+            if len(visible_editable_shop_ids) == 1
+            else None
+        ),
+    )
+    rfo_no = next(iter(visible_rfo_values)) if len(visible_rfo_values) == 1 else None
 
     return templates.TemplateResponse(request, "tasks/partials/_m2_tasks.html", {
         "request": request,
@@ -1366,9 +1651,7 @@ async def mobile_m2(
         "status_filter": status or "",
         "quick_filter": quick or "",
         "selected_ac_id": selected_ac_id,
-        "workers": workers,
-        "shop_id": selected_shop_id or "",
-        "work_package_id": selected_work_package_id or "",
+        **create_context,
     })
 
 
@@ -1387,10 +1670,8 @@ async def mobile_m3(
     db: AsyncSession = Depends(get_db),
 ):
     allowed_shop_ids = await _get_allowed_shop_ids(db, current_user)
-    max_access = await _get_max_access_level(db, current_user)
-    can_edit = max_access in ("EDIT", "MANAGE")
+    editable_shop_ids = await _get_entry_editable_shop_ids(db, current_user)
     visibility_clause = _entry_visibility_clause(current_user, allowed_shop_ids)
-    workers = await _get_workers(db)
     search_filter = _normalize_entry_search(search)
 
     snap = (await db.execute(select(TaskSnapshot).where(TaskSnapshot.id == snapshot_id))).scalar_one_or_none()
@@ -1402,16 +1683,39 @@ async def mobile_m3(
             "search_filter": search_filter,
             "status_filter": status or "",
             "quick_filter": quick or "",
-            "workers": workers,
+            "can_create_tasks": False,
+            "shop_options": [],
+            "work_package_options": [],
+            "workers_by_shop": {},
+            "create_shop_id": None,
+            "create_work_package_id": None,
         })
 
     task_item = (await db.execute(select(TaskItem).where(TaskItem.id == snap.task_id))).scalar_one()
     if not _can_view_task_item(current_user, allowed_shop_ids, task_item):
         raise APIError(403, "Shop access denied", "SHOP_ACCESS_DENIED")
+    if not _can_edit_task_item(current_user, editable_shop_ids, task_item):
+        return await mobile_m5(
+            request,
+            snapshot_id=snapshot_id,
+            ac=ac,
+            meeting_date=meeting_date,
+            search=search,
+            status=status,
+            quick=quick,
+            back="tasks",
+            current_user=current_user,
+            db=db,
+        )
+    workers_by_shop = await _get_entry_workers_by_shop(
+        db,
+        None if editable_shop_ids is None else editable_shop_ids,
+    )
     worker = None
     if task_item.assigned_worker_id:
         worker = (await db.execute(select(User).where(User.id == task_item.assigned_worker_id))).scalar_one_or_none()
     effective_meeting_date = meeting_date or (snap.meeting_date.isoformat() if snap.meeting_date else "")
+    selected_aircraft = await _get_entry_aircraft_by_id(db, task_item.aircraft_id)
 
     # Determine next snapshot for Save & Next
     next_q = (
@@ -1445,11 +1749,18 @@ async def mobile_m3(
         "assigned_worker_id": task_item.assigned_worker_id,
         "last_sync": last_sync,
     }
+    create_context = await _build_entry_create_context(
+        db,
+        current_user=current_user,
+        editable_shop_ids=editable_shop_ids,
+        selected_aircraft=selected_aircraft,
+        default_shop_id=task_item.shop_id,
+    )
 
     return templates.TemplateResponse(request, "tasks/partials/_m3_update.html", {
         "request": request,
         "task": task_data,
-        "workers": workers,
+        "workers": workers_by_shop.get(task_item.shop_id, []),
         "ac_reg": ac,
         "meeting_date": effective_meeting_date,
         "search_filter": search_filter,
@@ -1457,9 +1768,8 @@ async def mobile_m3(
         "quick_filter": quick or "",
         "next_snapshot_id": next_snap.id if next_snap else None,
         "selected_ac_id": task_item.aircraft_id,
-        "shop_id": task_item.shop_id or "",
-        "work_package_id": task_item.work_package_id or "",
-        "can_edit": can_edit,
+        "can_edit": True,
+        **create_context,
     })
 
 
@@ -1478,17 +1788,28 @@ async def mobile_m4(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    workers = await _get_workers(db)
+    editable_shop_ids = await _get_entry_editable_shop_ids(db, current_user)
+    selected_aircraft = await _get_entry_aircraft_by_id(db, ac_id)
+    if selected_aircraft is None:
+        raise APIError(404, "Aircraft not found", "NOT_FOUND")
+    create_context = await _build_entry_create_context(
+        db,
+        current_user=current_user,
+        editable_shop_ids=editable_shop_ids,
+        selected_aircraft=selected_aircraft,
+        default_shop_id=shop_id,
+        default_work_package_id=work_package_id,
+    )
+    if not create_context["can_create_tasks"]:
+        raise APIError(403, "Shop access denied", "SHOP_ACCESS_DENIED")
     return templates.TemplateResponse(request, "tasks/partials/_m4_add_task.html", {
         "request": request,
-        "workers": workers,
-        "selected_ac_id": ac_id,
+        "selected_ac_id": selected_aircraft.id,
         "meeting_date": meeting_date or "",
         "search_filter": _normalize_entry_search(search),
-        "shop_id": shop_id or "",
-        "work_package_id": work_package_id or "",
         "status_filter": status or "",
         "quick_filter": quick or "",
+        **create_context,
     })
 
 
@@ -1503,16 +1824,20 @@ async def mobile_m5(
     search: str | None = Query(None),
     status: str | None = Query(None),
     quick: str | None = Query(None),
+    back: str | None = Query(None),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     allowed_shop_ids = await _get_allowed_shop_ids(db, current_user)
+    editable_shop_ids = await _get_entry_editable_shop_ids(db, current_user)
     snap = (await db.execute(select(TaskSnapshot).where(TaskSnapshot.id == snapshot_id))).scalar_one_or_none()
     if not snap:
         return templates.TemplateResponse(request, "tasks/partials/_m5_detail.html", {
             "request": request, "task": {}, "snapshots": [], "audit_logs": [], "ac_reg": ac,
             "status_filter": status or "",
             "quick_filter": quick or "",
+            "back_label": "Back to Tasks",
+            "back_href": f"/tasks/entry/mobile/m2?{urlencode({'ac': ac})}",
         })
 
     task_item = (await db.execute(
@@ -1527,6 +1852,7 @@ async def mobile_m5(
     ti, aircraft, wp, shop = task_item
     if not _can_view_task_item(current_user, allowed_shop_ids, ti):
         raise APIError(403, "Shop access denied", "SHOP_ACCESS_DENIED")
+    can_edit = _can_edit_task_item(current_user, editable_shop_ids, ti)
 
     supervisor = worker = None
     if ti.assigned_supervisor_id:
@@ -1578,6 +1904,21 @@ async def mobile_m5(
         "action": log.action, "actor_name": user.name if user else None,
         "created_at": log.created_at.strftime("%b %d, %H:%M") if log.created_at else None,
     } for log, user in audit_rows]
+    filter_params = {"ac": ac}
+    if meeting_date:
+        filter_params["meeting_date"] = meeting_date
+    if search:
+        filter_params["search"] = search
+    if status:
+        filter_params["status"] = status
+    if quick:
+        filter_params["quick"] = quick
+    if back == "update" and can_edit:
+        back_label = "Back to Quick Update"
+        back_href = f"/tasks/entry/mobile/m3?{urlencode({'snapshot_id': snapshot_id, **filter_params})}"
+    else:
+        back_label = "Back to Tasks"
+        back_href = f"/tasks/entry/mobile/m2?{urlencode(filter_params)}"
 
     return templates.TemplateResponse(request, "tasks/partials/_m5_detail.html", {
         "request": request,
@@ -1589,4 +1930,6 @@ async def mobile_m5(
         "search_filter": _normalize_entry_search(search),
         "status_filter": status or "",
         "quick_filter": quick or "",
+        "back_label": back_label,
+        "back_href": back_href,
     })

@@ -623,9 +623,44 @@ async def test_admin_pages_worker_forbidden(worker_client, db):
 
 async def test_mobile_m4_route(async_client, db):
     """GET /tasks/entry/mobile/m4 returns add-task partial."""
-    resp = await async_client.get("/tasks/entry/mobile/m4")
+    from app.models.reference import WorkPackage
+    from sqlalchemy import select
+
+    wp_id = await _seed_wp(db)
+    shop_id = await _seed_shop(db)
+    await _grant_shop_access(db, user_id=3, shop_id=shop_id, access="VIEW")
+
+    async with db() as s:
+        wp = (await s.execute(select(WorkPackage).where(WorkPackage.id == wp_id))).scalar_one()
+        ac_id = wp.aircraft_id
+
+    resp = await async_client.get(f"/tasks/entry/mobile/m4?ac_id={ac_id}&meeting_date=2026-03-10")
     assert resp.status_code == 200
-    assert "Add Task" in resp.text
+    html = resp.text
+    assert "Add Task" in html
+    assert 'id="m4-shop-id"' in html
+    assert 'id="m4-wp-id"' in html
+    assert "credentials: 'same-origin'" in html
+    assert "Test Worker" in html
+    assert "Other Team Worker" not in html
+
+
+async def test_mobile_m4_forbidden_without_create_access(worker_client, db):
+    """GET /tasks/entry/mobile/m4 should reject users without editable shop access."""
+    from app.models.reference import WorkPackage
+    from sqlalchemy import select
+
+    wp_id = await _seed_wp(db)
+    shop_id = await _seed_shop(db)
+    await _grant_shop_access(db, user_id=3, shop_id=shop_id, access="VIEW")
+
+    async with db() as s:
+        wp = (await s.execute(select(WorkPackage).where(WorkPackage.id == wp_id))).scalar_one()
+        ac_id = wp.aircraft_id
+
+    resp = await worker_client.get(f"/tasks/entry/mobile/m4?ac_id={ac_id}&meeting_date=2026-03-10")
+    assert resp.status_code == 403
+    assert resp.json()["code"] == "SHOP_ACCESS_DENIED"
 
 
 async def test_task_entry_scopes_shop_visibility(worker_client, db):
@@ -700,6 +735,73 @@ async def test_mobile_m5_allows_assigned_worker_without_shop_row(worker_client, 
     resp = await worker_client.get(f"/tasks/entry/mobile/m5?snapshot_id={snap_id}&ac=9V-TST")
     assert resp.status_code == 200
     assert "Test task" in resp.text
+
+
+async def test_mobile_m2_routes_readonly_and_editable_tasks_differ(worker_client, db):
+    """Mobile M2 should route editable tasks to m3 and read-only tasks to m5."""
+    from sqlalchemy import select
+
+    from app.models.shop import Shop
+    from app.models.task import TaskItem
+
+    wp_id = await _seed_wp(db)
+    async with db() as s:
+        shop_edit = Shop(code="SME", name="Editable Shop", created_at=NOW)
+        shop_readonly = Shop(code="SMR", name="Readonly Shop", created_at=NOW)
+        s.add(shop_edit)
+        s.add(shop_readonly)
+        await s.flush()
+        shop_edit_id = shop_edit.id
+        shop_readonly_id = shop_readonly.id
+        await s.commit()
+
+    task_edit_id = await _seed_task(db, wp_id=wp_id, shop_id=shop_edit_id, worker_id=3)
+    task_readonly_id = await _seed_task(db, wp_id=wp_id, shop_id=shop_readonly_id, worker_id=3)
+    snap_edit_id = await _seed_snapshot(db, task_id=task_edit_id, meeting_date=date(2026, 3, 10), status="IN_PROGRESS")
+    snap_readonly_id = await _seed_snapshot(db, task_id=task_readonly_id, meeting_date=date(2026, 3, 10), status="WAITING")
+    await _grant_shop_access(db, user_id=3, shop_id=shop_edit_id, access="EDIT")
+
+    async with db() as s:
+        editable_task = (await s.execute(select(TaskItem).where(TaskItem.id == task_edit_id))).scalar_one()
+        readonly_task = (await s.execute(select(TaskItem).where(TaskItem.id == task_readonly_id))).scalar_one()
+        editable_task.task_text = "Editable mobile task"
+        readonly_task.task_text = "Readonly mobile task"
+        await s.commit()
+
+    resp = await worker_client.get("/tasks/entry/mobile/m2?ac=9V-TST&meeting_date=2026-03-10")
+    assert resp.status_code == 200
+    html = resp.text
+    assert "Editable mobile task" in html
+    assert "Readonly mobile task" in html
+    assert f'/tasks/entry/mobile/m3?snapshot_id={snap_edit_id}' in html
+    assert f'/tasks/entry/mobile/m5?snapshot_id={snap_readonly_id}' in html
+    assert f'/tasks/entry?ac=9V-TST&amp;edit={task_edit_id}' in html
+    assert f'/tasks/entry?ac=9V-TST&amp;meeting_date=2026-03-10' in html
+
+
+async def test_mobile_m3_readonly_task_falls_back_to_detail(worker_client, db):
+    """Mobile M3 direct access should fall back to the read-only detail stage when the task is not editable."""
+    from app.models.shop import Shop
+
+    wp_id = await _seed_wp(db)
+    async with db() as s:
+        shop = Shop(code="SMD", name="Detail Only Shop", created_at=NOW)
+        s.add(shop)
+        await s.flush()
+        shop_id = shop.id
+        await s.commit()
+
+    task_id = await _seed_task(db, wp_id=wp_id, shop_id=shop_id, worker_id=3)
+    snap_id = await _seed_snapshot(db, task_id=task_id, meeting_date=date(2026, 3, 10), status="IN_PROGRESS")
+
+    resp = await worker_client.get(
+        f"/tasks/entry/mobile/m3?snapshot_id={snap_id}&ac=9V-TST&meeting_date=2026-03-10"
+    )
+    assert resp.status_code == 200
+    assert 'id="mob-m5"' in resp.text
+    assert 'id="mob-m3"' not in resp.text
+    assert "Back to Tasks" in resp.text
+    assert "Quick Update" not in resp.text
 
 
 async def test_mobile_badges_scope_to_visible_domain(db):

@@ -10,8 +10,6 @@
     <input type="hidden" id="m4-aircraft-id" value="{{ selected_ac_id or '' }}"/>
     <input type="hidden" id="m4-meeting-date" value="{{ meeting_date or '' }}"/>
     <input type="hidden" id="m4-search-filter" value="{{ search_filter or '' }}"/>
-    <input type="hidden" id="m4-shop-id" value="{{ shop_id or '' }}"/>
-    <input type="hidden" id="m4-wp-id" value="{{ work_package_id or '' }}"/>
     <input type="hidden" id="m4-status-filter" value="{{ status_filter or '' }}"/>
     <input type="hidden" id="m4-quick-filter" value="{{ quick_filter or '' }}"/>
     <div>
@@ -32,6 +30,26 @@
         <input type="date" id="m4-deadline" class="inp w-full h-12 text-base"/>
       </div>
     </div>
+    <div class="grid grid-cols-1 gap-3">
+      <div>
+        <div class="mob-label">Shop</div>
+        <select id="m4-shop-id" class="inp w-full h-12 text-base" onchange="m4SyncWorkerOptions()">
+          <option value="">Select shop</option>
+          {% for shop in shop_options %}
+          <option value="{{ shop.id }}" {% if create_shop_id == shop.id %}selected{% endif %}>{{ shop.code }}{% if shop.name %} - {{ shop.name }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <div class="mob-label">RFO</div>
+        <select id="m4-wp-id" class="inp w-full h-12 text-base">
+          <option value="">Optional</option>
+          {% for wp in work_package_options %}
+          <option value="{{ wp.id }}" {% if create_work_package_id == wp.id %}selected{% endif %}>{{ wp.rfo_no or 'No RFO' }}{% if wp.title %} - {{ wp.title }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
     <div class="grid grid-cols-2 gap-3">
       <div>
         <div class="mob-label">Planned MH</div>
@@ -39,11 +57,15 @@
       </div>
       <div>
         <div class="mob-label">Assign Worker</div>
-        <select id="m4-worker" class="inp w-full h-12 text-base">
+        <select id="m4-worker" class="inp w-full h-12 text-base" {% if create_shop_id is none %}disabled{% endif %}>
+          {% if create_shop_id is none %}
+          <option value="">Select shop first</option>
+          {% else %}
           <option value="">Unassigned</option>
-          {% for w in workers %}
+          {% for w in workers_by_shop.get(create_shop_id, []) %}
           <option value="{{ w.id }}">{{ w.name }}</option>
           {% endfor %}
+          {% endif %}
         </select>
       </div>
     </div>
@@ -58,7 +80,8 @@
   </div>
 </div>
 <script>
-let mobCreateTaskInFlight = false;
+var mobCreateTaskInFlight = false;
+var M4_WORKERS_BY_SHOP = {{ workers_by_shop | tojson }};
 
 function m4GetErrorMessage(payload, fallback) {
   if (!payload) return fallback;
@@ -92,6 +115,43 @@ function m4SetButtonBusy(button, busy, busyText) {
   if (button.dataset.prevText) button.textContent = button.dataset.prevText;
 }
 
+function m4WorkersForShop(shopId) {
+  if (shopId === '' || shopId === null || shopId === undefined) return [];
+  return M4_WORKERS_BY_SHOP[String(shopId)] || M4_WORKERS_BY_SHOP[shopId] || [];
+}
+
+function m4SetWorkerOptions(selectedValue) {
+  var shopId = (document.getElementById('m4-shop-id') || {}).value || '';
+  var workerSelect = document.getElementById('m4-worker');
+  if (!workerSelect) return;
+  var currentValue = selectedValue !== undefined ? selectedValue : workerSelect.value;
+  workerSelect.innerHTML = '';
+  if (!shopId) {
+    workerSelect.disabled = true;
+    var emptyOpt = document.createElement('option');
+    emptyOpt.value = '';
+    emptyOpt.textContent = 'Select shop first';
+    workerSelect.appendChild(emptyOpt);
+    return;
+  }
+  workerSelect.disabled = false;
+  var blankOpt = document.createElement('option');
+  blankOpt.value = '';
+  blankOpt.textContent = 'Unassigned';
+  workerSelect.appendChild(blankOpt);
+  m4WorkersForShop(shopId).forEach(function(worker) {
+    var opt = document.createElement('option');
+    opt.value = String(worker.id);
+    opt.textContent = worker.name;
+    if (String(worker.id) === String(currentValue || '')) opt.selected = true;
+    workerSelect.appendChild(opt);
+  });
+}
+
+function m4SyncWorkerOptions() {
+  m4SetWorkerOptions();
+}
+
 async function m4RequestJson(url, options) {
   if (typeof taskEntryRequestJson === 'function') {
     return taskEntryRequestJson(url, options || {});
@@ -107,7 +167,7 @@ async function m4RequestJson(url, options) {
     body = opts.formData;
   }
 
-  var res = await fetch(url, { method: method, headers: headers, body: body });
+  var res = await fetch(url, { method: method, headers: headers, body: body, credentials: 'same-origin' });
   var raw = await res.text();
   var data = {};
   if (raw) {
@@ -189,7 +249,9 @@ async function mobCreateTask() {
     document.getElementById('m4-planned-mh').value = '';
     document.getElementById('m4-deadline').value = '';
     document.getElementById('m4-remarks').value = '';
-    document.getElementById('m4-worker').value = '';
+    document.getElementById('m4-shop-id').value = '{{ create_shop_id or "" }}';
+    document.getElementById('m4-wp-id').value = '{{ create_work_package_id or "" }}';
+    m4SetWorkerOptions('');
 
     var ac = document.getElementById('mob-ac-reg') ? document.getElementById('mob-ac-reg').value : '';
     var meetingDateFilter = (document.getElementById('m4-meeting-date') || {}).value || '';
@@ -218,4 +280,6 @@ async function mobCreateTask() {
     m4SetButtonBusy(submitBtn, false);
   }
 }
+
+m4SetWorkerOptions();
 </script>

@@ -13,10 +13,12 @@
       <div class="relative">
         <button class="text-surf-400 text-lg px-2" onclick="var m=this.nextElementSibling;m.style.display=m.style.display==='none'?'':'none'">&#8943;</button>
         <div style="display:none;position:absolute;right:0;top:100%;margin-top:4px;z-index:20;min-width:180px" class="card shadow-xl overflow-hidden">
+          {% if can_create_tasks %}
           <button class="w-full text-left px-4 py-3 text-sm font-medium text-navy-900 hover:bg-surf-50 border-b border-surf-100"
                   onclick="this.parentElement.style.display='none';document.getElementById('mob-m4-modal').style.display='flex'">+ Add Task</button>
+          {% endif %}
           <button class="w-full text-left px-4 py-3 text-sm font-medium text-navy-900 hover:bg-surf-50"
-                  hx-get="/tasks/entry/mobile/m5?snapshot_id={{ task.snapshot_id }}&amp;ac={{ ac_reg }}&amp;meeting_date={{ meeting_date }}{% if search_filter %}&amp;search={{ search_filter | urlencode }}{% endif %}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}"
+                  hx-get="/tasks/entry/mobile/m5?snapshot_id={{ task.snapshot_id }}&amp;ac={{ ac_reg }}&amp;back=update&amp;meeting_date={{ meeting_date }}{% if search_filter %}&amp;search={{ search_filter | urlencode }}{% endif %}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if quick_filter %}&amp;quick={{ quick_filter }}{% endif %}"
                   hx-target="#mob-entry-stage"
                   onclick="this.parentElement.style.display='none'">View Task Detail</button>
         </div>
@@ -116,10 +118,12 @@
   <input type="hidden" id="mob-status-filter" value="{{ status_filter or '' }}"/>
   <input type="hidden" id="mob-quick-filter" value="{{ quick_filter or '' }}"/>
   {# M4 Add Task modal #}
+  {% if can_create_tasks %}
   {% include "tasks/partials/_m4_add_task.html" %}
+  {% endif %}
 </div>
 <script>
-let mobTaskSaveInFlight = false;
+var mobTaskSaveInFlight = false;
 
 function mobSelectStatus(btn, status) {
   document.querySelectorAll('#mob-status-grid .status-btn').forEach(function(b){b.classList.remove('active')});
@@ -197,7 +201,7 @@ async function mobTaskRequestJson(url, options) {
     body = opts.formData;
   }
 
-  var res = await fetch(url, { method: method, headers: headers, body: body });
+  var res = await fetch(url, { method: method, headers: headers, body: body, credentials: 'same-origin' });
   var raw = await res.text();
   var data = {};
   if (raw) {
@@ -241,17 +245,25 @@ async function mobSaveTask(goNext) {
   mobSetTaskButtonBusy(nextBtn, true, 'Saving...');
 
   try {
-    await mobTaskRequestJson('/api/tasks/snapshots/' + snapshotId, {
+    var snapshotResult = await mobTaskRequestJson('/api/tasks/snapshots/' + snapshotId, {
       method: 'PATCH',
       json: payload
     });
+    document.getElementById('mob-version').value = String(snapshotResult.version);
 
     var workerRaw = document.getElementById('mob-worker-select').value;
     var workerId = workerRaw ? parseInt(workerRaw, 10) : null;
-    await mobTaskRequestJson('/api/tasks/' + taskId + '/assign-worker', {
-      method: 'PATCH',
-      json: { assigned_worker_id: Number.isFinite(workerId) ? workerId : null }
-    });
+    try {
+      await mobTaskRequestJson('/api/tasks/' + taskId + '/assign-worker', {
+        method: 'PATCH',
+        json: { assigned_worker_id: Number.isFinite(workerId) ? workerId : null }
+      });
+    } catch (assignErr) {
+      var acReload = document.getElementById('mob-ac-reg').value;
+      showToast('Partial Success', 'Task updated, worker assign failed: ' + ((assignErr && assignErr.message) || 'Unknown error'), 'red');
+      mobLoadStage('/tasks/entry/mobile/m3?snapshot_id=' + snapshotId + '&ac=' + acReload + mobBuildFilterQuery());
+      return;
+    }
 
     showToast('Saved', goNext ? 'Loading next task...' : 'Snapshot updated', 'green');
     if (goNext) {

@@ -118,6 +118,39 @@ async def _grant_shop_access(db_factory, user_id, shop_id, access="VIEW"):
         await s.commit()
 
 
+async def _seed_supervisor(
+    db_factory,
+    *,
+    name="Scoped Supervisor",
+    employee_no="E900",
+    team="Sheet Metal",
+    shop_id=None,
+    access="EDIT",
+):
+    from sqlalchemy import select
+    from app.models.user import Role, User
+    from app.models.user_shop_access import UserShopAccess
+
+    async with db_factory() as s:
+        sup_role = (await s.execute(select(Role).where(Role.name == "SUPERVISOR"))).scalar_one()
+        user = User(
+            employee_no=employee_no,
+            name=name,
+            email=f"{employee_no.lower()}@test.com",
+            team=team,
+            created_at=NOW,
+            updated_at=NOW,
+        )
+        user.roles = [sup_role]
+        s.add(user)
+        await s.flush()
+        if shop_id is not None:
+            s.add(UserShopAccess(user_id=user.id, shop_id=shop_id, access=access, granted_by=1))
+        await s.commit()
+        await s.refresh(user)
+        return user
+
+
 def _extract_int_metric(html: str, pattern: str) -> int:
     match = re.search(pattern, html, re.DOTALL)
     assert match, f"Could not find metric with pattern: {pattern}"
@@ -128,6 +161,20 @@ def _extract_float_metric(html: str, pattern: str) -> float:
     match = re.search(pattern, html, re.DOTALL)
     assert match, f"Could not find metric with pattern: {pattern}"
     return float(match.group(1))
+
+
+def _extract_select_section(html: str, select_id: str) -> str:
+    marker = f'<select id="{select_id}"'
+    assert marker in html, f"Could not find select: {select_id}"
+    return html.split(marker, 1)[1].split("</select>", 1)[0]
+
+
+def _extract_opening_tag_by_id(html: str, element_id: str) -> str:
+    marker = f'id="{element_id}"'
+    idx = html.index(marker)
+    start = html.rfind("<", 0, idx)
+    end = html.index(">", idx)
+    return html[start:end + 1]
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -302,6 +349,134 @@ async def test_task_manager_refresh_keeps_view_and_kanban_uses_stable_card_ref(a
 
 
 @pytest.mark.asyncio
+async def test_task_manager_defaults_to_latest_visible_meeting_date_for_supervisor(sup_client, db):
+    """Task Manager should default to the latest meeting_date visible to the supervisor, not a hidden shop's newer week."""
+    visible_shop = await _seed_shop(db, code="SMA", name="Sheet Metal")
+    hidden_shop = await _seed_shop(db, code="AFM", name="Airframe")
+    visible_ac = await _seed_aircraft(db, ac_reg="9V-VIS")
+    hidden_ac = await _seed_aircraft(db, ac_reg="9V-HID")
+    visible_wp = await _seed_wp(db, visible_ac.id, rfo_no="RFO-VIS")
+    hidden_wp = await _seed_wp(db, hidden_ac.id, rfo_no="RFO-HID")
+    visible_task = await _seed_task(db, ac_id=visible_ac.id, shop_id=visible_shop.id, wp_id=visible_wp.id, text="Visible scope task")
+    hidden_task = await _seed_task(db, ac_id=hidden_ac.id, shop_id=hidden_shop.id, wp_id=hidden_wp.id, text="Hidden scope task")
+    await _seed_snapshot(db, task_id=visible_task.id, meeting_date=date(2026, 3, 10), status="IN_PROGRESS", mh=5.0)
+    await _seed_snapshot(db, task_id=hidden_task.id, meeting_date=date(2026, 3, 17), status="IN_PROGRESS", mh=7.0)
+    await _grant_shop_access(db, user_id=2, shop_id=visible_shop.id, access="EDIT")
+
+    resp = await sup_client.get("/tasks")
+    assert resp.status_code == 200
+    html = resp.text
+    assert 'name="meeting_date" value="2026-03-10"' in html
+    assert "Visible scope task" in html
+    assert "Hidden scope task" not in html
+
+
+@pytest.mark.asyncio
+async def test_task_manager_non_admin_scopes_metadata_and_lookup_datasets(sup_client, db):
+    """Supervisor Task Manager should hide inaccessible supervisor/RFO metadata and omit admin-only lookup datasets."""
+    visible_shop = await _seed_shop(db, code="SMA", name="Sheet Metal")
+    hidden_shop = await _seed_shop(db, code="AFM", name="Airframe")
+    visible_ac = await _seed_aircraft(db, ac_reg="9V-SCP")
+    hidden_ac = await _seed_aircraft(db, ac_reg="9V-HDN")
+    visible_wp = await _seed_wp(db, visible_ac.id, rfo_no="RFO-SCP")
+    hidden_wp = await _seed_wp(db, hidden_ac.id, rfo_no="RFO-HDN")
+    visible_task = await _seed_task(db, ac_id=visible_ac.id, shop_id=visible_shop.id, wp_id=visible_wp.id, text="Scoped visible task")
+    hidden_task = await _seed_task(db, ac_id=hidden_ac.id, shop_id=hidden_shop.id, wp_id=hidden_wp.id, text="Scoped hidden task")
+    await _seed_snapshot(db, task_id=visible_task.id, meeting_date=date(2026, 3, 18), status="IN_PROGRESS", mh=5.0)
+    await _seed_snapshot(db, task_id=hidden_task.id, meeting_date=date(2026, 3, 18), status="IN_PROGRESS", mh=3.0)
+    await _grant_shop_access(db, user_id=2, shop_id=visible_shop.id, access="EDIT")
+    await _seed_supervisor(
+        db,
+        name="Hidden Supervisor",
+        employee_no="E901",
+        team="Airframe",
+        shop_id=hidden_shop.id,
+    )
+
+    resp = await sup_client.get("/tasks?meeting_date=2026-03-18")
+    assert resp.status_code == 200
+    html = resp.text
+    supervisor_filter = _extract_select_section(html, "f-supervisor")
+    rfo_filter = _extract_select_section(html, "f-rfo")
+
+    assert "Test Supervisor" in supervisor_filter
+    assert "Hidden Supervisor" not in html
+    assert 'value="RFO-SCP"' in rfo_filter
+    assert 'value="RFO-HDN"' not in rfo_filter
+    assert "Scoped visible task" in html
+    assert "Scoped hidden task" not in html
+    assert "const AIRCRAFT_OPTIONS = [];" in html
+    assert "const WORK_PACKAGE_OPTIONS = [];" in html
+
+
+@pytest.mark.asyncio
+async def test_task_manager_selected_shop_narrows_filter_metadata(sup_client, db):
+    """Selecting a shop should narrow the supervisor and RFO filter options to that shop."""
+    shop_one = await _seed_shop(db, code="SMA", name="Sheet Metal")
+    shop_two = await _seed_shop(db, code="AFM", name="Airframe")
+    ac_one = await _seed_aircraft(db, ac_reg="9V-SH1")
+    ac_two = await _seed_aircraft(db, ac_reg="9V-SH2")
+    wp_one = await _seed_wp(db, ac_one.id, rfo_no="RFO-SH1")
+    wp_two = await _seed_wp(db, ac_two.id, rfo_no="RFO-SH2")
+    task_one = await _seed_task(db, ac_id=ac_one.id, shop_id=shop_one.id, wp_id=wp_one.id, text="Shop one task")
+    task_two = await _seed_task(db, ac_id=ac_two.id, shop_id=shop_two.id, wp_id=wp_two.id, text="Shop two task")
+    await _seed_snapshot(db, task_id=task_one.id, meeting_date=date(2026, 3, 18), status="IN_PROGRESS", mh=5.0)
+    await _seed_snapshot(db, task_id=task_two.id, meeting_date=date(2026, 3, 18), status="WAITING", mh=2.0)
+    await _grant_shop_access(db, user_id=2, shop_id=shop_one.id, access="EDIT")
+    await _grant_shop_access(db, user_id=2, shop_id=shop_two.id, access="EDIT")
+    await _seed_supervisor(
+        db,
+        name="Shop Two Supervisor",
+        employee_no="E902",
+        team="Airframe",
+        shop_id=shop_two.id,
+    )
+
+    resp = await sup_client.get(f"/tasks?meeting_date=2026-03-18&shop_id={shop_one.id}")
+    assert resp.status_code == 200
+    html = resp.text
+    supervisor_filter = _extract_select_section(html, "f-supervisor")
+    rfo_filter = _extract_select_section(html, "f-rfo")
+
+    assert "Test Supervisor" in supervisor_filter
+    assert "Shop Two Supervisor" not in supervisor_filter
+    assert 'value="RFO-SH1"' in rfo_filter
+    assert 'value="RFO-SH2"' not in rfo_filter
+
+
+@pytest.mark.asyncio
+async def test_task_manager_search_matches_ac_reg_and_rfo(async_client, db):
+    """Task Manager search should match aircraft registration and RFO number as well as task text."""
+    ac = await _seed_aircraft(db, ac_reg="9V-FIND")
+    shop = await _seed_shop(db)
+    wp = await _seed_wp(db, ac.id, rfo_no="RFO-FIND")
+    task = await _seed_task(db, ac_id=ac.id, shop_id=shop.id, wp_id=wp.id, text="Findable task")
+    await _seed_snapshot(db, task_id=task.id, meeting_date=date(2026, 3, 18), status="IN_PROGRESS", mh=5.0)
+
+    resp_ac = await async_client.get("/tasks?meeting_date=2026-03-18&search=9V-FIND")
+    assert resp_ac.status_code == 200
+    assert "Findable task" in resp_ac.text
+
+    resp_rfo = await async_client.get("/tasks?meeting_date=2026-03-18&search=RFO-FIND")
+    assert resp_rfo.status_code == 200
+    assert "Findable task" in resp_rfo.text
+    assert "Search task, AC reg, RFO..." in resp_rfo.text
+
+
+@pytest.mark.asyncio
+async def test_task_manager_bulk_status_modal_uses_selected_status(async_client, db):
+    """Task Manager bulk status action should use a selected target status instead of a hard-coded value."""
+    resp = await async_client.get("/tasks")
+    assert resp.status_code == 200
+    html = resp.text
+    assert 'id="modal-bulk-status"' in html
+    assert 'id="bulkStatusSelect"' in html
+    assert "openBulkStatusModal()" in html
+    assert "const nextStatus = document.getElementById('bulkStatusSelect').value;" in html
+    assert "status: 'IN_PROGRESS'" not in html
+
+
+@pytest.mark.asyncio
 async def test_task_detail_shows_full_history(async_client, db):
     """Task detail page should show all snapshots (full history)."""
     ac = await _seed_aircraft(db)
@@ -362,9 +537,52 @@ async def test_task_entry_save_actions_update_locally_and_close_panel(async_clie
     html = resp.text
     assert "Save &amp; Close" in html
     assert "function updateDesktopTaskCard(taskId, snapshotResult, workerName)" in html
+    assert "credentials: 'same-origin'" in html
+    assert "Partial Success" in html
     assert "closeDesktopEditor();" in html
+    assert "refreshTaskEntry({}, { resetEdit: false });" in html
     assert "refreshTaskEntry({ edit: taskId });" not in html
     assert "refreshTaskEntry({ edit: nextTaskId });" not in html
+
+
+@pytest.mark.asyncio
+async def test_task_entry_create_form_keeps_selected_aircraft_context_without_visible_tasks(async_client, db):
+    """Desktop Data Entry create form should resolve the selected aircraft from query params, not the first task row."""
+    ac = await _seed_aircraft(db, ac_reg="9V-CTX")
+    await _seed_shop(db, code="CTX", name="Context Shop")
+    await _seed_wp(db, ac.id, rfo_no="RFO-CTX")
+
+    resp = await async_client.get(f"/tasks/entry?ac={ac.ac_reg}&meeting_date=2026-03-18")
+    assert resp.status_code == 200
+    html = resp.text
+    assert f"No tasks found for {ac.ac_reg}." in html
+    assert 'name="shop_id"' in html
+    assert 'name="work_package_id"' in html
+    assert '<input type="hidden" name="shop_id"' not in html
+    assert '<input type="hidden" name="work_package_id"' not in html
+    assert "Select shop first" in html
+    assert "showModal('modal-entry-task')" in html
+
+
+@pytest.mark.asyncio
+async def test_task_entry_worker_options_scope_to_editable_shop(sup_client, db):
+    """Desktop Data Entry worker dropdowns should only show assignees with access to the editable shop."""
+    ac = await _seed_aircraft(db, ac_reg="9V-WKR")
+    shop = await _seed_shop(db, code="WKS", name="Worker Scope Shop")
+    wp = await _seed_wp(db, ac.id, rfo_no="RFO-WKR")
+    task = await _seed_task(db, ac_id=ac.id, shop_id=shop.id, wp_id=wp.id, text="Worker scope task")
+    await _seed_snapshot(db, task_id=task.id, meeting_date=date(2026, 3, 18), status="IN_PROGRESS")
+    await _grant_shop_access(db, user_id=2, shop_id=shop.id, access="EDIT")
+    await _grant_shop_access(db, user_id=3, shop_id=shop.id, access="VIEW")
+
+    resp = await sup_client.get(
+        f"/tasks/entry?ac={ac.ac_reg}&meeting_date=2026-03-18&edit={task.id}"
+    )
+    assert resp.status_code == 200
+    html = resp.text
+    assert 'id="desktopQuickUpdateForm"' in html
+    assert "Test Worker" in html
+    assert "Other Team Worker" not in html
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -582,7 +800,7 @@ async def test_worker_no_shop_access_tasks_tab_disabled(db):
 
 
 @pytest.mark.asyncio
-async def test_worker_view_access_readonly(db):
+async def _legacy_test_worker_view_access_readonly(worker_client, db):
     """Worker with VIEW shop_access should have read-only task access."""
     from httpx import ASGITransport, AsyncClient
     from app.main import app
@@ -620,3 +838,62 @@ async def test_kanban_detail_button_label(async_client, db):
     html = resp.text
     assert "Open in Data Entry" not in html
     assert "View Task Detail" in html
+
+
+@pytest.mark.asyncio
+async def test_worker_view_access_readonly(worker_client, db):
+    """Worker with VIEW shop_access should see read-only cards with detail links only."""
+    ac = await _seed_aircraft(db, ac_reg="9V-RO")
+    shop = await _seed_shop(db)
+    task = await _seed_task(db, ac_id=ac.id, shop_id=shop.id, text="Read only task")
+    await _seed_snapshot(db, task_id=task.id, meeting_date=date(2026, 3, 18), status="IN_PROGRESS")
+    await _grant_shop_access(db, user_id=3, shop_id=shop.id, access="VIEW")
+
+    resp = await worker_client.get(
+        f"/tasks/entry?ac={ac.ac_reg}&meeting_date=2026-03-18&edit={task.id}"
+    )
+    assert resp.status_code == 200
+    html = resp.text
+    task_card = _extract_opening_tag_by_id(html, f"task-card-{task.id}")
+    assert "Read only task" in html
+    assert "View Task Detail" in html
+    assert f'href="/tasks/{task.id}"' in html
+    assert 'id="desktopQuickUpdateForm"' not in html
+    assert 'id="modal-entry-task"' not in html
+    assert "showModal('modal-entry-task')" not in html
+    assert "onclick=" not in task_card
+
+
+@pytest.mark.asyncio
+async def test_task_entry_mixed_scope_only_editable_card_opens_editor(sup_client, db):
+    """Desktop Data Entry should expose inline edit only for tasks in editable shops."""
+    from sqlalchemy import select
+
+    from app.models.task import TaskItem
+
+    ac = await _seed_aircraft(db, ac_reg="9V-MIX")
+    shop_edit = await _seed_shop(db, code="M1", name="Editable Shop")
+    shop_readonly = await _seed_shop(db, code="M2", name="Assigned Shop")
+    wp = await _seed_wp(db, ac.id, rfo_no="RFO-MIX")
+    task_edit = await _seed_task(db, ac_id=ac.id, shop_id=shop_edit.id, wp_id=wp.id, text="Editable task")
+    task_readonly = await _seed_task(db, ac_id=ac.id, shop_id=shop_readonly.id, wp_id=wp.id, text="Assigned read only task")
+    await _seed_snapshot(db, task_id=task_edit.id, meeting_date=date(2026, 3, 18), status="IN_PROGRESS")
+    await _seed_snapshot(db, task_id=task_readonly.id, meeting_date=date(2026, 3, 18), status="WAITING")
+    await _grant_shop_access(db, user_id=2, shop_id=shop_edit.id, access="EDIT")
+
+    async with db() as s:
+        readonly_row = (await s.execute(select(TaskItem).where(TaskItem.id == task_readonly.id))).scalar_one()
+        readonly_row.assigned_supervisor_id = 2
+        await s.commit()
+
+    resp = await sup_client.get(f"/tasks/entry?ac={ac.ac_reg}&meeting_date=2026-03-18")
+    assert resp.status_code == 200
+    html = resp.text
+    editable_card = _extract_opening_tag_by_id(html, f"task-card-{task_edit.id}")
+    readonly_card = _extract_opening_tag_by_id(html, f"task-card-{task_readonly.id}")
+    assert "Editable task" in html
+    assert "Assigned read only task" in html
+    assert "onclick=" in editable_card
+    assert "toggleDesktopTaskEditor" in editable_card
+    assert "onclick=" not in readonly_card
+    assert f'href="/tasks/{task_readonly.id}"' in html
