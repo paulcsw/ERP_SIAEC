@@ -19,6 +19,7 @@ from app.models.user_shop_access import UserShopAccess
 from app.schemas.common import APIError
 from app.services.shop_access_service import enforce_task_surface_access, has_any_shop_access
 from app.views import templates
+from app.views.context import build_task_access_context
 
 router = APIRouter(tags=["task-views"])
 
@@ -1298,6 +1299,7 @@ async def task_detail_page(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    task_access_ctx = await build_task_access_context(db, current_user)
     # Load task item with relationships
     task_q = (
         select(TaskItem, Aircraft, WorkPackage, Shop)
@@ -1310,7 +1312,13 @@ async def task_detail_page(
 
     if not result:
         return templates.TemplateResponse(request, "tasks/detail.html", _ctx(
-            request, current_user, page="tasks", task=None, snapshots=[], audit_logs=[],
+            request,
+            current_user,
+            **task_access_ctx,
+            page="tasks",
+            task=None,
+            snapshots=[],
+            audit_logs=[],
         ), status_code=404)
 
     task_item, aircraft, wp, shop = result
@@ -1402,6 +1410,7 @@ async def task_detail_page(
 
     return templates.TemplateResponse(request, "tasks/detail.html", _ctx(
         request, current_user,
+        **task_access_ctx,
         page="tasks",
         task=task_data,
         snapshots=snapshots,

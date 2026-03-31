@@ -30,12 +30,13 @@ async def _seed_aircraft(db_factory, ac_reg="9V-ALN", airline="SQ"):
         return ac
 
 
-async def _seed_wp(db_factory, aircraft_id, rfo_no="RFO-001"):
+async def _seed_wp(db_factory, aircraft_id, rfo_no="RFO-001", *, status="ACTIVE", title="Test WP"):
     from app.models.reference import WorkPackage
     async with db_factory() as s:
         wp = WorkPackage(
-            aircraft_id=aircraft_id, rfo_no=rfo_no, title="Test WP",
+            aircraft_id=aircraft_id, rfo_no=rfo_no, title=title,
             start_date=date(2026, 3, 1), end_date=date(2026, 3, 31),
+            status=status,
             created_at=NOW,
         )
         s.add(wp)
@@ -810,6 +811,38 @@ async def test_rfo_summary_empty_state(async_client, db):
     assert resp.status_code == 200
     html = resp.text
     assert "No active work packages" in html
+
+
+@pytest.mark.asyncio
+async def test_rfo_summary_worker_forbidden_and_missing_wp_404(async_client, worker_client, db):
+    """RFO Summary should return explicit 403/404 HTML states."""
+    resp = await worker_client.get("/more/rfo-summary")
+    assert resp.status_code == 403
+    assert "Access denied" in resp.text
+
+    missing = await async_client.get("/more/rfo-summary?wp_id=99999")
+    assert missing.status_code == 404
+    assert "RFO not found" in missing.text
+
+
+@pytest.mark.asyncio
+async def test_rfo_summary_historical_selection_is_preserved_and_task_cta_disabled_without_access(sup_client, db):
+    """Historical direct links should stay selected, and the task CTA should not dead-link without shop access."""
+    ac = await _seed_aircraft(db, ac_reg="9V-HSUM")
+    active_wp = await _seed_wp(db, ac.id, rfo_no="RFO-ACTIVE", status="ACTIVE", title="Active WP")
+    completed_wp = await _seed_wp(db, ac.id, rfo_no="RFO-DONE", status="COMPLETED", title="Completed WP")
+    await _seed_wp(db, ac.id, rfo_no="RFO-HOLD", status="ON_HOLD", title="On Hold WP")
+
+    resp = await sup_client.get(f"/more/rfo-summary?wp_id={completed_wp.id}")
+    assert resp.status_code == 200
+    html = resp.text
+    assert "RFO-DONE" in html
+    assert "RFO-ACTIVE" in html
+    assert "Historical selection" in html
+    assert "RFO-HOLD" not in html
+    assert html.index("RFO-DONE") < html.index("RFO-ACTIVE")
+    assert "Task surface access required" in html
+    assert 'href="/tasks/entry"' not in html
 
 
 # ═══════════════════════════════════════════════════════════════════════

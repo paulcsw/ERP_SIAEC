@@ -1457,7 +1457,8 @@ async def test_global_search_page_aggregates_task_ot_and_rfo_results(async_clien
     assert f'href="/ot/{ot_id}"' in body
     assert 'href="/ot?search=Hydraulic"' in body
     assert f'href="/rfo?id={wp_id}"' in body
-    assert "/tasks/entry?ac=9V-TST" in body
+    assert f'href="/tasks/{task_id}"' in body
+    assert "/tasks/entry?ac=9V-TST" not in body
 
 
 async def test_global_search_worker_scope_and_role_visibility(worker_client, db):
@@ -1526,6 +1527,12 @@ async def test_global_search_worker_scope_and_role_visibility(worker_client, db)
     assert "Visible scope OT" in body
     assert "Hidden scope OT" not in body
     assert "RFO Results" not in body
+    assert f'href="/tasks/{visible_task_id}"' in body
+    assert "/tasks/entry?ac=9V-TST" not in body
+
+    detail_resp = await worker_client.get(f"/tasks/{visible_task_id}")
+    assert detail_resp.status_code == 200
+    assert "Visible scope task" in detail_resp.text
 
 
 async def test_ot_list_search_filters_and_detail_links_preserve_state(async_client, db):
@@ -2034,6 +2041,8 @@ async def test_mobile_task_tab_enabled_with_shop_access(worker_client, db):
 
 async def test_supervisor_without_shop_access_task_surfaces_forbidden_and_tabs_disabled(sup_client, db):
     """Supervisor without explicit shop_access should be blocked from task surfaces and see disabled task affordances."""
+    wp_id = await _seed_wp(db)
+
     manager_resp = await sup_client.get("/tasks")
     assert manager_resp.status_code == 403
     assert manager_resp.json()["code"] == "SHOP_ACCESS_DENIED"
@@ -2054,12 +2063,25 @@ async def test_supervisor_without_shop_access_task_surfaces_forbidden_and_tabs_d
     assert more_resp.status_code == 200
     assert 'aria-disabled="true"' in more_resp.text
 
+    dashboard_resp = await sup_client.get("/dashboard")
+    assert dashboard_resp.status_code == 200
+    assert 'aria-disabled="true"' in dashboard_resp.text
+
+    search_resp = await sup_client.get("/search?q=scope")
+    assert search_resp.status_code == 200
+    assert 'aria-disabled="true"' in search_resp.text
+
+    rfo_resp = await sup_client.get(f"/rfo/{wp_id}")
+    assert rfo_resp.status_code == 200
+    assert 'aria-disabled="true"' in rfo_resp.text
+
 
 async def test_supervisor_with_shop_access_keeps_task_affordances_enabled(sup_client, db):
     """Supervisor with any explicit shop_access should keep task affordances enabled."""
     from app.models.shop import Shop
     from app.models.user_shop_access import UserShopAccess
 
+    wp_id = await _seed_wp(db)
     async with db() as s:
         shop = Shop(code="SUPA", name="Supervisor Access Shop", created_by=1)
         s.add(shop)
@@ -2075,6 +2097,18 @@ async def test_supervisor_with_shop_access_keeps_task_affordances_enabled(sup_cl
     more_resp = await sup_client.get("/more")
     assert more_resp.status_code == 200
     assert 'aria-disabled="true"' not in more_resp.text
+
+    dashboard_resp = await sup_client.get("/dashboard")
+    assert dashboard_resp.status_code == 200
+    assert 'aria-disabled="true"' not in dashboard_resp.text
+
+    search_resp = await sup_client.get("/search?q=scope")
+    assert search_resp.status_code == 200
+    assert 'aria-disabled="true"' not in search_resp.text
+
+    rfo_resp = await sup_client.get(f"/rfo/{wp_id}")
+    assert rfo_resp.status_code == 200
+    assert 'aria-disabled="true"' not in rfo_resp.text
 
 
 # ── Fix E/F: Sidebar role gating for OT Stats and RFO Detail ──────────────
@@ -2107,3 +2141,24 @@ async def test_sidebar_rfo_visible_for_supervisor(sup_client, db):
     resp = await sup_client.get("/ot")
     assert resp.status_code == 200
     assert 'href="/rfo"' in resp.text
+
+
+async def test_worker_without_shop_access_cross_surface_task_nav_stays_disabled(worker_client, db):
+    """Worker should keep disabled task affordances across dashboard/search/more and forbidden RFO detail."""
+    wp_id = await _seed_wp(db)
+
+    dashboard_resp = await worker_client.get("/dashboard")
+    assert dashboard_resp.status_code == 200
+    assert 'aria-disabled="true"' in dashboard_resp.text
+
+    search_resp = await worker_client.get("/search?q=scope")
+    assert search_resp.status_code == 200
+    assert 'aria-disabled="true"' in search_resp.text
+
+    more_resp = await worker_client.get("/more")
+    assert more_resp.status_code == 200
+    assert 'aria-disabled="true"' in more_resp.text
+
+    rfo_resp = await worker_client.get(f"/rfo/{wp_id}")
+    assert rfo_resp.status_code == 403
+    assert 'aria-disabled="true"' in rfo_resp.text

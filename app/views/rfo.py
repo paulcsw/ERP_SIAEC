@@ -12,6 +12,7 @@ from app.services.rfo_service import (
     get_work_package,
 )
 from app.views import templates
+from app.views.context import build_task_access_context
 
 router = APIRouter(tags=["rfo-views"])
 
@@ -63,6 +64,7 @@ async def _rfo_page(
     current_user: dict,
     db: AsyncSession,
 ):
+    task_access_ctx = await build_task_access_context(db, current_user)
     if not can_view_rfo(current_user):
         return templates.TemplateResponse(
             request,
@@ -70,6 +72,7 @@ async def _rfo_page(
             _ctx(
                 request,
                 current_user,
+                **task_access_ctx,
                 error_title="Access denied",
                 error_message="You do not have permission to view RFO detail.",
                 rfo_options=[],
@@ -85,6 +88,7 @@ async def _rfo_page(
             _ctx(
                 request,
                 current_user,
+                **task_access_ctx,
                 error_title="RFO not found",
                 error_message="The requested work package does not exist.",
                 rfo_options=[],
@@ -101,6 +105,7 @@ async def _rfo_page(
         _ctx(
             request,
             current_user,
+            **task_access_ctx,
             rfo_options=rfo_options,
             selected=detail_data.get("selected"),
             summary_strip=detail_data.get("summary_strip"),
