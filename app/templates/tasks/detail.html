@@ -9,7 +9,10 @@
   {% if not task %}
   <div class="card p-8 text-center">
     <svg class="w-12 h-12 mx-auto mb-3 text-surf-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M12 2a10 10 0 100 20 10 10 0 000-20z"/></svg>
-    <p class="text-sm text-surf-400">Task not found.</p>
+    <p class="text-sm text-surf-400">{{ error_title or 'Task not found.' }}</p>
+    {% if error_message %}
+    <p class="text-xs text-surf-400 mt-2">{{ error_message }}</p>
+    {% endif %}
     <a href="/tasks" class="btn-outline btn-sm mt-3 inline-block">Back to Task Manager</a>
   </div>
   {% else %}

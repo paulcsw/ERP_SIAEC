@@ -11,6 +11,7 @@ from app.models.ot import OtApproval, OtRequest
 from app.models.user import User
 from app.services.ot_service import MONTHLY_LIMIT_MINUTES
 from app.views import templates
+from app.views.context import build_task_access_context
 
 router = APIRouter(tags=["stats-views"])
 
@@ -63,10 +64,12 @@ async def ot_stats_page(
     roles = current_user.get("roles", [])
     is_sup_or_admin = "SUPERVISOR" in roles or "ADMIN" in roles
     is_admin = "ADMIN" in roles
+    task_access_ctx = await build_task_access_context(db, current_user)
     if not is_sup_or_admin:
         return templates.TemplateResponse(request, "stats/ot_dashboard.html", _ctx(
             request,
             current_user,
+            **task_access_ctx,
             error_title="Access denied",
             error_message="You do not have permission to view the OT dashboard.",
         ), status_code=403)
@@ -264,6 +267,7 @@ async def ot_stats_page(
 
     return templates.TemplateResponse(request, "stats/ot_dashboard.html", _ctx(
         request, current_user,
+        **task_access_ctx,
         month_label=month_label,
         month_display=month_display,
         months=months,

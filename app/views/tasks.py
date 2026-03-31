@@ -18,6 +18,13 @@ from app.models.user import User
 from app.models.user_shop_access import UserShopAccess
 from app.schemas.common import APIError
 from app.services.shop_access_service import enforce_task_surface_access, has_any_shop_access
+from app.services.task_visibility import (
+    build_entry_visibility_clause as _entry_visibility_clause,
+    can_edit_task_item as _can_edit_task_item,
+    can_view_task_item as _can_view_task_item,
+    get_allowed_shop_ids as _get_allowed_shop_ids,
+    get_entry_editable_shop_ids as _get_entry_editable_shop_ids,
+)
 from app.views import templates
 from app.views.context import build_task_access_context
 
@@ -65,20 +72,6 @@ def _format_relative(dt: datetime | None) -> str:
     return dt.strftime("%b %d")
 
 
-async def _get_allowed_shop_ids(db: AsyncSession, user: dict) -> set[int] | None:
-    """Return scoped shop ids for non-admin users; None means full access."""
-    if "ADMIN" in user.get("roles", []):
-        return None
-    rows = (
-        await db.execute(
-            select(UserShopAccess.shop_id).where(
-                UserShopAccess.user_id == user["user_id"]
-            )
-        )
-    ).all()
-    return {row.shop_id for row in rows}
-
-
 async def _get_max_access_level(db: AsyncSession, user: dict) -> str | None:
     """Return the highest explicit shop access level for a user, or None."""
     if "ADMIN" in user.get("roles", []):
@@ -95,61 +88,6 @@ async def _get_max_access_level(db: AsyncSession, user: dict) -> str | None:
     hierarchy = {"VIEW": 1, "EDIT": 2, "MANAGE": 3}
     best = max(rows, key=lambda a: hierarchy.get(a, 0))
     return best
-
-
-async def _get_entry_editable_shop_ids(db: AsyncSession, user: dict) -> set[int] | None:
-    """Return explicit EDIT/MANAGE shop ids for Data Entry mutations."""
-    if "ADMIN" in user.get("roles", []):
-        return None
-    rows = (
-        await db.execute(
-            select(UserShopAccess.shop_id, UserShopAccess.access).where(
-                UserShopAccess.user_id == user["user_id"]
-            )
-        )
-    ).all()
-    return {
-        row.shop_id for row in rows
-        if row.access in ("EDIT", "MANAGE")
-    }
-
-
-def _entry_visibility_clause(
-    user: dict,
-    allowed_shop_ids: set[int] | None,
-):
-    """Visibility for Data Entry SSR/mobile: shop access or direct assignment."""
-    if "ADMIN" in user.get("roles", []):
-        return None
-    uid = user["user_id"]
-    predicates = [
-        TaskItem.assigned_supervisor_id == uid,
-        TaskItem.assigned_worker_id == uid,
-    ]
-    if allowed_shop_ids:
-        predicates.append(TaskItem.shop_id.in_(allowed_shop_ids))
-    return or_(*predicates)
-
-
-def _can_view_task_item(user: dict, allowed_shop_ids: set[int] | None, task: TaskItem) -> bool:
-    if "ADMIN" in user.get("roles", []):
-        return True
-    uid = user["user_id"]
-    if allowed_shop_ids and task.shop_id in allowed_shop_ids:
-        return True
-    if task.assigned_supervisor_id == uid or task.assigned_worker_id == uid:
-        return True
-    return False
-
-
-def _can_edit_task_item(
-    user: dict,
-    editable_shop_ids: set[int] | None,
-    task: TaskItem,
-) -> bool:
-    if "ADMIN" in user.get("roles", []):
-        return True
-    return bool(editable_shop_ids and task.shop_id in editable_shop_ids)
 
 
 def _normalize_entry_search(value: str | None) -> str:
@@ -1324,7 +1262,17 @@ async def task_detail_page(
     task_item, aircraft, wp, shop = result
     allowed_shop_ids = await _get_allowed_shop_ids(db, current_user)
     if not _can_view_task_item(current_user, allowed_shop_ids, task_item):
-        raise APIError(403, "Shop access denied", "SHOP_ACCESS_DENIED")
+        return templates.TemplateResponse(request, "tasks/detail.html", _ctx(
+            request,
+            current_user,
+            **task_access_ctx,
+            page="tasks",
+            task=None,
+            snapshots=[],
+            audit_logs=[],
+            error_title="Access denied",
+            error_message="You do not have permission to view this task.",
+        ), status_code=403)
 
     # Load supervisor and worker names
     supervisor = None
@@ -1428,9 +1376,11 @@ async def settings_page(
 ):
     configs = await _get_config_map(db)
     shops = await _get_shops(db)
+    task_access_ctx = await build_task_access_context(db, current_user)
 
     return templates.TemplateResponse(request, "admin/settings.html", _ctx(
         request, current_user,
+        **task_access_ctx,
         page="settings",
         configs=configs,
         shops=shops,

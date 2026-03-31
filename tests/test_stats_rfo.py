@@ -613,6 +613,7 @@ async def test_ot_dashboard_worker_forbidden_ssr(worker_client, db):
     assert "You do not have permission to view the OT dashboard." in body
     assert "Total OT Hours" not in body
     assert 'id="ot-team"' not in body
+    assert 'aria-disabled="true"' in body
 
 
 async def test_ot_dashboard_supervisor_ignores_foreign_team_query_and_hides_team_filter(sup_client, db):
@@ -627,6 +628,13 @@ async def test_ot_dashboard_supervisor_ignores_foreign_team_query_and_hides_team
     assert "March 2026 - Sheet Metal - Employment Act Part IV compliance" in body
     assert "Airframe - Employment Act Part IV compliance" not in body
     assert "Other Team Worker" not in body
+
+
+async def test_ot_dashboard_supervisor_without_shop_access_disables_task_nav(sup_client, db):
+    """SUPERVISOR OT dashboard should disable task navigation when the user has no task-surface access."""
+    resp = await sup_client.get("/stats/ot?month=2026-03")
+    assert resp.status_code == 200
+    assert 'aria-disabled="true"' in resp.text
 
 
 async def test_ot_dashboard_admin_team_filter_still_filters_rendered_scope(async_client, db):
@@ -1456,7 +1464,8 @@ async def test_global_search_page_aggregates_task_ot_and_rfo_results(async_clien
     assert "RFO-HYD" in body
     assert f'href="/ot/{ot_id}"' in body
     assert 'href="/ot?search=Hydraulic"' in body
-    assert f'href="/rfo?id={wp_id}"' in body
+    assert f'href="/rfo/{wp_id}"' in body
+    assert f'href="/rfo?id={wp_id}"' not in body
     assert f'href="/tasks/{task_id}"' in body
     assert "/tasks/entry?ac=9V-TST" not in body
 
@@ -2042,6 +2051,7 @@ async def test_mobile_task_tab_enabled_with_shop_access(worker_client, db):
 async def test_supervisor_without_shop_access_task_surfaces_forbidden_and_tabs_disabled(sup_client, db):
     """Supervisor without explicit shop_access should be blocked from task surfaces and see disabled task affordances."""
     wp_id = await _seed_wp(db)
+    ot_id = await _seed_ot(db, user_id=3, status="PENDING")
 
     manager_resp = await sup_client.get("/tasks")
     assert manager_resp.status_code == 403
@@ -2058,6 +2068,14 @@ async def test_supervisor_without_shop_access_task_surfaces_forbidden_and_tabs_d
     ot_resp = await sup_client.get("/ot")
     assert ot_resp.status_code == 200
     assert 'aria-disabled="true"' in ot_resp.text
+
+    ot_new_resp = await sup_client.get("/ot/new")
+    assert ot_new_resp.status_code == 200
+    assert 'aria-disabled="true"' in ot_new_resp.text
+
+    ot_detail_resp = await sup_client.get(f"/ot/{ot_id}")
+    assert ot_detail_resp.status_code == 200
+    assert 'aria-disabled="true"' in ot_detail_resp.text
 
     more_resp = await sup_client.get("/more")
     assert more_resp.status_code == 200
@@ -2082,6 +2100,7 @@ async def test_supervisor_with_shop_access_keeps_task_affordances_enabled(sup_cl
     from app.models.user_shop_access import UserShopAccess
 
     wp_id = await _seed_wp(db)
+    ot_id = await _seed_ot(db, user_id=3, status="PENDING")
     async with db() as s:
         shop = Shop(code="SUPA", name="Supervisor Access Shop", created_by=1)
         s.add(shop)
@@ -2093,6 +2112,14 @@ async def test_supervisor_with_shop_access_keeps_task_affordances_enabled(sup_cl
     assert ot_resp.status_code == 200
     assert 'aria-disabled="true"' not in ot_resp.text
     assert 'href="/tasks/entry"' in ot_resp.text
+
+    ot_new_resp = await sup_client.get("/ot/new")
+    assert ot_new_resp.status_code == 200
+    assert 'aria-disabled="true"' not in ot_new_resp.text
+
+    ot_detail_resp = await sup_client.get(f"/ot/{ot_id}")
+    assert ot_detail_resp.status_code == 200
+    assert 'aria-disabled="true"' not in ot_detail_resp.text
 
     more_resp = await sup_client.get("/more")
     assert more_resp.status_code == 200
@@ -2146,6 +2173,7 @@ async def test_sidebar_rfo_visible_for_supervisor(sup_client, db):
 async def test_worker_without_shop_access_cross_surface_task_nav_stays_disabled(worker_client, db):
     """Worker should keep disabled task affordances across dashboard/search/more and forbidden RFO detail."""
     wp_id = await _seed_wp(db)
+    ot_id = await _seed_ot(db, user_id=3, status="PENDING")
 
     dashboard_resp = await worker_client.get("/dashboard")
     assert dashboard_resp.status_code == 200
@@ -2159,6 +2187,22 @@ async def test_worker_without_shop_access_cross_surface_task_nav_stays_disabled(
     assert more_resp.status_code == 200
     assert 'aria-disabled="true"' in more_resp.text
 
+    ot_new_resp = await worker_client.get("/ot/new")
+    assert ot_new_resp.status_code == 200
+    assert 'aria-disabled="true"' in ot_new_resp.text
+
+    ot_detail_resp = await worker_client.get(f"/ot/{ot_id}")
+    assert ot_detail_resp.status_code == 200
+    assert 'aria-disabled="true"' in ot_detail_resp.text
+
     rfo_resp = await worker_client.get(f"/rfo/{wp_id}")
     assert rfo_resp.status_code == 403
     assert 'aria-disabled="true"' in rfo_resp.text
+
+
+async def test_admin_ot_approve_keeps_task_affordances_enabled(async_client, db):
+    """Admin OT approve page should keep task affordances enabled via shared SSR context."""
+    resp = await async_client.get("/admin/ot-approve")
+    assert resp.status_code == 200
+    assert 'aria-disabled="true"' not in resp.text
+    assert 'href="/tasks/entry"' in resp.text

@@ -1,6 +1,5 @@
 """OT SSR views (Branch 04 commits 5-6)."""
 from datetime import date, datetime, timezone
-from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import RedirectResponse
@@ -19,8 +18,8 @@ from app.services.ot_service import (
     get_visible_ot_user_ids,
     normalize_ot_search,
 )
-from app.services.shop_access_service import has_any_shop_access
 from app.views import templates
+from app.views.context import build_href, build_task_access_context
 
 router = APIRouter(tags=["ot-views"])
 
@@ -147,7 +146,7 @@ def _ot_detail_back_href(
     date_to: date | None = None,
     page: int | None = None,
 ) -> str:
-    return _build_href(
+    return build_href(
         "/ot",
         **_build_ot_list_state_params(
             status=status,
@@ -163,7 +162,7 @@ def _ot_mobile_history_href(
     status: str | None = None,
     page: int | None = None,
 ) -> str:
-    return _build_href(
+    return build_href(
         "/ot/segment/o2",
         status=status or None,
         page=page if page and page > 1 else None,
@@ -325,15 +324,13 @@ def _ctx(request, user, **kw):
     }
 
 
-def _build_href(path: str, **params) -> str:
-    filtered = {
-        key: value
-        for key, value in params.items()
-        if value is not None and value != ""
-    }
-    if not filtered:
-        return path
-    return f"{path}?{urlencode(filtered)}"
+async def _ctx_with_task_access(request: Request, user: dict, db: AsyncSession, **kw):
+    return _ctx(
+        request,
+        user,
+        **(await build_task_access_context(db, user)),
+        **kw,
+    )
 
 
 def _is_htmx_request(request: Request) -> bool:
@@ -371,19 +368,25 @@ async def ot_submit_page(
     wps = (await db.execute(select(WorkPackage))).scalars().all()
     rfo_options = [{"id": wp.id, "rfo_no": wp.rfo_no or f"WP-{wp.id}"} for wp in wps]
 
-    return templates.TemplateResponse(request, "ot/submit.html", _ctx(
-        request, current_user,
-        active_page="ot_new",
-        my_used_hours=round(my_used / 60, 1),
-        my_limit_hours=round(MONTHLY_LIMIT_MINUTES / 60, 1),
-        my_used_pct=round(my_used / MONTHLY_LIMIT_MINUTES * 100, 1),
-        my_remaining_hours=round((MONTHLY_LIMIT_MINUTES - my_used) / 60, 1),
-        team_users=team_users,
-        roster_scope_label=roster_scope_label,
-        is_sup_or_admin=is_sup_or_admin,
-        rfo_options=rfo_options,
-        today=today.isoformat(),
-    ))
+    return templates.TemplateResponse(
+        request,
+        "ot/submit.html",
+        await _ctx_with_task_access(
+            request,
+            current_user,
+            db,
+            active_page="ot_new",
+            my_used_hours=round(my_used / 60, 1),
+            my_limit_hours=round(MONTHLY_LIMIT_MINUTES / 60, 1),
+            my_used_pct=round(my_used / MONTHLY_LIMIT_MINUTES * 100, 1),
+            my_remaining_hours=round((MONTHLY_LIMIT_MINUTES - my_used) / 60, 1),
+            team_users=team_users,
+            roster_scope_label=roster_scope_label,
+            is_sup_or_admin=is_sup_or_admin,
+            rfo_options=rfo_options,
+            today=today.isoformat(),
+        ),
+    )
 
 
 # ?? Desktop: /ot ??List + Mobile segment shell ??????????????????????
@@ -438,7 +441,7 @@ async def ot_list_page(
 
     items = await _enrich_ot_list(db, rows)
     for item in items:
-        item["detail_href"] = _build_href(
+        item["detail_href"] = build_href(
             f"/ot/{item['id']}",
             **_build_ot_list_state_params(
                 status=status,
@@ -467,31 +470,34 @@ async def ot_list_page(
     wps = (await db.execute(select(WorkPackage))).scalars().all()
     rfo_options = [{"id": wp.id, "rfo_no": wp.rfo_no or f"WP-{wp.id}"} for wp in wps]
 
-    task_access = await has_any_shop_access(db, current_user)
-
-    return templates.TemplateResponse(request, "ot/list.html", _ctx(
-        request, current_user,
-        active_page="ot_list",
-        items=items,
-        total=total,
-        page=page,
-        per_page=per_page,
-        total_pages=total_pages,
-        status_filter=status or "",
-        search_filter=search_filter,
-        date_from_filter=date_from.isoformat() if date_from else "",
-        date_to_filter=date_to.isoformat() if date_to else "",
-        my_used_hours=round(my_used / 60, 1),
-        my_limit_hours=round(MONTHLY_LIMIT_MINUTES / 60, 1),
-        my_used_pct=round(my_used / MONTHLY_LIMIT_MINUTES * 100, 1),
-        my_remaining_hours=round((MONTHLY_LIMIT_MINUTES - my_used) / 60, 1),
-        team_users=team_users,
-        is_sup_or_admin="SUPERVISOR" in roles or "ADMIN" in roles,
-        rfo_options=rfo_options,
-        today=today.isoformat(),
-        has_task_access=task_access,
-        can_export_csv="SUPERVISOR" in roles or "ADMIN" in roles,
-    ))
+    return templates.TemplateResponse(
+        request,
+        "ot/list.html",
+        await _ctx_with_task_access(
+            request,
+            current_user,
+            db,
+            active_page="ot_list",
+            items=items,
+            total=total,
+            page=page,
+            per_page=per_page,
+            total_pages=total_pages,
+            status_filter=status or "",
+            search_filter=search_filter,
+            date_from_filter=date_from.isoformat() if date_from else "",
+            date_to_filter=date_to.isoformat() if date_to else "",
+            my_used_hours=round(my_used / 60, 1),
+            my_limit_hours=round(MONTHLY_LIMIT_MINUTES / 60, 1),
+            my_used_pct=round(my_used / MONTHLY_LIMIT_MINUTES * 100, 1),
+            my_remaining_hours=round((MONTHLY_LIMIT_MINUTES - my_used) / 60, 1),
+            team_users=team_users,
+            is_sup_or_admin="SUPERVISOR" in roles or "ADMIN" in roles,
+            rfo_options=rfo_options,
+            today=today.isoformat(),
+            can_export_csv="SUPERVISOR" in roles or "ADMIN" in roles,
+        ),
+    )
 
 
 # ?? Desktop: /ot/{id} ??Detail ??????????????????????????????????????
@@ -508,6 +514,7 @@ async def ot_detail_page(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    task_access_ctx = await build_task_access_context(db, current_user)
     search_filter = normalize_ot_search(search)
     back_href = _ot_detail_back_href(
         status=status,
@@ -516,7 +523,7 @@ async def ot_detail_page(
         date_to=date_to,
         page=page,
     )
-    detail_href = _build_href(
+    detail_href = build_href(
         f"/ot/{ot_id}",
         **_build_ot_list_state_params(
             status=status,
@@ -531,6 +538,7 @@ async def ot_detail_page(
         return templates.TemplateResponse(request, "ot/detail.html", _ctx(
             request,
             current_user,
+            **task_access_ctx,
             active_page="ot_list",
             ot=None,
             error_title="OT request not found",
@@ -547,6 +555,7 @@ async def ot_detail_page(
         return templates.TemplateResponse(request, "ot/detail.html", _ctx(
             request,
             current_user,
+            **task_access_ctx,
             active_page="ot_list",
             ot=None,
             error_title="Access denied",
@@ -567,6 +576,7 @@ async def ot_detail_page(
 
     return templates.TemplateResponse(request, "ot/detail.html", _ctx(
         request, current_user,
+        **task_access_ctx,
         active_page="ot_list",
         ot=item,
         back_href=back_href,
@@ -588,12 +598,18 @@ async def ot_approve_page(
 ):
     items = await _load_admin_ot_approve_items(db, current_user)
 
-    return templates.TemplateResponse(request, "ot/approve.html", _ctx(
-        request, current_user,
-        active_page="ot_approve",
-        items=items,
-        count=len(items),
-    ))
+    return templates.TemplateResponse(
+        request,
+        "ot/approve.html",
+        await _ctx_with_task_access(
+            request,
+            current_user,
+            db,
+            active_page="ot_approve",
+            items=items,
+            count=len(items),
+        ),
+    )
 
 
 # ?? Mobile HTMX: /ot/segment/{seg} ??????????????????????????????????
@@ -660,7 +676,7 @@ async def ot_segment(
         )).scalars().all()
         items = await _enrich_ot_list(db, rows)
         for item in items:
-            item["detail_href"] = _build_href(
+            item["detail_href"] = build_href(
                 f"/ot/detail/{item['id']}",
                 status=status or None,
                 page=current_page if current_page > 1 else None,
@@ -714,7 +730,7 @@ async def ot_mobile_detail(
         return RedirectResponse("/ot", status_code=302)
 
     back_href = _ot_mobile_history_href(status, page)
-    detail_href = _build_href(
+    detail_href = build_href(
         f"/ot/detail/{ot_id}",
         status=status or None,
         page=page if page > 1 else None,

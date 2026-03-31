@@ -69,13 +69,13 @@
       </div>
       {% endif %}
       {# Deep link to Tasks tab #}
-      {% if has_task_access %}
-      <a href="/tasks/entry" class="btn-outline w-full h-12 text-base flex items-center justify-center gap-2" style="text-decoration:none">
-        View Related Tasks &rarr;
+      {% if related_tasks_href %}
+      <a href="{{ related_tasks_href }}" class="btn-outline w-full h-12 text-base flex items-center justify-center gap-2" style="text-decoration:none">
+        Open Related Tasks in Task Manager &rarr;
       </a>
       {% else %}
       <div class="btn-outline w-full h-12 text-base flex items-center justify-center gap-2 opacity-50 cursor-not-allowed" aria-disabled="true">
-        Task surface access required
+        {{ related_tasks_disabled_reason or 'Task surface access required' }}
       </div>
       {% endif %}
       {% else %}

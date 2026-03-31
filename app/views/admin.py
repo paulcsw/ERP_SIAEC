@@ -10,6 +10,7 @@ from app.models.shop import Shop
 from app.models.user import User
 from app.models.user_shop_access import UserShopAccess
 from app.views import templates
+from app.views.context import build_task_access_context
 
 router = APIRouter(tags=["admin-views"])
 
@@ -29,6 +30,15 @@ def _ctx(request, user, **kw):
         "page": page,
         **kw,
     }
+
+
+async def _ctx_with_task_access(request: Request, user: dict, db: AsyncSession, **kw):
+    return _ctx(
+        request,
+        user,
+        **(await build_task_access_context(db, user)),
+        **kw,
+    )
 
 
 # ?? GET /admin/users ?????????????????????????????????????????????????
@@ -58,12 +68,18 @@ async def admin_users_page(
     # Distinct teams for filter/select
     teams = sorted(set(u["team"] for u in user_list if u["team"]))
 
-    return templates.TemplateResponse(request, "admin/users.html", _ctx(
-        request, current_user,
-        page="users",
-        users=user_list,
-        teams=teams,
-    ))
+    return templates.TemplateResponse(
+        request,
+        "admin/users.html",
+        await _ctx_with_task_access(
+            request,
+            current_user,
+            db,
+            page="users",
+            users=user_list,
+            teams=teams,
+        ),
+    )
 
 
 # ?? GET /admin/reference ?????????????????????????????????????????????
@@ -106,13 +122,19 @@ async def admin_reference_page(
         "status": ss.status,
     } for ss, wp in ss_rows]
 
-    return templates.TemplateResponse(request, "admin/reference.html", _ctx(
-        request, current_user,
-        page="reference",
-        aircraft=aircraft,
-        work_packages=work_packages,
-        shop_streams=shop_streams,
-    ))
+    return templates.TemplateResponse(
+        request,
+        "admin/reference.html",
+        await _ctx_with_task_access(
+            request,
+            current_user,
+            db,
+            page="reference",
+            aircraft=aircraft,
+            work_packages=work_packages,
+            shop_streams=shop_streams,
+        ),
+    )
 
 
 # ?? GET /admin/shops ?????????????????????????????????????????????????
@@ -128,11 +150,17 @@ async def admin_shops_page(
         "id": s.id, "code": s.code, "name": s.name,
     } for s in rows]
 
-    return templates.TemplateResponse(request, "admin/shops.html", _ctx(
-        request, current_user,
-        page="shops",
-        shops=shops,
-    ))
+    return templates.TemplateResponse(
+        request,
+        "admin/shops.html",
+        await _ctx_with_task_access(
+            request,
+            current_user,
+            db,
+            page="shops",
+            shops=shops,
+        ),
+    )
 
 
 # ?? GET /admin/shop-access ??????????????????????????????????????????
@@ -188,11 +216,17 @@ async def admin_shop_access_page(
     ]
     shops = (await db.execute(select(Shop).order_by(Shop.code))).scalars().all()
 
-    return templates.TemplateResponse(request, "admin/shop_access.html", _ctx(
-        request, current_user,
-        page="shop_access",
-        access_list=access_list,
-        users=[{"id": u.id, "name": u.name, "employee_no": u.employee_no} for u in grantable_users],
-        shops=[{"id": s.id, "code": s.code, "name": s.name} for s in shops],
-    ))
+    return templates.TemplateResponse(
+        request,
+        "admin/shop_access.html",
+        await _ctx_with_task_access(
+            request,
+            current_user,
+            db,
+            page="shop_access",
+            access_list=access_list,
+            users=[{"id": u.id, "name": u.name, "employee_no": u.employee_no} for u in grantable_users],
+            shops=[{"id": s.id, "code": s.code, "name": s.name} for s in shops],
+        ),
+    )
 

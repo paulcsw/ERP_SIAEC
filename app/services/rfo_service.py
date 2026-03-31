@@ -101,6 +101,7 @@ async def build_rfo_analytics(
     waiting_mh = 0.0
     completed = 0
     blocker_count = 0
+    overdue_count = 0
     unassigned_count = sum(1 for task in tasks if not task.assigned_worker_id)
     status_counts = {"NOT_STARTED": 0, "IN_PROGRESS": 0, "WAITING": 0, "COMPLETED": 0}
     cycle_times: list[float] = []
@@ -158,6 +159,13 @@ async def build_rfo_analytics(
                     )
             elif latest_snapshot.status == "COMPLETED":
                 completed += 1
+
+            if (
+                latest_snapshot.status != "COMPLETED"
+                and latest_snapshot.deadline_date
+                and latest_snapshot.deadline_date < now.date()
+            ):
+                overdue_count += 1
 
         first_in_progress = (
             await db.execute(
@@ -243,6 +251,7 @@ async def build_rfo_analytics(
             "unassigned": unassigned_count,
             "assigned_count": total_tasks - unassigned_count,
             "completion_rate": completion_rate,
+            "overdue_count": overdue_count,
             "remaining_mh": round(max(0, planned_mh - actual_mh), 1),
         },
         "task_status_bar": {

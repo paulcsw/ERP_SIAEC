@@ -498,6 +498,29 @@ async def test_task_detail_shows_full_history(async_client, db):
 
 
 @pytest.mark.asyncio
+async def test_task_detail_access_denied_renders_html(worker_client, db):
+    """Unauthorized task detail access should render the SSR HTML 403 state, not API JSON."""
+    ac = await _seed_aircraft(db, ac_reg="9V-DENY")
+    shop = await _seed_shop(db)
+    task = await _seed_task(db, ac_id=ac.id, shop_id=shop.id, text="Denied detail task")
+    await _seed_snapshot(
+        db,
+        task_id=task.id,
+        meeting_date=date(2026, 3, 11),
+        status="IN_PROGRESS",
+        mh=2.0,
+    )
+
+    resp = await worker_client.get(f"/tasks/{task.id}")
+    assert resp.status_code == 403
+    assert "text/html" in resp.headers.get("content-type", "")
+    html = resp.text
+    assert "Access denied" in html
+    assert "You do not have permission to view this task." in html
+    assert '"code":"SHOP_ACCESS_DENIED"' not in html
+
+
+@pytest.mark.asyncio
 async def test_task_entry_edit_panel_renders_below_selected_card(async_client, db):
     """Desktop Data Entry should render quick update directly below the selected card."""
     ac = await _seed_aircraft(db)
@@ -845,6 +868,34 @@ async def test_rfo_summary_historical_selection_is_preserved_and_task_cta_disabl
     assert 'href="/tasks/entry"' not in html
 
 
+@pytest.mark.asyncio
+async def test_rfo_summary_related_task_cta_uses_exact_rfo_filter(async_client, db):
+    """RFO Summary should deep-link into Task Manager with an exact RFO filter."""
+    ac = await _seed_aircraft(db, ac_reg="9V-REL")
+    wp = await _seed_wp(db, ac.id, rfo_no="RFO-LINK", status="ACTIVE", title="Linked WP")
+
+    resp = await async_client.get(f"/more/rfo-summary?wp_id={wp.id}")
+    assert resp.status_code == 200
+    html = resp.text
+    assert 'href="/tasks?rfo=RFO-LINK"' in html
+    assert "Open Related Tasks in Task Manager" in html
+    assert "Task surface access required" not in html
+
+
+@pytest.mark.asyncio
+async def test_rfo_summary_disables_related_task_cta_without_raw_rfo(async_client, db):
+    """RFO Summary should not offer a broad task link when the WP has no raw RFO code."""
+    ac = await _seed_aircraft(db, ac_reg="9V-NORFO")
+    wp = await _seed_wp(db, ac.id, rfo_no=None, status="ACTIVE", title="No RFO WP")
+
+    resp = await async_client.get(f"/more/rfo-summary?wp_id={wp.id}")
+    assert resp.status_code == 200
+    html = resp.text
+    assert "No linked RFO code for task filter" in html
+    assert 'href="/tasks?rfo=' not in html
+    assert "Open Related Tasks in Task Manager" not in html
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  F. MOBILE ACCESS BEHAVIOR
 # ═══════════════════════════════════════════════════════════════════════
@@ -871,32 +922,6 @@ async def test_worker_no_shop_access_tasks_tab_disabled(db):
         html = resp.text
         # Tasks tab should be disabled (opacity-30 or aria-disabled)
         assert "opacity-30" in html or 'aria-disabled="true"' in html
-
-
-@pytest.mark.asyncio
-async def _legacy_test_worker_view_access_readonly(worker_client, db):
-    """Worker with VIEW shop_access should have read-only task access."""
-    from httpx import ASGITransport, AsyncClient
-    from app.main import app
-    from app.middleware.rate_limit import reset_rate_limits
-
-    shop = await _seed_shop(db)
-    await _grant_shop_access(db, user_id=3, shop_id=shop.id, access="VIEW")
-
-    reset_rate_limits()
-    worker_session = {
-        "user_id": 3, "employee_no": "E003", "display_name": "Test Worker",
-        "roles": ["WORKER"], "team": "Sheet Metal",
-        "csrf_token": "test-csrf-token-abc123",
-    }
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
-        c.cookies.set("session", _make_session_cookie(worker_session))
-        resp = await c.get("/tasks/entry")
-        assert resp.status_code == 200
-        # Tasks tab should NOT be disabled (has access)
-        # can_edit should be false — no edit forms should be visible
-        # (exact check depends on template, just verify page renders)
 
 
 # ═══════════════════════════════════════════════════════════════════════

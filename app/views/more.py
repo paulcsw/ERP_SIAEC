@@ -1,6 +1,4 @@
 """More and global search SSR views."""
-from urllib.parse import urlencode
-
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,9 +21,12 @@ from app.services.rfo_service import (
     get_rfo_selector_options,
     get_work_package,
 )
+from app.services.task_visibility import (
+    build_entry_visibility_clause,
+    get_allowed_shop_ids,
+)
 from app.views import templates
-from app.views.context import build_task_access_context
-from app.views.tasks import _entry_visibility_clause, _get_allowed_shop_ids
+from app.views.context import build_href, build_task_access_context
 
 router = APIRouter(tags=["more-views"])
 
@@ -60,20 +61,9 @@ def _normalize_search_query(value: str | None) -> str:
     return (value or "").strip()
 
 
-def _build_href(path: str, **params) -> str:
-    filtered = {
-        key: value
-        for key, value in params.items()
-        if value is not None and value != ""
-    }
-    if not filtered:
-        return path
-    return f"{path}?{urlencode(filtered)}"
-
-
 async def _search_tasks(db: AsyncSession, user: dict, query: str, limit: int = 8) -> dict:
-    allowed_shop_ids = await _get_allowed_shop_ids(db, user)
-    visibility_clause = _entry_visibility_clause(user, allowed_shop_ids)
+    allowed_shop_ids = await get_allowed_shop_ids(db, user)
+    visibility_clause = build_entry_visibility_clause(user, allowed_shop_ids)
     if not query:
         return {"title": "Task Results", "results": [], "has_more": False}
 
@@ -181,7 +171,7 @@ async def _search_ot(db: AsyncSession, user: dict, query: str, limit: int = 8) -
         "description": "Requests you can open directly from the result list.",
         "results": results,
         "has_more": has_more,
-        "list_href": _build_href("/ot", search=normalized),
+        "list_href": build_href("/ot", search=normalized),
         "link_label": "Open OT List",
     }
 
@@ -221,7 +211,7 @@ async def _search_rfo(db: AsyncSession, user: dict, query: str, limit: int = 8) 
     results = []
     for wp, aircraft in rows[:limit]:
         results.append({
-            "href": _build_href("/rfo", id=wp.id),
+            "href": f"/rfo/{wp.id}",
             "title": wp.rfo_no or f"WP-{wp.id}",
             "eyebrow": aircraft.ac_reg,
             "meta": " | ".join(filter(None, [
@@ -290,9 +280,6 @@ async def more_rfo_summary(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.models.task import TaskItem, TaskSnapshot
-    from datetime import datetime, timezone
-
     task_access_ctx = await build_task_access_context(db, current_user)
     if not can_view_rfo(current_user):
         return templates.TemplateResponse(
@@ -334,6 +321,8 @@ async def more_rfo_summary(
     metrics = None
     blockers_list: list[dict] = []
     selected_wp_id = selected_wp.id if selected_wp else None
+    related_tasks_href: str | None = None
+    related_tasks_disabled_reason: str | None = None
 
     if selected_wp is None and wp_options:
         selected_wp_id = wp_options[0]["id"]
@@ -347,35 +336,21 @@ async def more_rfo_summary(
         blockers_data = detail_data.get("blockers_data") or {}
         rfo = {
             "id": selected.get("id", selected_wp.id),
+            "rfo_no": selected.get("rfo_no"),
             "display_rfo_no": selected.get("display_rfo_no") or (selected_wp.rfo_no or f"WP-{selected_wp.id}"),
             "status": selected.get("status") or selected_wp.status,
             "ac_reg": summary_strip.get("ac_reg") or "N/A",
         }
-
-        tasks = (await db.execute(
-            select(TaskItem).where(
-                TaskItem.work_package_id == selected_wp.id,
-                TaskItem.is_active == True,  # noqa: E712
-            )
-        )).scalars().all()
-
-        overdue = 0
-        now = datetime.now(timezone.utc)
-
-        for ti in tasks:
-            snap = (await db.execute(
-                select(TaskSnapshot)
-                .where(TaskSnapshot.task_id == ti.id, TaskSnapshot.is_deleted == False)  # noqa: E712
-                .order_by(TaskSnapshot.meeting_date.desc()).limit(1)
-            )).scalar_one_or_none()
-            if not snap:
-                continue
-            if snap.status != "COMPLETED" and snap.deadline_date and snap.deadline_date < now.date():
-                overdue += 1
+        if not task_access_ctx.get("has_task_access", False):
+            related_tasks_disabled_reason = "Task surface access required"
+        elif rfo["rfo_no"]:
+            related_tasks_href = build_href("/tasks", rfo=rfo["rfo_no"])
+        else:
+            related_tasks_disabled_reason = "No linked RFO code for task filter"
 
         metrics = {
             "progress_pct": kpi.get("completion_rate", 0),
-            "overdue_count": overdue,
+            "overdue_count": kpi.get("overdue_count", 0),
             "blocker_count": blockers_data.get("count", 0),
             "remaining_mh": detail_data.get("burndown_data", {}).get("remaining_mh", kpi.get("remaining_mh", 0)),
         }
@@ -395,6 +370,8 @@ async def more_rfo_summary(
         blockers=blockers_list[:5],
         wp_options=wp_options,
         selected_wp_id=selected_wp_id,
+        related_tasks_href=related_tasks_href,
+        related_tasks_disabled_reason=related_tasks_disabled_reason,
     ))
 
 
