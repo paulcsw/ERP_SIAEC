@@ -75,6 +75,55 @@ async def test_update_unknown_key(async_client, db):
     assert resp.json()["code"] == "NOT_FOUND"
 
 
+async def test_update_invalid_threshold_rejected(async_client, db):
+    await _seed_config(db)
+
+    resp = await async_client.patch(
+        "/api/config",
+        json={"configs": [{"key": "needs_update_threshold_hours", "value": "abc"}]},
+        headers=CSRF_HEADERS,
+    )
+    assert resp.status_code == 422
+    assert resp.json()["code"] == "VALIDATION_ERROR"
+    assert resp.json()["field"] == "needs_update_threshold_hours"
+
+
+async def test_update_out_of_range_threshold_rejected(async_client, db):
+    await _seed_config(db)
+
+    resp = await async_client.patch(
+        "/api/config",
+        json={"configs": [{"key": "needs_update_threshold_hours", "value": "721"}]},
+        headers=CSRF_HEADERS,
+    )
+    assert resp.status_code == 422
+    assert resp.json()["field"] == "needs_update_threshold_hours"
+
+
+async def test_update_invalid_meeting_date_rejected(async_client, db):
+    await _seed_config(db)
+
+    resp = await async_client.patch(
+        "/api/config",
+        json={"configs": [{"key": "meeting_current_date", "value": "2026-02-30"}]},
+        headers=CSRF_HEADERS,
+    )
+    assert resp.status_code == 422
+    assert resp.json()["field"] == "meeting_current_date"
+
+
+async def test_update_invalid_boolean_rejected(async_client, db):
+    await _seed_config(db)
+
+    resp = await async_client.patch(
+        "/api/config",
+        json={"configs": [{"key": "teams_enabled", "value": "yes"}]},
+        headers=CSRF_HEADERS,
+    )
+    assert resp.status_code == 422
+    assert resp.json()["field"] == "teams_enabled"
+
+
 # ── GET /api/config/{key} ──────────────────────────────────────────
 
 async def test_get_single_config(async_client, db):

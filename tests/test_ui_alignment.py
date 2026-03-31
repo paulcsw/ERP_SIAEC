@@ -725,6 +725,47 @@ async def test_settings_phase2_labels(async_client, db):
     assert "Phase 2" in html, "Notification sections must indicate Phase 2"
 
 
+@pytest.mark.asyncio
+async def test_settings_snapshot_ui_is_manual_only(async_client, db):
+    """Settings snapshot section should no longer expose dead auto/day/time controls."""
+    await _seed_config(db, "meeting_current_date", "2026-03-30")
+    resp = await async_client.get("/admin/settings")
+    html = resp.text
+    assert 'id="adv-day"' not in html
+    assert 'id="adv-time"' not in html
+    assert 'id="auto-advance"' not in html
+    assert "Automatic week advancement is not active yet." in html
+    assert 'id="snap-week-display"></div>' in html
+
+
+@pytest.mark.asyncio
+async def test_settings_export_uses_saved_working_week(async_client, db):
+    """Task export should use the saved meeting_current_date, not the live preview week."""
+    await _seed_config(db, "meeting_current_date", "2026-03-24")
+    resp = await async_client.get("/admin/settings")
+    html = resp.text
+    assert "Tasks CSV uses the saved working week." in html
+    assert 'const savedMeetingDate = \'2026-03-24\'' in html
+    assert "return savedMeetingDate;" in html
+    assert "To export this previewed week, save configuration first." in html
+
+
+@pytest.mark.asyncio
+async def test_invalid_threshold_rejected_without_breaking_task_entry(async_client, db):
+    """Invalid threshold should be rejected so task entry continues to render safely."""
+    await _seed_config(db, "needs_update_threshold_hours", "72")
+
+    patch_resp = await async_client.patch(
+        "/api/config",
+        headers=CSRF_HEADERS,
+        json={"configs": [{"key": "needs_update_threshold_hours", "value": "abc"}]},
+    )
+    assert patch_resp.status_code == 422
+
+    entry_resp = await async_client.get("/tasks/entry")
+    assert entry_resp.status_code == 200
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  E. MORE > RFO SUMMARY
 # ═══════════════════════════════════════════════════════════════════════

@@ -6,64 +6,36 @@
 {% block content %}
 <div class="p-4 lg:p-5 w-full overflow-y-auto">
   <h1 class="text-lg font-semibold text-navy-900 mb-1">Admin Settings</h1>
-  <p class="text-xs text-surf-400 mb-5">Configure system-wide parameters · ADMIN only</p>
+  <p class="text-xs text-surf-400 mb-5">Configure system-wide parameters - ADMIN only</p>
 
   <div class="space-y-4">
-
-    {# ── Snapshot Week Configuration ── #}
     <div class="card p-4 space-y-3">
       <h3 class="text-sm font-semibold text-navy-900 flex items-center gap-2">
         <svg class="w-4 h-4 text-navy-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         Snapshot Week Configuration
       </h3>
-      <p class="text-[11px] text-surf-400 -mt-1">Sets the current working week for data entry. Dashboard viewing is separate — this controls which week accepts new data.</p>
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div>
-          <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">Advance On</label>
-          <div class="flex gap-2">
-            <select id="adv-day" class="inp flex-1 h-9 text-sm" onchange="updateSnapshotWeek()">
-              <option value="0" {% if configs.get('snapshot_advance_day') == '0' %}selected{% endif %}>Sunday</option>
-              <option value="1" {% if configs.get('snapshot_advance_day', '1') == '1' %}selected{% endif %}>Monday</option>
-              <option value="2" {% if configs.get('snapshot_advance_day') == '2' %}selected{% endif %}>Tuesday</option>
-              <option value="3" {% if configs.get('snapshot_advance_day') == '3' %}selected{% endif %}>Wednesday</option>
-              <option value="4" {% if configs.get('snapshot_advance_day') == '4' %}selected{% endif %}>Thursday</option>
-              <option value="5" {% if configs.get('snapshot_advance_day') == '5' %}selected{% endif %}>Friday</option>
-              <option value="6" {% if configs.get('snapshot_advance_day') == '6' %}selected{% endif %}>Saturday</option>
-            </select>
-            <select id="adv-time" class="inp w-24 h-9 text-sm shrink-0">
-              <option {% if configs.get('snapshot_advance_time', '00:00') == '00:00' %}selected{% endif %}>00:00</option>
-              <option {% if configs.get('snapshot_advance_time') == '06:00' %}selected{% endif %}>06:00</option>
-              <option {% if configs.get('snapshot_advance_time') == '08:00' %}selected{% endif %}>08:00</option>
-              <option {% if configs.get('snapshot_advance_time') == '12:00' %}selected{% endif %}>12:00</option>
-              <option {% if configs.get('snapshot_advance_time') == '18:00' %}selected{% endif %}>18:00</option>
-            </select>
-          </div>
-        </div>
+      <p class="text-[11px] text-surf-400 -mt-1">Set the saved working week for Data Entry. This page is manual only for now, and exports use the saved working week after you click Save Configuration.</p>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">Current Working Week</label>
           <div class="flex items-center gap-1">
-            <button class="btn-outline w-9 h-9 text-center text-sm shrink-0" onclick="shiftSnapshotWeek(-1)">&lsaquo;</button>
-            <div class="inp flex-1 h-9 text-sm font-mono font-bold text-center flex items-center justify-center" id="snap-week-display">–</div>
-            <button class="btn-outline w-9 h-9 text-center text-sm shrink-0" onclick="shiftSnapshotWeek(1)">&rsaquo;</button>
+            <button class="btn-outline w-9 h-9 text-center text-sm shrink-0" type="button" onclick="shiftSnapshotWeek(-1)">&lsaquo;</button>
+            <div class="inp flex-1 h-9 text-sm font-mono font-bold text-center flex items-center justify-center" id="snap-week-display"></div>
+            <button class="btn-outline w-9 h-9 text-center text-sm shrink-0" type="button" onclick="shiftSnapshotWeek(1)">&rsaquo;</button>
           </div>
-          <div class="text-[10px] text-surf-400 mt-1" id="snap-week-note">Data entry open for this period</div>
+          <div class="text-[10px] text-surf-400 mt-1" id="snap-week-note"></div>
         </div>
-        <div>
-          <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">Auto-advance</label>
-          <select id="auto-advance" class="inp w-full h-9 text-sm">
-            <option value="manual" {% if configs.get('meeting_auto_advance', 'manual') != 'every_monday' %}selected{% endif %}>Manual only</option>
-            <option value="auto" {% if configs.get('meeting_auto_advance', 'manual') == 'every_monday' %}selected{% endif %}>Automatic weekly</option>
-          </select>
+
+        <div class="bg-surf-50 rounded-lg p-3 text-xs text-surf-500 flex items-start gap-2">
+          <svg class="w-3.5 h-3.5 text-surf-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span>Automatic week advancement is not active yet. Preview a different week with the arrows, then save it to make it the active working week for Data Entry and task CSV export.</span>
         </div>
       </div>
-      <div class="bg-surf-50 rounded-lg p-3 text-xs text-surf-500 flex items-start gap-2">
-        <svg class="w-3.5 h-3.5 text-surf-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        <span>When the week advances, current snapshot data is frozen and a new snapshot week begins. All unsaved changes in Data Entry will be carried over. Previous snapshots remain viewable in read-only mode.</span>
-      </div>
-      <button class="btn-primary btn-sm text-xs" onclick="saveSnapshotConfig()">Save Configuration</button>
+
+      <button class="btn-primary btn-sm text-xs" type="button" onclick="saveSnapshotConfig()">Save Configuration</button>
     </div>
 
-    {# ── Data Entry Badge Threshold ── #}
     <div class="card p-4 space-y-3">
       <h3 class="text-sm font-semibold text-navy-900 flex items-center gap-2">
         <svg class="w-4 h-4 text-navy-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -77,26 +49,23 @@
                  value="{{ configs.get('needs_update_threshold_hours', '72') }}">
           <span class="text-sm text-surf-400 whitespace-nowrap">hours</span>
         </div>
-        <p class="text-xs text-surf-400 mt-1">Default: 72 hours (3 days). Tasks where supervisor_updated_at is older than this threshold will show the badge.</p>
+        <p class="text-xs text-surf-400 mt-1">Default: 72 hours (3 days). Valid range: 1 to 720 hours.</p>
       </div>
-      <button class="btn-primary btn-sm text-xs" onclick="saveThreshold()">Save Threshold</button>
+      <button class="btn-primary btn-sm text-xs" type="button" onclick="saveThreshold()">Save Threshold</button>
     </div>
 
-    {# ── Notifications ── #}
     <div class="card p-4 space-y-3">
       <h3 class="text-sm font-semibold text-navy-900 flex items-center gap-2">
         <svg class="w-4 h-4 text-navy-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
         Notifications
       </h3>
       <div class="space-y-2">
-
-        {# Teams #}
         <label class="flex items-center gap-3 p-2 rounded-lg hover:bg-surf-50 cursor-pointer">
           <input type="checkbox" id="chk-teams" class="w-4 h-4 rounded"
                  {% if configs.get('teams_enabled', 'false') == 'true' %}checked{% endif %}/>
           <div class="flex-1">
             <div class="text-sm text-navy-900">Teams Auto-notification <span class="text-[10px] text-surf-300 font-normal">(Phase 2)</span></div>
-            <div class="text-[11px] text-surf-400">Send meeting summary to Teams channel · settings saved only</div>
+            <div class="text-[11px] text-surf-400">Send meeting summary to Teams channel - settings saved only</div>
           </div>
         </label>
         <div class="ml-9 p-3 bg-surf-50 rounded-lg space-y-2">
@@ -107,17 +76,16 @@
           </div>
           <div>
             <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">Message Template</label>
-            <textarea id="teams-template" class="inp w-full text-xs h-14 resize-y" placeholder="Use {week}, {shop}, {task_count}, {issues}...">{{ configs.get('teams_message_template', 'Weekly Summary — {shop} · Week {week}: {task_count} tasks, {issues} issues flagged.') }}</textarea>
+            <textarea id="teams-template" class="inp w-full text-xs h-14 resize-y" placeholder="Use {week}, {shop}, {task_count}, {issues}...">{{ configs.get('teams_message_template', 'Weekly Summary - {shop} - Week {week}: {task_count} tasks, {issues} issues flagged.') }}</textarea>
           </div>
         </div>
 
-        {# Outlook #}
         <label class="flex items-center gap-3 p-2 rounded-lg hover:bg-surf-50 cursor-pointer">
           <input type="checkbox" id="chk-outlook" class="w-4 h-4 rounded"
                  {% if configs.get('outlook_enabled', 'false') == 'true' %}checked{% endif %}/>
           <div class="flex-1">
             <div class="text-sm text-navy-900">Outlook Email Reminders <span class="text-[10px] text-surf-300 font-normal">(Phase 2)</span></div>
-            <div class="text-[11px] text-surf-400">Send OT approval reminders via Outlook · settings saved only</div>
+            <div class="text-[11px] text-surf-400">Send OT approval reminders via Outlook - settings saved only</div>
           </div>
         </label>
         <div class="ml-9 p-3 bg-surf-50 rounded-lg space-y-2">
@@ -129,7 +97,7 @@
           <div>
             <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">Email Subject Template</label>
             <input id="outlook-subject" class="inp w-full h-8 text-xs"
-                   value="{{ configs.get('outlook_subject_template', '[CIS ERP] OT Approval Reminder — {date}') }}"/>
+                   value="{{ configs.get('outlook_subject_template', '[CIS ERP] OT Approval Reminder - {date}') }}"/>
           </div>
           <div>
             <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">Email Body</label>
@@ -137,13 +105,12 @@
           </div>
         </div>
 
-        {# Critical Issue Alerts #}
         <label class="flex items-center gap-3 p-2 rounded-lg hover:bg-surf-50 cursor-pointer">
           <input type="checkbox" id="chk-critical" class="w-4 h-4 rounded"
                  {% if configs.get('critical_alert_enabled', 'false') == 'true' %}checked{% endif %}/>
           <div class="flex-1">
             <div class="text-sm text-navy-900">Critical Issue Alerts <span class="text-[10px] text-surf-300 font-normal">(Phase 2)</span></div>
-            <div class="text-[11px] text-surf-400">Instant alert when critical issue is flagged · settings saved only</div>
+            <div class="text-[11px] text-surf-400">Instant alert when critical issue is flagged - settings saved only</div>
           </div>
         </label>
         <div class="ml-9 p-3 bg-surf-50 rounded-lg space-y-2">
@@ -155,15 +122,15 @@
           </div>
         </div>
       </div>
-      <button class="btn-primary btn-sm text-xs" onclick="saveNotifications()">Save Notifications</button>
+      <button class="btn-primary btn-sm text-xs" type="button" onclick="saveNotifications()">Save Notifications</button>
     </div>
 
-    {# ── Data Export ── #}
     <div class="card p-4 space-y-3">
       <h3 class="text-sm font-semibold text-navy-900 flex items-center gap-2">
         <svg class="w-4 h-4 text-navy-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         Data Export
       </h3>
+      <p class="text-[11px] text-surf-400 -mt-1">Tasks CSV uses the saved working week. If you have previewed another week above, save the configuration first.</p>
       <div class="max-w-sm">
         <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">Tasks CSV Shop Scope</label>
         <select id="export-shop" class="inp w-full h-9 text-sm">
@@ -177,52 +144,55 @@
         </select>
       </div>
       <div class="grid grid-cols-2 gap-3">
-        <button class="btn-outline h-10 text-sm flex items-center justify-center gap-2" onclick="exportCsv('tasks')">
+        <button class="btn-outline h-10 text-sm flex items-center justify-center gap-2" type="button" onclick="exportCsv('tasks')">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
           Export All Tasks (CSV)
         </button>
-        <button class="btn-outline h-10 text-sm flex items-center justify-center gap-2" onclick="exportCsv('ot')">
+        <button class="btn-outline h-10 text-sm flex items-center justify-center gap-2" type="button" onclick="exportCsv('ot')">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           Export All OT Records (CSV)
         </button>
       </div>
     </div>
-
   </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-/* ── Snapshot Week Calculator ────────────────────────────── */
-const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-const fullDayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const savedMeetingDate = '{{ configs.get("meeting_current_date", "") }}';
 
-{% if configs.get('meeting_current_date') %}
-  let snapWeekStart = new Date('{{ configs.get("meeting_current_date") }}');
-{% else %}
-  let snapWeekStart = (function() {
-    const today = new Date();
-    const advDay = parseInt(document.getElementById('adv-day')?.value || 1);
-    const ref = new Date(today);
-    while (ref.getDay() !== advDay) ref.setDate(ref.getDate() - 1);
-    return ref;
-  })();
-{% endif %}
-
-function formatSnapDate(d) {
-  return monthNames[d.getMonth()] + ' ' + String(d.getDate()).padStart(2, '0');
+function parseIsoDate(value) {
+  if (!value) return null;
+  const parts = value.split('-');
+  if (parts.length !== 3) return null;
+  const year = Number(parts[0]);
+  const month = Number(parts[1]);
+  const day = Number(parts[2]);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  return new Date(year, month - 1, day);
 }
 
-function updateSnapshotWeek() {
-  const advDay = parseInt(document.getElementById('adv-day').value);
+function deriveDefaultWeekStart() {
   const today = new Date();
   const ref = new Date(today);
-  while (ref.getDay() !== advDay) ref.setDate(ref.getDate() - 1);
-  snapWeekStart = new Date(ref);
-  renderSnapWeek();
+  while (ref.getDay() !== 1) ref.setDate(ref.getDate() - 1);
+  return ref;
 }
+
+function toIsoDate(dateValue) {
+  return dateValue.getFullYear() + '-' +
+    String(dateValue.getMonth() + 1).padStart(2, '0') + '-' +
+    String(dateValue.getDate()).padStart(2, '0');
+}
+
+function formatSnapDate(dateValue) {
+  return monthNames[dateValue.getMonth()] + ' ' + String(dateValue.getDate()).padStart(2, '0');
+}
+
+const savedWeekStart = parseIsoDate(savedMeetingDate);
+let snapWeekStart = savedWeekStart ? new Date(savedWeekStart) : deriveDefaultWeekStart();
 
 function shiftSnapshotWeek(dir) {
   snapWeekStart.setDate(snapWeekStart.getDate() + dir * 7);
@@ -232,53 +202,54 @@ function shiftSnapshotWeek(dir) {
 function renderSnapWeek() {
   const end = new Date(snapWeekStart);
   end.setDate(end.getDate() + 6);
-  const advDay = parseInt(document.getElementById('adv-day').value);
-  const advName = fullDayNames[advDay];
-  const prevDay = fullDayNames[(advDay + 6) % 7];
+  const previewIso = toIsoDate(snapWeekStart);
+  const savedIso = savedWeekStart ? toIsoDate(savedWeekStart) : '';
   document.getElementById('snap-week-display').textContent =
     formatSnapDate(snapWeekStart) + ' \u2013 ' + formatSnapDate(end);
-  document.getElementById('snap-week-note').innerHTML =
-    advName + ' to ' + prevDay + ' \u00b7 Data entry open for this period';
+
+  let note = 'Saved working week used for Data Entry and task CSV export.';
+  if (!savedIso) {
+    note = 'No saved working week yet. Save Configuration to activate this week.';
+  } else if (previewIso !== savedIso) {
+    note = 'Previewing another week. Save Configuration to make it the active working week.';
+  }
+  document.getElementById('snap-week-note').textContent = note;
 }
 
-// Init on load / HTMX swap
 renderSnapWeek();
 
-/* ── CSRF helper ─────────────────────────────────────────── */
 function csrfToken() {
   return document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
 }
 
 function patchConfig(data) {
-  /* Transform flat {key: value, ...} into SSOT §8.9 bulk shape:
-     { configs: [ {key: "...", value: "..."}, ... ] }                 */
-  const configs = Object.entries(data).map(([k, v]) => ({key: k, value: String(v)}));
+  const configs = Object.entries(data).map(([key, value]) => ({
+    key,
+    value: value == null ? '' : String(value),
+  }));
   return fetch('/api/config', {
     method: 'PATCH',
     headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken()},
-    body: JSON.stringify({configs})
+    body: JSON.stringify({configs}),
   });
 }
 
-/* ── Save handlers ───────────────────────────────────────── */
 function saveSnapshotConfig() {
-  const end = new Date(snapWeekStart);
-  end.setDate(end.getDate() + 6);
-  const dateStr = snapWeekStart.getFullYear() + '-' +
-    String(snapWeekStart.getMonth()+1).padStart(2,'0') + '-' +
-    String(snapWeekStart.getDate()).padStart(2,'0');
   patchConfig({
-    meeting_current_date: dateStr,
-    meeting_auto_advance: document.getElementById('auto-advance').value === 'auto' ? 'every_monday' : 'manual',
+    meeting_current_date: toIsoDate(snapWeekStart),
   }).then(r => {
-    if (r.ok) showToast('Saved', 'Snapshot week configuration updated', 'green');
-    else r.json().then(d => showToast('Error', d.detail || 'Failed', 'red'));
+    if (r.ok) {
+      showToast('Saved', 'Snapshot week configuration updated', 'green');
+      window.location.reload();
+      return;
+    }
+    return r.json().then(d => showToast('Error', d.detail || 'Failed', 'red'));
   }).catch(() => showToast('Error', 'Network error', 'red'));
 }
 
 function saveThreshold() {
   patchConfig({
-    needs_update_threshold_hours: document.getElementById('threshold-hours').value,
+    needs_update_threshold_hours: document.getElementById('threshold-hours').value.trim(),
   }).then(r => {
     if (r.ok) showToast('Saved', 'Threshold updated', 'green');
     else r.json().then(d => showToast('Error', d.detail || 'Failed', 'red'));
@@ -311,20 +282,25 @@ function downloadWithoutNavigation(url) {
 }
 
 function getMeetingDateForExport() {
-  if (snapWeekStart instanceof Date && !Number.isNaN(snapWeekStart.getTime())) {
-    return snapWeekStart.getFullYear() + '-' +
-      String(snapWeekStart.getMonth() + 1).padStart(2, '0') + '-' +
-      String(snapWeekStart.getDate()).padStart(2, '0');
-  }
-  return '{{ configs.get("meeting_current_date", "") }}';
+  return savedMeetingDate;
 }
 
 function exportCsv(type) {
   if (type === 'tasks') {
     const meetingDate = getMeetingDateForExport();
     const shopId = (document.getElementById('export-shop')?.value || '').trim();
-    if (!meetingDate || !shopId) {
-      showToast('Error', 'Select meeting week and shop before exporting tasks CSV', 'red');
+    const previewMeetingDate = toIsoDate(snapWeekStart);
+
+    if (!meetingDate) {
+      showToast('Error', 'Save Configuration before exporting tasks CSV', 'red');
+      return;
+    }
+    if (previewMeetingDate !== meetingDate) {
+      showToast('Save first', 'To export this previewed week, save configuration first. Exports use the saved working week.', 'red');
+      return;
+    }
+    if (!shopId) {
+      showToast('Error', 'Select shop before exporting tasks CSV', 'red');
       return;
     }
     downloadWithoutNavigation('/api/tasks/export/csv?meeting_date=' + encodeURIComponent(meetingDate) + '&shop_id=' + encodeURIComponent(shopId));

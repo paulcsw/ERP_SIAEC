@@ -47,16 +47,26 @@ async def _seed_approval(db_factory, ot_id, *, stage="APPROVE", action="APPROVE"
         await s.commit()
 
 
-async def _seed_wp(db_factory):
+async def _seed_wp(
+    db_factory,
+    aircraft_id=None,
+    *,
+    rfo_no="RFO-001",
+    title="Test WP",
+    status="ACTIVE",
+):
     """Seed an aircraft + work package; return wp.id."""
     from app.models.reference import Aircraft, WorkPackage
     async with db_factory() as s:
-        ac = Aircraft(ac_reg="9V-TST", airline="Test Air", created_at=NOW)
-        s.add(ac)
-        await s.flush()
+        if aircraft_id is None:
+            ac = Aircraft(ac_reg="9V-TST", airline="Test Air", created_at=NOW)
+            s.add(ac)
+            await s.flush()
+            aircraft_id = ac.id
         wp = WorkPackage(
-            aircraft_id=ac.id, rfo_no="RFO-001", title="Test WP",
+            aircraft_id=aircraft_id, rfo_no=rfo_no, title=title,
             start_date=date(2026, 3, 1), end_date=date(2026, 3, 31),
+            status=status,
             created_at=NOW,
         )
         s.add(wp)
@@ -563,6 +573,17 @@ async def test_rfo_burndown_remaining_decreases(async_client, rfo_env):
         assert w["remaining_mh"] == expected_remaining
 
 
+async def test_rfo_burndown_running_cumulative(async_client, rfo_env):
+    """Burndown cumulative_mh should accumulate across meeting weeks."""
+    wp_id = rfo_env["wp_id"]
+    resp = await async_client.get(f"/api/rfo/{wp_id}/burndown")
+    assert resp.status_code == 200
+    assert resp.json()["weeks"] == [
+        {"week": "2026-03-03", "cumulative_mh": 10.0, "remaining_mh": 15.0},
+        {"week": "2026-03-10", "cumulative_mh": 18.0, "remaining_mh": 7.0},
+    ]
+
+
 async def test_rfo_burndown_empty(async_client, db):
     """WP with no tasks → empty weeks."""
     wp_id = await _seed_wp(db)
@@ -685,6 +706,74 @@ async def test_rfo_detail_ssr_with_id(async_client, rfo_env):
     resp2 = await async_client.get(f"/rfo/{wp_id}")
     assert resp2.status_code == 200
     assert "RFO-001" in resp2.text
+
+
+async def test_rfo_detail_worker_forbidden_ssr(worker_client, db):
+    """WORKER should get an explicit 403 HTML state for RFO detail routes."""
+    wp_id = await _seed_wp(db)
+
+    resp = await worker_client.get("/rfo")
+    assert resp.status_code == 403
+    assert "Access denied" in resp.text
+    assert 'id="rfo-combo"' not in resp.text
+
+    resp2 = await worker_client.get(f"/rfo/{wp_id}")
+    assert resp2.status_code == 403
+    assert "Access denied" in resp2.text
+    assert 'id="rfo-combo"' not in resp2.text
+
+
+async def test_rfo_detail_ssr_404_for_missing_wp(async_client, db):
+    """Missing work package should return an explicit HTML 404 state."""
+    resp = await async_client.get("/rfo/99999")
+    assert resp.status_code == 404
+    assert "RFO not found" in resp.text
+    assert 'id="rfo-combo"' not in resp.text
+
+
+async def test_rfo_detail_selector_shows_active_plus_selected_historical(async_client, db):
+    """Selector should list active WPs and keep the selected historical WP visible."""
+    from app.models.reference import Aircraft
+
+    async with db() as s:
+        ac = Aircraft(ac_reg="9V-HIST", airline="Test Air", created_at=NOW)
+        s.add(ac)
+        await s.commit()
+        await s.refresh(ac)
+        aircraft_id = ac.id
+
+    active_wp = await _seed_wp(db, aircraft_id, rfo_no="RFO-ACTIVE", title="Active WP", status="ACTIVE")
+    completed_wp = await _seed_wp(db, aircraft_id, rfo_no="RFO-DONE", title="Completed WP", status="COMPLETED")
+    await _seed_wp(db, aircraft_id, rfo_no="RFO-HOLD", title="On Hold WP", status="ON_HOLD")
+
+    resp = await async_client.get(f"/rfo/{completed_wp}")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "RFO-DONE" in body
+    assert "RFO-ACTIVE" in body
+    assert "Historical selection" in body
+    assert "RFO-HOLD" not in body
+    assert body.index("RFO-DONE") < body.index("RFO-ACTIVE")
+
+
+async def test_rfo_detail_header_uses_wp_fallback_when_rfo_no_null(async_client, db):
+    """Selected header should use WP-id fallback when rfo_no is NULL."""
+    wp_id = await _seed_wp(db, rfo_no=None, title="Fallback WP")
+    resp = await async_client.get(f"/rfo/{wp_id}")
+    assert resp.status_code == 200
+    body = resp.text
+    assert f"WP-{wp_id}" in body
+    assert "None" not in body
+
+
+async def test_rfo_detail_ssr_uses_corrected_burndown_remaining(async_client, rfo_env):
+    """SSR burndown footer should use the corrected cumulative remaining MH."""
+    wp_id = rfo_env["wp_id"]
+    resp = await async_client.get(f"/rfo/{wp_id}")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "Remaining: <strong class=\"text-navy-700\">7.0 MH</strong>" in body
+    assert ">18.0h<" in body
 
 
 # ── Admin SSR smoke tests ────────────────────────────────────────────
