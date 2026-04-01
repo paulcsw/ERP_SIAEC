@@ -9,7 +9,7 @@ from app.models.audit import AuditLog
 async def write_audit(
     db: AsyncSession,
     *,
-    actor_id: int,
+    actor_id: int | None,
     entity_type: str,
     entity_id: int,
     action: str,

@@ -522,7 +522,7 @@ async def test_task_detail_access_denied_renders_html(worker_client, db):
 
 @pytest.mark.asyncio
 async def test_task_entry_edit_panel_renders_below_selected_card(async_client, db):
-    """Desktop Data Entry should render quick update directly below the selected card."""
+    """Desktop Data Entry should render quick update below the selected card and show an explicit expand chevron."""
     ac = await _seed_aircraft(db)
     shop = await _seed_shop(db)
     task1 = await _seed_task(db, ac_id=ac.id, shop_id=shop.id, text="First task")
@@ -543,11 +543,13 @@ async def test_task_entry_edit_panel_renders_below_selected_card(async_client, d
     assert card1_idx < panel_idx < card2_idx
     assert "function toggleDesktopTaskEditor" in html
     assert "Quick Update" in html
+    assert 'data-role="task-expand-icon"' in html
+    assert ')\">\n               >' not in html
 
 
 @pytest.mark.asyncio
 async def test_task_entry_save_actions_update_locally_and_close_panel(async_client, db):
-    """Desktop Data Entry save actions should avoid full refresh and close locally when requested."""
+    """Desktop Data Entry save actions should avoid full refresh, preserve scroll on open, and close locally when requested."""
     ac = await _seed_aircraft(db)
     shop = await _seed_shop(db)
     task = await _seed_task(db, ac_id=ac.id, shop_id=shop.id, text="Save behavior task")
@@ -561,10 +563,13 @@ async def test_task_entry_save_actions_update_locally_and_close_panel(async_clie
     html = resp.text
     assert "Save &amp; Close" in html
     assert "function updateDesktopTaskCard(taskId, snapshotResult, workerName)" in html
+    assert "function captureTaskEntryScrollState()" in html
+    assert "function restoreTaskEntryScrollState()" in html
     assert "credentials: 'same-origin'" in html
     assert "Partial Success" in html
     assert "closeDesktopEditor();" in html
-    assert "refreshTaskEntry({}, { resetEdit: false });" in html
+    assert "preserveScroll: true" in html
+    assert "refreshTaskEntry({}, { resetEdit: false, preserveScroll: true });" in html
     assert "refreshTaskEntry({ edit: taskId });" not in html
     assert "refreshTaskEntry({ edit: nextTaskId });" not in html
 
@@ -693,7 +698,8 @@ async def test_settings_page_renders(async_client, db):
 async def test_config_patch_accepts_ssot_keys(async_client, db):
     """PATCH /api/config with SSOT key names should succeed."""
     # Seed required config keys
-    for key in ("needs_update_threshold_hours", "teams_enabled",
+    for key in ("meeting_auto_advance", "snapshot_advance_day", "snapshot_advance_time",
+                "needs_update_threshold_hours", "teams_enabled",
                 "teams_recipients", "teams_message_template",
                 "outlook_enabled", "outlook_recipients",
                 "outlook_subject_template", "outlook_body_template",
@@ -750,16 +756,22 @@ async def test_settings_phase2_labels(async_client, db):
 
 
 @pytest.mark.asyncio
-async def test_settings_snapshot_ui_is_manual_only(async_client, db):
-    """Settings snapshot section should no longer expose dead auto/day/time controls."""
+async def test_settings_snapshot_ui_supports_automatic_advancement(async_client, db):
+    """Settings snapshot section should expose automatic advancement controls with saved values."""
     await _seed_config(db, "meeting_current_date", "2026-03-30")
+    await _seed_config(db, "meeting_auto_advance", "scheduled")
+    await _seed_config(db, "snapshot_advance_day", "friday")
+    await _seed_config(db, "snapshot_advance_time", "18:00")
     resp = await async_client.get("/admin/settings")
     html = resp.text
-    assert 'id="adv-day"' not in html
-    assert 'id="adv-time"' not in html
-    assert 'id="auto-advance"' not in html
-    assert "Automatic week advancement is not active yet." in html
+    assert 'id="adv-day"' in html
+    assert 'id="adv-time"' in html
+    assert 'id="auto-advance"' in html
+    assert "Working weeks always start on Monday." in html
     assert 'id="snap-week-display"></div>' in html
+    assert "meeting_auto_advance" in html
+    assert "snapshot_advance_day" in html
+    assert "snapshot_advance_time" in html
 
 
 @pytest.mark.asyncio
@@ -775,6 +787,17 @@ async def test_settings_export_uses_saved_working_week(async_client, db):
 
 
 @pytest.mark.asyncio
+async def test_settings_snapshot_save_sends_auto_advance_config_keys(async_client, db):
+    """Snapshot save JS should persist week + automatic advancement settings together."""
+    resp = await async_client.get("/admin/settings")
+    html = resp.text
+    assert "meeting_current_date: toIsoDate(snapWeekStart)" in html
+    assert "meeting_auto_advance: autoAdvanceEnabled() ? 'scheduled' : 'manual'" in html
+    assert "snapshot_advance_day: document.getElementById('adv-day').value" in html
+    assert "snapshot_advance_time: document.getElementById('adv-time').value" in html
+
+
+@pytest.mark.asyncio
 async def test_invalid_threshold_rejected_without_breaking_task_entry(async_client, db):
     """Invalid threshold should be rejected so task entry continues to render safely."""
     await _seed_config(db, "needs_update_threshold_hours", "72")
@@ -785,6 +808,18 @@ async def test_invalid_threshold_rejected_without_breaking_task_entry(async_clie
         json={"configs": [{"key": "needs_update_threshold_hours", "value": "abc"}]},
     )
     assert patch_resp.status_code == 422
+
+    entry_resp = await async_client.get("/tasks/entry")
+    assert entry_resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_auto_week_configs_do_not_break_task_entry(async_client, db):
+    """Auto-advance config should coexist with task entry rendering safely."""
+    await _seed_config(db, "meeting_current_date", "2026-03-30")
+    await _seed_config(db, "meeting_auto_advance", "scheduled")
+    await _seed_config(db, "snapshot_advance_day", "friday")
+    await _seed_config(db, "snapshot_advance_time", "18:00")
 
     entry_resp = await async_client.get("/tasks/entry")
     assert entry_resp.status_code == 200

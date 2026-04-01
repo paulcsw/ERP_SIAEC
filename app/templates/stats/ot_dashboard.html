@@ -145,25 +145,30 @@
       {% endif %}
     </div>
 
-    <div class="card p-4">
-      <div class="text-sm font-semibold text-navy-900 mb-3">Weekly OT Trend</div>
-      <div class="flex items-end gap-2 h-28">
-        {% for w in weekly %}
-        <div class="flex-1 flex flex-col items-center gap-1">
-          <div class="w-full rounded-t" style="height:{{ w.height }}px;background:{{ w.bg_hex }}"></div>
-          <span class="text-[9px] {% if w.is_current %}font-medium text-navy-700{% else %}text-surf-400{% endif %}">{{ w.label }}</span>
-          <span class="text-[10px] font-mono text-navy-700">{{ w.hours }}h</span>
+    <div class="card p-4 flex flex-col">
+      <div class="text-sm font-semibold text-navy-900 shrink-0">Weekly OT Trend</div>
+      <div class="mt-4 min-h-[9.5rem]">
+        {% if weekly %}
+        <div class="flex items-end gap-2 h-full">
+          {% for w in weekly %}
+          <div class="min-w-0 flex-1 flex flex-col items-center justify-end h-full">
+            <div class="w-full h-24 flex items-end justify-center">
+              <div class="w-full max-w-[42px] rounded-t-md" style="height:{{ w.height }}px;background:{{ w.bg_hex }}"></div>
+            </div>
+            <span class="mt-2 text-[9px] {% if w.is_current %}font-medium text-navy-700{% else %}text-surf-400{% endif %}">{{ w.label }}</span>
+            <span class="text-[10px] font-mono text-navy-700 leading-none mt-1">{{ w.hours }}h</span>
+          </div>
+          {% endfor %}
         </div>
-        {% endfor %}
-        {% if not weekly %}
-        <div class="text-sm text-surf-400 py-4 text-center w-full">No data</div>
+        {% else %}
+        <div class="h-full min-h-[9.5rem] flex items-center justify-center text-sm text-surf-400 text-center">No data</div>
         {% endif %}
       </div>
       {% if weekly %}
-      <div class="mt-3 pt-3 border-t border-surf-100 flex justify-between text-xs">
+      <div class="mt-4 pt-3 border-t border-surf-100 flex items-start justify-between gap-3 text-xs">
         <span class="text-surf-400">Month total: <strong class="text-navy-700">{{ weekly_footer.month_total }}h</strong></span>
         {% if weekly_footer.trend_text %}
-        <span class="{{ weekly_footer.trend_color }} font-medium">{{ weekly_footer.trend_text }}</span>
+        <span class="{{ weekly_footer.trend_color }} font-medium text-right">{{ weekly_footer.trend_text }}</span>
         {% endif %}
       </div>
       {% endif %}

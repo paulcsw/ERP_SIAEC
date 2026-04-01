@@ -12,6 +12,10 @@
 .task-card:hover{border-color:#aebdd2}
 .task-card.editing{border-color:#2e5a8a;box-shadow:0 0 0 2px rgba(46,90,138,.15)}
 .task-card-stack{display:flex;flex-direction:column;gap:12px}
+.task-card-icon-stack{display:flex;align-items:flex-start;gap:8px;flex-shrink:0}
+.task-card-chevron{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:999px;background:#f5f7fa;color:#7c8694;transition:transform .15s ease,background .15s ease,color .15s ease}
+.task-card:hover .task-card-chevron{background:#eef2f7;color:#2e5a8a}
+.task-card.editing .task-card-chevron{background:#eef2f7;color:#2e5a8a;transform:rotate(90deg)}
 .inline-edit-panel{animation:entry-slide-down .2s ease}
 .badge-new{background:#c8850a;color:#fff;font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;letter-spacing:.3px}
 .badge-needs-update{background:#fdf5e0;color:#a07d12;font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;letter-spacing:.3px}
@@ -150,7 +154,7 @@
     {% endif %}
 
     {# Task cards + edit area #}
-    <div class="flex-1 overflow-y-auto p-5">
+    <div class="flex-1 overflow-y-auto p-5" id="taskDetailPane">
       {% if tasks %}
       <div class="space-y-3" id="taskCardList">
         {% for task in tasks %}
@@ -165,7 +169,7 @@
                data-assigned-worker="{{ task.assigned_worker or '' }}"
                data-is-editing="{{ 'true' if editing_task_id == task.task_id else 'false' }}"
                {% if task.can_edit %}
-               onclick="toggleDesktopTaskEditor('{{ selected_ac }}', {{ task.task_id }}, this.dataset.isEditing === 'true')">
+               onclick="toggleDesktopTaskEditor('{{ selected_ac }}', {{ task.task_id }}, this.dataset.isEditing === 'true')"
                {% endif %}>
             <div class="flex items-start justify-between gap-3">
               <div class="flex-1 min-w-0">
@@ -202,9 +206,16 @@
                 </div>
                 {% endif %}
               </div>
-              <div data-role="task-issue-slot">
-                {% if task.has_issue %}
-                <svg class="w-5 h-5 text-st-red shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+              <div class="task-card-icon-stack">
+                <div data-role="task-issue-slot">
+                  {% if task.has_issue %}
+                  <svg class="w-5 h-5 text-st-red shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                  {% endif %}
+                </div>
+                {% if task.can_edit %}
+                <div data-role="task-expand-icon" class="task-card-chevron" aria-hidden="true">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </div>
                 {% endif %}
               </div>
             </div>
@@ -432,6 +443,7 @@
 const TASK_ENTRY_CSRF = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
 const TASK_ENTRY_WORKERS_BY_SHOP = {{ workers_by_shop | tojson }};
 let taskEntryActionInFlight = false;
+let taskEntryPendingScrollState = null;
 
 function setTaskEntryButtonBusy(button, busy, busyText) {
   if (!button) return;
@@ -501,8 +513,35 @@ async function runTaskEntryAction(actionFn) {
   }
 }
 
+function captureTaskEntryScrollState() {
+  const aircraftPane = document.getElementById('acList');
+  const detailPane = document.getElementById('taskDetailPane');
+  return {
+    aircraftScrollTop: aircraftPane ? aircraftPane.scrollTop : null,
+    detailScrollTop: detailPane ? detailPane.scrollTop : null,
+  };
+}
+
+function restoreTaskEntryScrollState() {
+  if (!taskEntryPendingScrollState) return false;
+  const nextState = taskEntryPendingScrollState;
+  taskEntryPendingScrollState = null;
+  requestAnimationFrame(() => {
+    const aircraftPane = document.getElementById('acList');
+    const detailPane = document.getElementById('taskDetailPane');
+    if (aircraftPane && Number.isFinite(nextState.aircraftScrollTop)) {
+      aircraftPane.scrollTop = nextState.aircraftScrollTop;
+    }
+    if (detailPane && Number.isFinite(nextState.detailScrollTop)) {
+      detailPane.scrollTop = nextState.detailScrollTop;
+    }
+  });
+  return true;
+}
+
 function refreshTaskEntry(overrides = {}, options = {}) {
   if (typeof htmx === 'undefined') return;
+  taskEntryPendingScrollState = options.preserveScroll === true ? captureTaskEntryScrollState() : null;
   const params = new URLSearchParams(window.location.search || '');
   Object.entries(overrides).forEach(([key, value]) => {
     if (value === null || value === undefined || value === '') {
@@ -528,7 +567,7 @@ function toggleDesktopTaskEditor(ac, taskId, isEditing) {
     closeDesktopEditor();
     return;
   }
-  refreshTaskEntry({ ac: ac || '', edit: taskId }, { resetEdit: false });
+  refreshTaskEntry({ ac: ac || '', edit: taskId }, { resetEdit: false, preserveScroll: true });
 }
 
 function syncTaskEntryUrl(mutator) {
@@ -789,7 +828,7 @@ function submitDesktopQuickUpdate(event) {
         updateDesktopTaskCard(taskId, snapshotResult, workerName);
       } catch (assignErr) {
         showToast('Partial Success', 'Task updated, worker assign failed: ' + (assignErr.message || 'Unknown error'), 'red');
-        refreshTaskEntry({}, { resetEdit: false });
+        refreshTaskEntry({}, { resetEdit: false, preserveScroll: true });
         return;
       }
 
@@ -890,8 +929,11 @@ function submitDesktopCreateTask(event) {
 }
 
 function initTaskEntryDesktopState() {
-  focusEditingTaskCard();
+  const restoredScroll = restoreTaskEntryScrollState();
   syncDesktopCreateWorkerOptions();
+  if (!restoredScroll) {
+    focusEditingTaskCard();
+  }
 }
 
 initTaskEntryDesktopState();

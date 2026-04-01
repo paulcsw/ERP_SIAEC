@@ -1,4 +1,6 @@
+import asyncio
 import secrets
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import RedirectResponse
@@ -8,10 +10,37 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.config import settings
 from app.database import get_engine
 from app.schemas.common import APIError, api_error_handler
+from app.services.week_advancement_service import run_auto_week_advancement_loop
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="CIS ERP", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        auto_week_stop_event = None
+        auto_week_task = None
+        should_start_auto_week = bool(settings.DATABASE_URL.strip()) and not getattr(
+            app.state,
+            "disable_auto_week_scheduler",
+            False,
+        )
+        if should_start_auto_week:
+            auto_week_stop_event = asyncio.Event()
+            auto_week_task = asyncio.create_task(
+                run_auto_week_advancement_loop(stop_event=auto_week_stop_event)
+            )
+            app.state.auto_week_stop_event = auto_week_stop_event
+            app.state.auto_week_task = auto_week_task
+
+        try:
+            yield
+        finally:
+            if auto_week_stop_event is not None:
+                auto_week_stop_event.set()
+            if auto_week_task is not None:
+                with suppress(asyncio.CancelledError):
+                    await auto_week_task
+
+    app = FastAPI(title="CIS ERP", version="0.1.0", lifespan=lifespan)
 
     # ── Exception handlers ────────────────────────────────────────
     app.add_exception_handler(APIError, api_error_handler)

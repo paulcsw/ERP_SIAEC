@@ -23,6 +23,8 @@ from app.middleware.rate_limit import reset_rate_limits
 from app.models import Base
 from app.models.user import Role, User
 
+app.state.disable_auto_week_scheduler = True
+
 # ── Helpers ─────────────────────────────────────────────────────────
 
 CSRF_HEADERS = {"X-CSRFToken": "test-csrf-token-abc123"}

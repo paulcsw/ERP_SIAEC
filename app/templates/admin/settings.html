@@ -14,7 +14,7 @@
         <svg class="w-4 h-4 text-navy-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         Snapshot Week Configuration
       </h3>
-      <p class="text-[11px] text-surf-400 -mt-1">Set the saved working week for Data Entry. This page is manual only for now, and exports use the saved working week after you click Save Configuration.</p>
+      <p class="text-[11px] text-surf-400 -mt-1">Set the saved working week for Data Entry. Working weeks always start on Monday. Automatic advancement controls when the next Monday week becomes active.</p>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
@@ -27,9 +27,45 @@
           <div class="text-[10px] text-surf-400 mt-1" id="snap-week-note"></div>
         </div>
 
-        <div class="bg-surf-50 rounded-lg p-3 text-xs text-surf-500 flex items-start gap-2">
-          <svg class="w-3.5 h-3.5 text-surf-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-          <span>Automatic week advancement is not active yet. Preview a different week with the arrows, then save it to make it the active working week for Data Entry and task CSV export.</span>
+        <div class="space-y-3">
+          <label class="flex items-center gap-3 p-2 rounded-lg bg-surf-50 cursor-pointer">
+            <input
+              type="checkbox"
+              id="auto-advance"
+              class="w-4 h-4 rounded"
+              {% if configs.get('meeting_auto_advance', 'manual') == 'scheduled' %}checked{% endif %}
+            />
+            <div class="flex-1">
+              <div class="text-sm text-navy-900">Automatic week advancement</div>
+              <div class="text-[11px] text-surf-400">When enabled, the working week advances automatically based on the schedule below.</div>
+            </div>
+          </label>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">Advance On</label>
+              <select id="adv-day" class="inp w-full h-9 text-sm">
+                {% set saved_adv_day = configs.get('snapshot_advance_day', 'monday') %}
+                {% for day in ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] %}
+                <option value="{{ day }}" {% if saved_adv_day == day %}selected{% endif %}>{{ day|title }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label class="block text-[10px] font-medium text-surf-400 uppercase tracking-wider mb-1">Advance Time</label>
+              <input
+                type="time"
+                id="adv-time"
+                class="inp w-full h-9 text-sm"
+                value="{{ configs.get('snapshot_advance_time', '00:00') }}"
+              />
+            </div>
+          </div>
+
+          <div class="bg-surf-50 rounded-lg p-3 text-xs text-surf-500 flex items-start gap-2">
+            <svg class="w-3.5 h-3.5 text-surf-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span id="auto-advance-summary"></span>
+          </div>
         </div>
       </div>
 
@@ -162,6 +198,8 @@
 <script>
 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const savedMeetingDate = '{{ configs.get("meeting_current_date", "") }}';
+const savedAdvanceDay = '{{ configs.get("snapshot_advance_day", "monday") }}';
+const savedAdvanceTime = '{{ configs.get("snapshot_advance_time", "00:00") }}';
 
 function parseIsoDate(value) {
   if (!value) return null;
@@ -194,6 +232,37 @@ function formatSnapDate(dateValue) {
 const savedWeekStart = parseIsoDate(savedMeetingDate);
 let snapWeekStart = savedWeekStart ? new Date(savedWeekStart) : deriveDefaultWeekStart();
 
+function autoAdvanceEnabled() {
+  return document.getElementById('auto-advance').checked;
+}
+
+function syncAutoAdvanceControls() {
+  const enabled = autoAdvanceEnabled();
+  const dayInput = document.getElementById('adv-day');
+  const timeInput = document.getElementById('adv-time');
+  dayInput.disabled = !enabled;
+  timeInput.disabled = !enabled;
+  dayInput.classList.toggle('opacity-60', !enabled);
+  timeInput.classList.toggle('opacity-60', !enabled);
+}
+
+function renderAutoAdvanceSummary() {
+  const enabled = autoAdvanceEnabled();
+  const day = document.getElementById('adv-day').value || savedAdvanceDay;
+  const time = document.getElementById('adv-time').value || savedAdvanceTime;
+  const summary = document.getElementById('auto-advance-summary');
+
+  if (!enabled) {
+    summary.textContent = 'Automatic advancement is off. Use Save Configuration after previewing another week to change the active working week manually.';
+    return;
+  }
+
+  summary.textContent =
+    'Automatic advancement is on. The active working week will switch to the next Monday week every ' +
+    day.charAt(0).toUpperCase() + day.slice(1) +
+    ' at ' + time + ' (Asia/Singapore).';
+}
+
 function shiftSnapshotWeek(dir) {
   snapWeekStart.setDate(snapWeekStart.getDate() + dir * 7);
   renderSnapWeek();
@@ -214,9 +283,18 @@ function renderSnapWeek() {
     note = 'Previewing another week. Save Configuration to make it the active working week.';
   }
   document.getElementById('snap-week-note').textContent = note;
+  renderAutoAdvanceSummary();
 }
 
 renderSnapWeek();
+syncAutoAdvanceControls();
+
+document.getElementById('auto-advance').addEventListener('change', () => {
+  syncAutoAdvanceControls();
+  renderSnapWeek();
+});
+document.getElementById('adv-day').addEventListener('change', renderAutoAdvanceSummary);
+document.getElementById('adv-time').addEventListener('change', renderAutoAdvanceSummary);
 
 function csrfToken() {
   return document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
@@ -237,6 +315,9 @@ function patchConfig(data) {
 function saveSnapshotConfig() {
   patchConfig({
     meeting_current_date: toIsoDate(snapWeekStart),
+    meeting_auto_advance: autoAdvanceEnabled() ? 'scheduled' : 'manual',
+    snapshot_advance_day: document.getElementById('adv-day').value,
+    snapshot_advance_time: document.getElementById('adv-time').value,
   }).then(r => {
     if (r.ok) {
       showToast('Saved', 'Snapshot week configuration updated', 'green');

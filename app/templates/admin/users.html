@@ -21,16 +21,24 @@
   </div>
 
   <div class="card flex-1 flex flex-col min-h-0">
-    <div class="flex-1 overflow-y-auto">
-      <table class="tbl">
+    <div class="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
+      <table class="tbl" style="table-layout:fixed;min-width:980px">
+        <colgroup>
+          <col style="width:14%">
+          <col style="width:24%">
+          <col style="width:16%">
+          <col style="width:20%">
+          <col style="width:11%">
+          <col style="width:15%">
+        </colgroup>
         <thead>
           <tr>
-            <th>Employee</th>
+            <th class="whitespace-nowrap">Employee</th>
             <th>Name</th>
             <th>Team</th>
             <th>Role</th>
-            <th>Status</th>
-            <th>Actions</th>
+            <th class="whitespace-nowrap">Status</th>
+            <th class="whitespace-nowrap" style="text-align:center;">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -48,25 +56,27 @@
             {% set protection_reason = "" %}
           {% endif %}
           <tr>
-            <td class="font-mono text-xs">{{ u.employee_no }}</td>
-            <td class="text-sm font-medium">{{ u.name }}</td>
-            <td class="text-xs">{{ u.team }}</td>
+            <td class="font-mono text-xs whitespace-nowrap">{{ u.employee_no }}</td>
+            <td class="text-sm font-medium break-words">{{ u.name }}</td>
+            <td class="text-xs break-words">{{ u.team }}</td>
             <td>
+              <div class="flex flex-wrap gap-1">
               {% for role in u.roles %}
               <span class="badge {% if role == 'ADMIN' %}bg-navy-50 text-navy-700{% elif role == 'SUPERVISOR' %}bg-gold-50 text-gold-600{% else %}bg-surf-100 text-surf-400{% endif %}">{{ role }}</span>
               {% endfor %}
+              </div>
             </td>
-            <td>
+            <td class="whitespace-nowrap">
               {% if u.is_active %}
               <span class="flex items-center gap-1.5 text-xs"><span class="w-2 h-2 rounded-full bg-st-green inline-block"></span> Active</span>
               {% else %}
               <span class="flex items-center gap-1.5 text-xs text-surf-400"><span class="w-2 h-2 rounded-full bg-surf-300 inline-block"></span> Inactive</span>
               {% endif %}
             </td>
-            <td>
-              <div class="flex flex-col items-start gap-1">
+            <td class="align-top text-center">
+              <div class="w-full flex flex-col items-center gap-1">
                 <button
-                  class="btn-outline btn-sm text-xs"
+                  class="btn-outline btn-sm text-xs mx-auto"
                   data-user='{{ {
                     "id": u.id,
                     "employee_no": u.employee_no,
@@ -84,7 +94,7 @@
                   onclick="openEditUser(this)"
                 >Edit</button>
                 {% if protection_reason %}
-                <span class="text-[11px] text-surf-400 max-w-[220px]">{{ protection_reason }}</span>
+                <span class="text-[11px] text-surf-400 max-w-[220px] text-center">{{ protection_reason }}</span>
                 {% endif %}
               </div>
             </td>
